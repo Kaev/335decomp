@@ -35,6 +35,7 @@
 #include "WoW/Source/WowServices/Login.h"
 #include "WoW/Source/WowServices/LoginResponse.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/AccountData.h"
+#include "GameVersion.h"
 
 // STATIC: 0x00AD91F0
 static const char* s_errorTokens[] = {
@@ -244,143 +245,143 @@ static void LogConnectionStatus(WOWCS_OPS op, int32_t errorCode, int32_t initiat
     }
 
     switch (errorCode) {
-        case 0:
+        case ResponseCodes::RESPONSE_SUCCESS:
             SStrCopy(errorText, "RESPONSE_SUCCESS", sizeof(errorText));
             break;
 
-        case 1:
+        case ResponseCodes::RESPONSE_FAILURE:
             SStrCopy(errorText, "RESPONSE_FAILURE", sizeof(errorText));
             break;
 
-        case 2:
+        case ResponseCodes::RESPONSE_CANCELLED:
             SStrCopy(errorText, "RESPONSE_CANCELLED", sizeof(errorText));
             break;
 
-        case 3:
+        case ResponseCodes::RESPONSE_DISCONNECTED:
             SStrCopy(errorText, "RESPONSE_DISCONNECTED", sizeof(errorText));
             break;
 
-        case 4:
+        case ResponseCodes::RESPONSE_FAILED_TO_CONNECT:
             SStrCopy(errorText, "RESPONSE_FAILED_TO_CONNECT", sizeof(errorText));
             break;
 
-        case 5:
+        case ResponseCodes::RESPONSE_CONNECTED:
             SStrCopy(errorText, "RESPONSE_CONNECTED", sizeof(errorText));
             break;
 
-        case 6:
+        case ResponseCodes::RESPONSE_VERSION_MISMATCH:
             SStrCopy(errorText, "RESPONSE_VERSION_MISMATCH", sizeof(errorText));
             break;
 
-        case 7:
+        case ResponseCodes::CSTATUS_CONNECTING:
             SStrCopy(errorText, "CSTATUS_CONNECTING", sizeof(errorText));
             break;
 
-        case 8:
+        case ResponseCodes::CSTATUS_NEGOTIATING_SECURITY:
             SStrCopy(errorText, "CSTATUS_NEGOTIATING_SECURITY", sizeof(errorText));
             break;
 
-        case 9:
+        case ResponseCodes::CSTATUS_NEGOTIATION_COMPLETE:
             SStrCopy(errorText, "CSTATUS_NEGOTIATION_COMPLETE", sizeof(errorText));
             break;
 
-        case 10:
+        case ResponseCodes::CSTATUS_NEGOTIATION_FAILED:
             SStrCopy(errorText, "CSTATUS_NEGOTIATION_FAILED", sizeof(errorText));
             break;
 
-        case 11:
+        case ResponseCodes::CSTATUS_AUTHENTICATING:
             SStrCopy(errorText, "CSTATUS_AUTHENTICATING", sizeof(errorText));
             break;
 
-        case 12:
+        case ResponseCodes::AUTH_OK:
             SStrCopy(errorText, "AUTH_OK", sizeof(errorText));
             break;
 
-        case 13:
+        case ResponseCodes::AUTH_FAILED:
             SStrCopy(errorText, "AUTH_FAILED", sizeof(errorText));
             break;
 
-        case 14:
+        case ResponseCodes::AUTH_REJECT:
             SStrCopy(errorText, "AUTH_REJECT", sizeof(errorText));
             break;
 
-        case 15:
+        case ResponseCodes::AUTH_BAD_SERVER_PROOF:
             SStrCopy(errorText, "AUTH_BAD_SERVER_PROOF", sizeof(errorText));
             break;
 
-        case 16:
+        case ResponseCodes::AUTH_UNAVAILABLE:
             SStrCopy(errorText, "AUTH_UNAVAILABLE", sizeof(errorText));
             break;
 
-        case 17:
+        case ResponseCodes::AUTH_SYSTEM_ERROR:
             SStrCopy(errorText, "AUTH_SYSTEM_ERROR", sizeof(errorText));
             break;
 
-        case 18:
+        case ResponseCodes::AUTH_BILLING_ERROR:
             SStrCopy(errorText, "AUTH_BILLING_ERROR", sizeof(errorText));
             break;
 
-        case 19:
+        case ResponseCodes::AUTH_BILLING_EXPIRED:
             SStrCopy(errorText, "AUTH_BILLING_EXPIRED", sizeof(errorText));
             break;
 
-        case 20:
+        case ResponseCodes::AUTH_VERSION_MISMATCH:
             SStrCopy(errorText, "AUTH_VERSION_MISMATCH", sizeof(errorText));
             break;
 
-        case 21:
+        case ResponseCodes::AUTH_UNKNOWN_ACCOUNT:
             SStrCopy(errorText, "AUTH_UNKNOWN_ACCOUNT", sizeof(errorText));
             break;
 
-        case 22:
+        case ResponseCodes::AUTH_INCORRECT_PASSWORD:
             SStrCopy(errorText, "AUTH_INCORRECT_PASSWORD", sizeof(errorText));
             break;
 
-        case 23:
+        case ResponseCodes::AUTH_SESSION_EXPIRED:
             SStrCopy(errorText, "AUTH_SESSION_EXPIRED", sizeof(errorText));
             break;
 
-        case 24:
+        case ResponseCodes::AUTH_SERVER_SHUTTING_DOWN:
             SStrCopy(errorText, "AUTH_SERVER_SHUTTING_DOWN", sizeof(errorText));
             break;
 
-        case 25:
+        case ResponseCodes::AUTH_ALREADY_LOGGING_IN:
             SStrCopy(errorText, "AUTH_ALREADY_LOGGING_IN", sizeof(errorText));
             break;
 
-        case 26:
+        case ResponseCodes::AUTH_LOGIN_SERVER_NOT_FOUND:
             SStrCopy(errorText, "AUTH_LOGIN_SERVER_NOT_FOUND", sizeof(errorText));
             break;
 
-        case 27:
+        case ResponseCodes::AUTH_WAIT_QUEUE:
             SStrCopy(errorText, "AUTH_WAIT_QUEUE", sizeof(errorText));
             break;
 
-        case 35:
+        case ResponseCodes::REALM_LIST_IN_PROGRESS:
             SStrCopy(errorText, "REALM_LIST_IN_PROGRESS", sizeof(errorText));
             break;
 
-        case 36:
+        case ResponseCodes::REALM_LIST_SUCCESS:
             SStrCopy(errorText, "REALM_LIST_SUCCESS", sizeof(errorText));
             break;
 
-        case 37:
+        case ResponseCodes::REALM_LIST_FAILED:
             SStrCopy(errorText, "REALM_LIST_FAILED", sizeof(errorText));
             break;
 
-        case 38:
+        case ResponseCodes::REALM_LIST_INVALID:
             SStrCopy(errorText, "REALM_LIST_INVALID", sizeof(errorText));
             break;
 
-        case 39:
+        case ResponseCodes::REALM_LIST_REALM_NOT_FOUND:
             SStrCopy(errorText, "REALM_LIST_REALM_NOT_FOUND", sizeof(errorText));
             break;
 
-        case 74:
+        case ResponseCodes::CHAR_DELETE_FAILED_GUILD_LEADER:
             SStrCopy(errorText, "CHAR_DELETE_FAILED_GUILD_LEADER", sizeof(errorText));
             break;
 
-        case 75:
+        case ResponseCodes::CHAR_DELETE_FAILED_ARENA_CAPTAIN:
             SStrCopy(errorText, "CHAR_DELETE_FAILED_ARENA_CAPTAIN", sizeof(errorText));
             break;
 
@@ -399,13 +400,13 @@ static void LogConnectionStatus(WOWCS_OPS op, int32_t errorCode, int32_t initiat
 // VERIFY: 9e19522f manual
 // OFFSET: 0x006B0250
 ClientConnection::ClientConnection(RealmResponse* realmResponse) : RealmConnection(realmResponse) {
-    this->unk_2F3C = 0;
-    this->unk_2F40 = 0;
+    this->m_connected = 0;
+    this->m_characterLoggedIn = 0;
     this->m_inGame = 0;
     this->m_statusComplete = 1;
     this->m_statusResult = 1;
     this->m_statusOp = COP_NONE;
-    this->m_errorCode = 0;
+    this->m_errorCode = RESPONSE_SUCCESS;
     this->m_cleanup = nullptr;
     this->m_quitAfterLogout = 0;
     this->m_loggingOut = 0;
@@ -464,7 +465,7 @@ void ClientConnection::AccountLogin(const char* accountName, const char* passwor
 // OFFSET: 0x006B0940
 void ClientConnection::Disconnect() {
     this->NetClient::Disconnect();
-    this->unk_2F3C = 0;
+    this->m_connected = 0;
     WardenClient_Destroy();
 }
 
@@ -577,13 +578,13 @@ const char* ClientServices::GetErrorToken(int32_t errorCode) {
 // VERIFY: c031479f auto
 // OFFSET: 0x006B0F90
 int32_t ClientServices::CharacterValidateName(const char* name) {
-    return ValidateCharacterNameConst(s_locale, name, true, true, true, true, 0) + 87;
+    return static_cast<int32_t>(ValidateCharacterNameConst(s_locale, name, true, true, true, true, 0)) + CHAR_NAME_SUCCESS;
 }
 
 // VERIFY: ca1062a6 auto
 // OFFSET: 0x006B0FC0
 int32_t ClientServices::CharacterValidateDeclension(const char* name, const char* declension) {
-    return ValidateCharacterNameDeclension(s_locale, name, declension) + 87;
+    return static_cast<int32_t>(ValidateCharacterNameDeclension(s_locale, name, declension)) + CHAR_NAME_SUCCESS;
 }
 
 // VERIFY: ae977242 manual
@@ -606,7 +607,7 @@ int32_t ClientConnection::PollStatus(WOWCS_OPS& op, const char** text, int32_t& 
         return this->m_statusComplete;
     }
 
-    if (errorCode == 27) {
+    if (errorCode == AUTH_WAIT_QUEUE) {
         SStrPrintf(s_statusText, sizeof(s_statusText), token, ClientServices::Connection()->m_queuePosition);
         *text = s_statusText;
         return this->m_statusComplete;
@@ -628,9 +629,9 @@ void ClientServices::Destroy() {
     ConsoleCommandUnregister("logout");
 
     if (g_clientConnection) {
-        if (g_clientConnection->unk_2F3C) {
+        if (g_clientConnection->m_connected) {
             g_clientConnection->NetClient::Disconnect();
-            g_clientConnection->unk_2F3C = 0;
+            g_clientConnection->m_connected = 0;
             WardenClient_Destroy();
         }
 
@@ -705,8 +706,8 @@ int32_t SendBugOpcode(uint32_t suggestion, const char* text) {
     int32_t vendor;
     OsGetProcessorFeaturesEx(vendor);
 
-    if (static_cast<uint32_t>(vendor) > 4) {
-        vendor = 0;
+    if (static_cast<uint32_t>(vendor) > OS_PROCESSOR_VENDOR_CPUID_FAILED) {
+        vendor = OS_PROCESSOR_VENDOR_UNKNOWN;
     }
 
     SStrPrintf(line, sizeof(line), "Processor vendor:\t%s\n", s_processorVendors[vendor]);
@@ -731,7 +732,7 @@ int32_t SendBugOpcode(uint32_t suggestion, const char* text) {
     OsGetVersionString(line, sizeof(line));
     SStrPack(info, line, sizeof(info));
     SStrPack(info, "\n", sizeof(info));
-    SStrPrintf(line, sizeof(line), "Version:\t%s\n", "WoW [Release] Build 12340 (Jun 24 2010 23:54:57)");
+    SStrPrintf(line, sizeof(line), "Version:\t%s\n", "WoW [Release] Build " GAME_BUILD_STRING " (" GAME_BUILD_DATE " " GAME_BUILD_TIME ")");
     SStrPack(info, line, sizeof(info));
     const char* account = ClientServices::s_accountName[0] ? ClientServices::s_accountName : nullptr;
 
@@ -746,11 +747,11 @@ int32_t SendBugOpcode(uint32_t suggestion, const char* text) {
 
             if (player) {
                 CGUnitData* unit = player->m_unit;
-                ChrRacesRec* race = g_chrRacesDB.GetRecord(unit->m_unitFieldBytes0[0]);
-                ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(unit->m_unitFieldBytes0[1]);
+                ChrRacesRec* race = g_chrRacesDB.GetRecord(unit->m_raceID);
+                ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(unit->m_classID);
                 const char* className = playerClass ? playerClass->m_name : "Unknown";
                 const char* raceName = race ? race->m_name : "Unknown";
-                SStrPrintf(line, sizeof(line), "Character:\t%s (level %i %s %s %s)\n", player->GetUnitName(nullptr, 1), player->m_unit->m_unitFieldLevel, raceName, s_sexNames[player->m_unit->m_unitFieldBytes0[2]], className);
+                SStrPrintf(line, sizeof(line), "Character:\t%s (level %i %s %s %s)\n", player->GetUnitName(nullptr, 1), player->m_unit->m_unitFieldLevel, raceName, s_sexNames[player->m_unit->m_sex], className);
                 SStrPack(info, line, sizeof(info));
                 int32_t mapId = CGPlayer_C::GetNewContinentID();
                 MapRec* map = g_mapDB.GetRecord(mapId);
@@ -780,7 +781,7 @@ int32_t SendBugOpcode(uint32_t suggestion, const char* text) {
                 SStrPack(info, line, sizeof(info));
 
                 if (CGGameUI::m_lockedTarget) {
-                    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+                    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_UNIT, __FILE__, __LINE__));
 
                     if (target) {
                         SStrPrintf(line, sizeof(line), "Target:\t%s\n", target->GetUnitName(nullptr, 1));
@@ -1022,7 +1023,7 @@ void ClientServices::GetRealmList() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    connection->Initiate(COP_GET_REALMS, 35, nullptr);
+    connection->Initiate(COP_GET_REALMS, REALM_LIST_IN_PROGRESS, nullptr);
 
     if (ClientServices::s_loginObj->IsLoggedOn()) {
         ClientServices::s_loginObj->GetRealmList();
@@ -1067,12 +1068,12 @@ void ClientServices::RealmEnumCallback(uint32_t result) {
     }
 
     if (result == 1) {
-        ClientServices::s_currentConnection->Complete(0, 23);
+        ClientServices::s_currentConnection->Complete(0, AUTH_SESSION_EXPIRED);
         return;
     }
 
     if (result == 3 || result == 2 || result == 4) {
-        ClientServices::s_currentConnection->Complete(0, 37);
+        ClientServices::s_currentConnection->Complete(0, REALM_LIST_FAILED);
         return;
     }
 
@@ -1080,7 +1081,7 @@ void ClientServices::RealmEnumCallback(uint32_t result) {
 
     if (connection->m_statusOp != COP_CONNECT || connection->m_realmConnectPending) {
         if (connection->m_statusOp == COP_GET_REALMS) {
-            connection->Complete(1, 36);
+            connection->Complete(1, REALM_LIST_SUCCESS);
         }
 
         return;
@@ -1091,7 +1092,7 @@ void ClientServices::RealmEnumCallback(uint32_t result) {
             connection->m_realmConnectPending = 1;
             ClientServices::s_loginObj->JoinRealm(ClientServices::m_selectRealmInfo.m_regionId, ClientServices::m_selectRealmInfo.m_battlegroupId, ClientServices::m_selectRealmInfo.m_realmId);
         } else {
-            ClientServices::Connection()->Complete(0, 39);
+            ClientServices::Connection()->Complete(0, REALM_LIST_REALM_NOT_FOUND);
         }
     } else {
         connection->m_realmConnectPending = 1;
@@ -1102,8 +1103,8 @@ void ClientServices::RealmEnumCallback(uint32_t result) {
 // VERIFY: a4f8699b auto
 // OFFSET: 0x006B1260
 int32_t ClientConnection::HandleConnect() {
-    this->Complete(1, 5);
-    this->unk_2F3C = 1;
+    this->Complete(1, RESPONSE_CONNECTED);
+    this->m_connected = 1;
     WardenClient_Initialize();
 
     return this->NetClient::HandleConnect();
@@ -1118,7 +1119,7 @@ int32_t ClientConnection::HandleDisconnect() {
     }
 
     this->m_statusComplete = 1;
-    this->unk_2F3C = 0;
+    this->m_connected = 0;
     this->m_loggingOut = 0;
     WardenClient_Destroy();
 
@@ -1128,8 +1129,8 @@ int32_t ClientConnection::HandleDisconnect() {
 // VERIFY: c357ca6f auto
 // OFFSET: 0x006B1320
 int32_t ClientConnection::HandleCantConnect() {
-    this->Complete(0, 4);
-    this->unk_2F3C = 0;
+    this->Complete(0, RESPONSE_FAILED_TO_CONNECT);
+    this->m_connected = 0;
     WardenClient_Destroy();
 
     return this->NetClient::HandleCantConnect();
@@ -1144,10 +1145,10 @@ void ClientConnection::Connect() {
 
     CGlueMgr::ResetQueueState();
     this->m_realmConnectPending = 0;
-    this->Initiate(COP_CONNECT, 7, nullptr);
+    this->Initiate(COP_CONNECT, CSTATUS_CONNECTING, nullptr);
 
-    if (this->unk_2F3C) {
-        this->Complete(1, 5);
+    if (this->m_connected) {
+        this->Complete(1, RESPONSE_CONNECTED);
     }
 
     ClientServices::s_loginObj->GetRealmList();
@@ -1185,12 +1186,12 @@ bool ClientServices::SetSelectedRealmInfo(int32_t force) {
 // OFFSET: 0x006B2E30
 void ClientServices::ConnectToSelectedServer() {
     if (!ClientServices::m_selectRealmInfoValid && !ClientServices::SetSelectedRealmInfo(0)) {
-        ClientServices::Connection()->Complete(0, 39);
+        ClientServices::Connection()->Complete(0, REALM_LIST_REALM_NOT_FOUND);
         return;
     }
 
     if (ClientServices::Connection()->m_netState != NS_INITIALIZED) {
-        ClientServices::Connection()->Complete(0, 39);
+        ClientServices::Connection()->Complete(0, REALM_LIST_REALM_NOT_FOUND);
         return;
     }
 
@@ -1223,15 +1224,15 @@ REALM_INFO* ClientServices::GetRealmInfoByIndex(uint32_t index) {
 // VERIFY: 815a18e9 auto
 // OFFSET: 0x006B1460
 void ClientConnection::HandleAuthResult(int32_t result) {
-    this->Complete(result == 12, result);
+    this->Complete(result == AUTH_OK, result);
 }
 
 // VERIFY: 0d280d76 manual
 // OFFSET: 0x006B14C0
 void ClientConnection::GetCharacterList() {
-    this->Initiate(COP_GET_CHARACTERS, 43, nullptr);
+    this->Initiate(COP_GET_CHARACTERS, CHAR_LIST_RETRIEVING, nullptr);
 
-    if (this->unk_2F3C) {
+    if (this->m_connected) {
         this->RequestCharacterEnum();
     } else {
         this->Cancel(RESPONSE_FAILED_TO_CONNECT);
@@ -1249,11 +1250,11 @@ void ClientRealmResponseAdapter::AddOnListReceived(RealmConnection* connection) 
 void ClientRealmResponseAdapter::HandleAuthResponse(RealmConnection* connection, uint8_t result) {
     ClientConnection* clientConnection = static_cast<ClientConnection*>(connection);
 
-    if (result == 27) {
+    if (result == AUTH_WAIT_QUEUE) {
         clientConnection->m_statusOp = COP_WAIT_QUEUE;
-        clientConnection->m_errorCode = 27;
+        clientConnection->m_errorCode = AUTH_WAIT_QUEUE;
         clientConnection->m_statusComplete = 0;
-        LogConnectionStatus(COP_WAIT_QUEUE, 27, 1, 1);
+        LogConnectionStatus(COP_WAIT_QUEUE, AUTH_WAIT_QUEUE, 1, 1);
         CGlueMgr::UpdateWaitQueue(clientConnection->m_queuePosition);
     } else {
         clientConnection->HandleAuthResult(result);
@@ -1268,9 +1269,9 @@ void ClientRealmResponseAdapter::CharacterListReceived(RealmConnection* connecti
     ClientConnection* clientConnection = static_cast<ClientConnection*>(connection);
 
     if (success) {
-        clientConnection->Complete(1, 44);
+        clientConnection->Complete(1, CHAR_LIST_RETRIEVED);
     } else {
-        clientConnection->Complete(0, 45);
+        clientConnection->Complete(0, CHAR_LIST_FAILED);
     }
 }
 
@@ -1349,7 +1350,7 @@ void ClientConnection::HandleCharacterCreate(uint8_t result) {
 void ClientConnection::RequestCharacterCreate(const CHARACTER_CREATE_INFO& info) {
     this->Initiate(COP_CREATE_CHARACTER, CHAR_CREATE_IN_PROGRESS, nullptr);
 
-    if (!this->unk_2F3C) {
+    if (!this->m_connected) {
         this->Cancel(RESPONSE_FAILED_TO_CONNECT);
         return;
     }
@@ -1375,13 +1376,13 @@ void ClientConnection::RequestCharacterCreate(const CHARACTER_CREATE_INFO& info)
 void ClientConnection::CharacterLogin(WOWGUID guid, int32_t a2) {
     this->Initiate(COP_LOGIN_CHARACTER, CHAR_LOGIN_IN_PROGRESS, nullptr);
 
-    if (!this->unk_2F3C) {
+    if (!this->m_connected) {
         this->Cancel(RESPONSE_FAILED_TO_CONNECT);
         return;
     }
 
     this->RequestCharacterLogin(guid, a2);
-    this->unk_2F40 = 1;
+    this->m_characterLoggedIn = 1;
 }
 
 // VERIFY: 74e67f09 auto
@@ -1413,7 +1414,7 @@ void ClientConnection::HandleCharacterDelete(uint8_t result) {
 void ClientConnection::RequestCharacterDelete(WOWGUID guid) {
     this->Initiate(COP_DELETE_CHARACTER, CHAR_DELETE_IN_PROGRESS, nullptr);
 
-    if (!this->unk_2F3C) {
+    if (!this->m_connected) {
         this->Cancel(RESPONSE_FAILED_TO_CONNECT);
         return;
     }
@@ -1452,12 +1453,12 @@ void ClientRealmResponseAdapter::OnChatReceived(RealmConnection* connection, WOW
 
 // VERIFY: 01b28e4e auto
 // OFFSET: 0x006B1B80
-void ClientRealmResponseAdapter::OnAccountOnline(RealmConnection* connection, int32_t a2, WOWGUID guid) {
+void ClientRealmResponseAdapter::OnAccountOnline(RealmConnection* connection, int32_t unused_a2, WOWGUID guid) {
 }
 
 // VERIFY: 93d4ae81 auto
 // OFFSET: 0x006B1BA0
-void ClientRealmResponseAdapter::OnAFKMonitorInfoResponse(RealmConnection* connection, WOWGUID guid, int32_t a3, int32_t a4, int32_t a5, int32_t a6) {
+void ClientRealmResponseAdapter::OnAFKMonitorInfoResponse(RealmConnection* connection, WOWGUID guid, int32_t unused_a3, int32_t unused_a4, int32_t unused_a5, int32_t unused_a6) {
 }
 
 // VERIFY: a13283da auto
@@ -1529,7 +1530,7 @@ void ClientConnection::HandleLogoutComplete() {
         this->CharacterSetInGame(0);
     }
 
-    this->unk_2F40 = 0;
+    this->m_characterLoggedIn = 0;
 
     if (!ClientServices::s_currentConnection) {
         SErrDisplayAppFatalMessage("", "", 0);
@@ -1558,7 +1559,7 @@ void ClientServices::JoinRealmResult(uint32_t realmId, int32_t a2, int32_t a3, i
     }
 
     if (!ClientServices::m_selectRealmInfoValid || !realmId || ClientServices::m_selectRealmInfo.m_realmId != realmId) {
-        ClientServices::s_currentConnection->Complete(0, 4);
+        ClientServices::s_currentConnection->Complete(0, RESPONSE_FAILED_TO_CONNECT);
         return;
     }
 
@@ -1595,7 +1596,7 @@ void ClientConnection::CharacterLogout(bool quit, bool instant) {
 
     if (this != ClientServices::s_currentConnection) {
         this->CharacterSetInGame(0);
-        this->unk_2F40 = 0;
+        this->m_characterLoggedIn = 0;
         return;
     }
 
@@ -1726,7 +1727,7 @@ void ClientConnection::HandleCharacterLoginFailed(uint8_t result) {
         this->CharacterSetInGame(0);
     }
 
-    this->unk_2F40 = 0;
+    this->m_characterLoggedIn = 0;
 
     if (!ClientServices::s_currentConnection) {
         SErrDisplayAppFatalMessage("", "", 0);
@@ -1737,35 +1738,35 @@ void ClientConnection::HandleCharacterLoginFailed(uint8_t result) {
     }
 
     switch (result) {
-        case 1:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_NO_WORLD:
             this->Cancel(CHAR_LOGIN_NO_WORLD);
             break;
 
-        case 2:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_DUPLICATE_CHARACTER:
             this->Cancel(CHAR_LOGIN_DUPLICATE_CHARACTER);
             break;
 
-        case 3:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_NO_INSTANCES:
             this->Cancel(CHAR_LOGIN_NO_INSTANCES);
             break;
 
-        case 4:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_DISABLED:
             this->Cancel(CHAR_LOGIN_DISABLED);
             break;
 
-        case 5:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_NO_CHARACTER:
             this->Cancel(CHAR_LOGIN_NO_CHARACTER);
             break;
 
-        case 6:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_LOCKED_FOR_TRANSFER:
             this->Cancel(CHAR_LOGIN_LOCKED_FOR_TRANSFER);
             break;
 
-        case 7:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_LOCKED_BY_BILLING:
             this->Cancel(CHAR_LOGIN_LOCKED_BY_BILLING);
             break;
 
-        case 8:
+        case ClientConnection::CHARACTER_LOGIN_FAILURE::LOGIN_FAILURE_UI_LOCKED_BY_MOBILE_AH:
             this->Cancel(CHAR_LOGIN_LOCKED_BY_MOBILE_AH);
             break;
 

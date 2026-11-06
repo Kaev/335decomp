@@ -45,7 +45,7 @@ void CGItemSocketInfo::SetItem(WOWGUID item) {
     CGItemSocketInfo::m_gemItems[2] = WOWGUID();
     CGItemSocketInfo::m_socketItemStats = nullptr;
     CGItemSocketInfo::m_socketItem = item;
-    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (object) {
         WOWGUID none = WOWGUID();
@@ -73,7 +73,7 @@ int32_t CGItemSocketInfo::SetGem(uint32_t slot, WOWGUID item, WOWGUID container,
         return 1;
     }
 
-    CGItem_C* gem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* gem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!gem) {
         return 0;
@@ -187,7 +187,7 @@ void CGItemSocketInfo::EnterWorld() {
 // VERIFY: a44ae1bf manual
 // OFFSET: 0x005C4970
 bool CGItemSocketInfo::IsSocketItemBoundTradeable() {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGItemSocketInfo::m_socketItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGItemSocketInfo::m_socketItem, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return false;
@@ -225,7 +225,7 @@ void CGItemSocketInfo::Accept() {
 // VERIFY: 5ccf6cd7 manual
 // OFFSET: 0x005C50E0
 bool CGItemSocketInfo::IsSocketItemRefundable() {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGItemSocketInfo::m_socketItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGItemSocketInfo::m_socketItem, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return false;
@@ -238,7 +238,7 @@ bool CGItemSocketInfo::IsSocketItemRefundable() {
     }
 
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
-    return static_cast<int32_t>(purchase->m_refundTimeLeft + 7200 - player->GetPlayedTime()) > 0;
+    return static_cast<int32_t>(purchase->m_purchasePlayedTime + CGItem_C::ItemPurchaseData::REFUND_PERIOD_SECONDS - player->GetPlayedTime()) > 0;
 }
 
 // VERIFY: 47e2ebf9 auto

@@ -14,6 +14,7 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
+#include "GameVersion.h"
 
 class CHashKeyGUID;
 class CWardenKey;
@@ -26,7 +27,7 @@ struct HASHKEY_INT {
 
 struct DBCACHECALLBACK : public TSLinkedNode<DBCACHECALLBACK> {
     /* 0008 */ void (*m_callback)(int32_t id, const WOWGUID& guid, void* param, bool success);
-    /* 000C */ uint32_t unk_000C;
+    /* 000C */ uint32_t unused_000C;
     /* 0010 */ WOWGUID m_guid;
     /* 0018 */ void* m_param;
 };
@@ -188,7 +189,7 @@ void DBCache<T, TKey, THashKey>::Load() {
     uint32_t build;
     header.Get(build);
 
-    if (build != 12340) {
+    if (build != GAME_BUILD) {
         OsCloseFile(file);
         return;
     }
@@ -304,7 +305,7 @@ T* DBCache<T, TKey, THashKey>::GetRecord(TKey key, const WOWGUID& guid, void (*c
             hash = this->m_entries.New(DBCacheHashKey(key), key, 0, 0);
             hash->m_id = key;
 
-            DBCACHECALLBACK* node = hash->m_callbacks.NewNode(2, 0, 0);
+            DBCACHECALLBACK* node = hash->m_callbacks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
             node->m_callback = callback;
             node->m_guid = guid;
             node->m_param = param;
@@ -332,7 +333,7 @@ T* DBCache<T, TKey, THashKey>::GetRecord(TKey key, const WOWGUID& guid, void (*c
             }
         }
 
-        DBCACHECALLBACK* node = hash->m_callbacks.NewNode(2, 0, 0);
+        DBCACHECALLBACK* node = hash->m_callbacks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         node->m_callback = callback;
         node->m_guid = guid;
         node->m_param = param;
@@ -438,7 +439,7 @@ void DBCache<T, TKey, THashKey>::Save() {
 
     CDataStore header;
     header.Put(this->m_signature);
-    header.Put(static_cast<uint32_t>(12340));
+    header.Put(static_cast<uint32_t>(GAME_BUILD));
     header.Put(SFile::s_locale);
     header.Put(static_cast<uint32_t>(sizeof(T)));
     header.Put(T::s_cacheVersion);

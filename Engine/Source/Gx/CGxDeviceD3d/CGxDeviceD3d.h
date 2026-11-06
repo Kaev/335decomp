@@ -206,7 +206,7 @@ class CGxDeviceD3d : public CGxDevice {
 
     /* 3968 */ HWND m_hwnd;
     /* 396C */ ATOM m_hwndClass;
-    /* 396E */ uint16_t unk_396E;
+    /* 396E */ uint16_t unused_396E;
     /* 3970 */ int32_t m_ownhwnd;
     /* 3974 */ HINSTANCE m_d3dLib;
     /* 3978 */ LPDIRECT3D9 m_d3d;
@@ -241,7 +241,7 @@ class CGxDeviceD3d : public CGxDevice {
     /* 3B64 */ LPDIRECT3DVERTEXBUFFER9 m_d3dVertexStreamBuf [8];
     /* 3B84 */ uint32_t m_d3dVertexStreamOfs [8];
     /* 3BA4 */ uint32_t m_d3dVertexStreamStride [8];
-    /* 3BC4 */ uint32_t m_deviceStates [182];
+    /* 3BC4 */ uint32_t m_deviceStates [DeviceStates_Last];
     /* 3E9C */ bool m_texEnabled [8];
 
     virtual void ITexMarkAsUpdated(CGxTex* texId);
@@ -308,16 +308,16 @@ class CGxDeviceD3d : public CGxDevice {
     static const D3DFORMAT s_GxTexFmtToD3dFmt[GxTexFormats_Last];
     static EGxTexFormat s_GxTexFormatToUse[GxTexFormats_Last];
     static const EGxTexFormat s_tolerableTexFmtMapping[GxTexFormats_Last];
-    static const D3DCUBEMAP_FACES s_faceTypes[6];
+    static const D3DCUBEMAP_FACES s_faceTypes[GxTexCubeFaces_Last];
     static const D3DPRIMITIVETYPE s_primitiveConversion[GxPrims_Last];
     static const D3DBLEND s_srcBlend[12];
     static const D3DBLEND s_dstBlend[12];
-    static const D3DCMPFUNC s_cmpFunc[4];
+    static const D3DCMPFUNC s_cmpFunc[GxCmps_Last];
     static const D3DCULL s_cullMode[3];
     static D3DTEXTUREFILTERTYPE s_filterModes[GxTexFilters_Last][3];
     static const D3DTEXTUREADDRESS s_wrapModes[2];
-    static const uint32_t s_gxAttribToD3dAttribSize[7];
-    static D3DDECLTYPE s_gxAttribToD3dAttribType[7];
+    static const uint32_t s_gxAttribToD3dAttribSize[GxVertexAttribTypes_Last];
+    static D3DDECLTYPE s_gxAttribToD3dAttribType[GxVertexAttribTypes_Last];
     static const D3DDECLUSAGE s_gxAttribToD3dAttribUsage[GxVAs_Last];
     static const uint32_t s_gxAttribToD3dAttribUsageIndex[GxVAs_Last];
 

@@ -1,4 +1,5 @@
 #include "MapEntity.h"
+#include "WoW/Source/WorldClient/WorldLightingConstants.h"
 #include "Engine/Source/Tempest/C3Segment.h"
 #include "WoW/Source/DB/DBClient/DBClient.h"
 #include "WoW/Source/DB/Rec/AreaTableRec.h"
@@ -17,6 +18,8 @@
 #include "WoW/Source/Ui/MinimapFrame.h"
 #include "WoW/Source/WorldClient/CWorldMath.h"
 
+static const float dirLightScaleRate = 3.3333333f;
+
 // STATIC: 0x00ADEEBC
 float CMapStaticEntity::s_characterAmbient = 1.0f;
 
@@ -29,7 +32,7 @@ CMapStaticEntity::CMapStaticEntity() {
     this->m_sphere.c = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sphere.r = 0.0f;
     this->m_scale = 0.0f;
-    this->unk_007C &= 0xFFFE4000;
+    this->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_CONSTRUCTOR_CLEAR_MASK;
     this->m_distanceToCamera = 0.0f;
     this->m_liquidHeight = 0.0f;
     this->m_model = nullptr;
@@ -38,7 +41,7 @@ CMapStaticEntity::CMapStaticEntity() {
     this->m_shadowStamps[0] = 0;
     this->m_shadowStamps[1] = 0;
     this->m_shadowStamps[2] = 0;
-    this->unk_002B = 0;
+    this->unused_002B = 0;
     this->m_fadeLevel = 0;
     this->m_vec2 = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_culled = 2;
@@ -66,11 +69,11 @@ void FogQueue::Erase(uint32_t index, uint32_t count) {
 
 // VERIFY: 67998dc9 manual
 // OFFSET: 0x007A0CD0
-static void LerpInteriorFog(SMOFog::Fog* dst, const SMOFog::Fog* src, float t) {
-    for (int32_t i = 0; i < 2; i++) {
-        dst[i].m_end = (src[i].m_end - dst[i].m_end) * t + dst[i].m_end;
-        dst[i].m_startScalar = t * (src[i].m_startScalar - dst[i].m_startScalar) + dst[i].m_startScalar;
-        dst[i].m_color = DayNight::InterpColor(dst[i].m_color, src[i].m_color, t);
+void SMOFog::Fogs::Blend(const Fogs& fogs, float t) {
+    for (int32_t i = 0; i < NUM_FOGS; i++) {
+        this->m_fog[i].m_end = (fogs.m_fog[i].m_end - this->m_fog[i].m_end) * t + this->m_fog[i].m_end;
+        this->m_fog[i].m_startScalar = t * (fogs.m_fog[i].m_startScalar - this->m_fog[i].m_startScalar) + this->m_fog[i].m_startScalar;
+        this->m_fog[i].m_color = DayNight::InterpColor(this->m_fog[i].m_color, fogs.m_fog[i].m_color, t);
     }
 }
 
@@ -150,22 +153,22 @@ void FogQueue::Push(float distance, uint32_t fogIndex) {
 // VERIFY: eeb1ad46 manual
 // OFFSET: 0x007A0FE0
 CMapEntity::CMapEntity() {
-    this->unk_00A8 = C3Vector(0.0f, 0.0f, 0.0f);
+    this->unused_00A8 = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_func = nullptr;
     this->m_funcParam = nullptr;
     this->m_funcParam64 = 0;
     this->m_funcParam32 = 0;
-    this->unk_00B4 = 0;
+    this->unused_00B4 = 0;
     this->m_groundType = 0;
-    this->unk_00BC = 0;
-    this->unk_00BE = 0;
+    this->m_liquidType = 0;
+    this->unused_00BE = 0;
     this->unk_00A4 = 0xFFFFFFFF;
-    this->unk_00C0.b = 0xFF;
-    this->unk_00C0.g = 0x00;
-    this->unk_00C0.r = 0x00;
-    this->unk_00C0.a = 0x00;
-    this->unk_00C4 = 0.0f;
-    this->m_type |= 0x20;
+    this->m_targetAmbientColor.b = 0xFF;
+    this->m_targetAmbientColor.g = 0x00;
+    this->m_targetAmbientColor.r = 0x00;
+    this->m_targetAmbientColor.a = 0x00;
+    this->m_targetDiffuseLightScale = 0.0f;
+    this->m_type |= CMapBaseObj::Type_Entity;
 }
 
 // VERIFY: 515c7062 manual
@@ -225,7 +228,7 @@ int32_t CMapEntity::QueryCameraFog(SMOFog* fog, CMapObjDef** mapObjDef, uint8_t*
             float dz = groupFog.m_position.z - localPos.z;
             float fogDistance = sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (fogDistance < groupFog.m_largerRadius && !(groupFog.m_flags & 1)) {
+            if (fogDistance < groupFog.m_largerRadius && !(groupFog.m_flags & SMOFog::F_IEBLEND)) {
                 s_fogQueue.Push(fogDistance, fogIndex);
             }
         }
@@ -250,7 +253,7 @@ int32_t CMapEntity::QueryCameraFog(SMOFog* fog, CMapObjDef** mapObjDef, uint8_t*
             weight = 1.0f;
         }
 
-        LerpInteriorFog(&fog->m_fog, &groupFog.m_fog, weight);
+        fog->m_fogs.Blend(groupFog.m_fogs, weight);
 
         if (s_fogQueue.m_count == 1) {
             fog->m_flags = groupFog.m_flags;
@@ -292,7 +295,7 @@ void CMapStaticEntity::SelectLights(CM2Lighting* lighting) {
 
             dir = CMapStaticEntity::s_interiorSunDir;
 
-            if ((this->unk_007C & 0x1000) != 0) {
+            if ((this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_BLEND_OUTDOOR_LIGHT) != 0) {
                 DayNight::DNInfo* dayNight = DayNight::GetInfo();
                 float blend = this->m_m2DiffuseColor.a / 255.0f;
 
@@ -304,7 +307,7 @@ void CMapStaticEntity::SelectLights(CM2Lighting* lighting) {
             }
         }
 
-        if ((this->unk_007C & 0x8000) != 0) {
+        if ((this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_USE_CHARACTER_AMBIENT) != 0) {
             ambient.x *= CMapStaticEntity::s_characterAmbient;
             ambient.y *= CMapStaticEntity::s_characterAmbient;
             ambient.z *= CMapStaticEntity::s_characterAmbient;
@@ -384,14 +387,14 @@ FogQ FogQueue::Pop() {
 // VERIFY: 5f34315e manual
 // OFFSET: 0x007A1B10
 void CMapEntity::QueryLiquidSounds(TSGrowableArray<World::LiquidQueryResult>& results, uint32_t* distance) {
-    if (!(this->unk_007C & 0x1)) {
+    if (!(this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_INSIDE)) {
         return;
     }
 
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (!(ref->m_type & 0x10)) {
+        if (!(ref->m_type & CMapBaseObj::Type_MapObjDefGroup)) {
             continue;
         }
 
@@ -415,9 +418,9 @@ void CMapEntity::Tick() {
     int32_t r = this->m_m2AmbientColor.r;
     int32_t g = this->m_m2AmbientColor.g;
     int32_t b = this->m_m2AmbientColor.b;
-    int32_t targetR = this->unk_00C0.r;
-    int32_t targetG = this->unk_00C0.g;
-    int32_t targetB = this->unk_00C0.b;
+    int32_t targetR = this->m_targetAmbientColor.r;
+    int32_t targetG = this->m_targetAmbientColor.g;
+    int32_t targetB = this->m_targetAmbientColor.b;
     int32_t changed = 0;
 
     if (targetR - r) {
@@ -478,27 +481,27 @@ void CMapEntity::Tick() {
     this->m_m2AmbientColor.g = static_cast<uint8_t>(g);
     this->m_m2AmbientColor.b = static_cast<uint8_t>(b);
 
-    if (!(this->unk_007C & 0x1) && !changed) {
+    if (!(this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_INSIDE) && !changed) {
         CImVector ambient = DayNight::GetInfo()->m_light1.m_ambient;
         this->m_m2AmbientColor = ambient;
-        this->unk_00C0 = ambient;
+        this->m_targetAmbientColor = ambient;
     }
 
-    float rate = FrameTime::s_tickTimeSec * 3.3333333f;
-    float delta = this->m_diffuseLightScale - this->unk_00C4;
+    float rate = FrameTime::s_tickTimeSec * dirLightScaleRate;
+    float delta = this->m_diffuseLightScale - this->m_targetDiffuseLightScale;
 
     if (0.0f != delta) {
         if (delta >= 0.0f) {
             this->m_diffuseLightScale = this->m_diffuseLightScale - rate;
 
-            if (this->m_diffuseLightScale < this->unk_00C4) {
-                this->m_diffuseLightScale = this->unk_00C4;
+            if (this->m_diffuseLightScale < this->m_targetDiffuseLightScale) {
+                this->m_diffuseLightScale = this->m_targetDiffuseLightScale;
             }
         } else {
             this->m_diffuseLightScale = rate + this->m_diffuseLightScale;
 
-            if (this->m_diffuseLightScale > this->unk_00C4) {
-                this->m_diffuseLightScale = this->unk_00C4;
+            if (this->m_diffuseLightScale > this->m_targetDiffuseLightScale) {
+                this->m_diffuseLightScale = this->m_targetDiffuseLightScale;
             }
         }
     }
@@ -518,7 +521,7 @@ bool CMapStaticEntity::GetMapObjAndGroup(CMapObjDef** mapObjDef, CMapObj** mapOb
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (!(ref->m_type & 0x10)) {
+        if (!(ref->m_type & CMapBaseObj::Type_MapObjDefGroup)) {
             continue;
         }
 
@@ -544,7 +547,7 @@ bool CMapStaticEntity::GetMapObjAndGroup(CMapObjDef** mapObjDef, CMapObj** mapOb
 // VERIFY: d211d73c auto
 // OFFSET: 0x007A1A30
 bool CMapEntity::UpdateMapObjLiquid() {
-    this->unk_007C &= ~0x60;
+    this->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LIQUID_STATE_MASK;
     CMapObjDef* mapObjDef;
     CMapObj* mapObj;
     CMapObjDefGroup* mapObjDefGroup;
@@ -562,17 +565,17 @@ bool CMapEntity::UpdateMapObjLiquid() {
         return false;
     }
 
-    this->unk_007C |= 0x20;
+    this->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_IN_LIQUID;
     C3Vector world = C3Vector(local.x, local.y, level) * mapObjDef->m_mat;
     this->m_liquidHeight = world.z;
 
     if (world.z <= this->m_bbox.t.z) {
-        this->unk_007C |= 0x40;
+        this->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LIQUID_SURFACE_CLIP;
     } else {
-        this->unk_007C &= ~0x40;
+        this->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LIQUID_SURFACE_CLIP;
     }
 
-    this->unk_00BC = static_cast<uint16_t>(liquidType);
+    this->m_liquidType = static_cast<uint16_t>(liquidType);
     return true;
 }
 
@@ -590,8 +593,8 @@ bool CMapEntity::QueryInteriorLighting(CMapObjDef* mapObjDef, int32_t groupNum, 
     } else {
         C3Vector local = this->m_position * mapObjDef->m_invMat;
         C3Segment seg;
-        seg.b = C3Vector(local.x, local.y, local.z + 1.0f);
-        seg.t = C3Vector(local.x, local.y, local.z - 12.0f);
+        seg.start = C3Vector(local.x, local.y, local.z + 1.0f);
+        seg.end = C3Vector(local.x, local.y, local.z - 12.0f);
         result = mapObjDef->m_owner->QueryLighting(groupNum, seg, &color, &flag);
     }
 
@@ -600,11 +603,11 @@ bool CMapEntity::QueryInteriorLighting(CMapObjDef* mapObjDef, int32_t groupNum, 
     }
 
     CImVector limit;
-    *reinterpret_cast<uint32_t*>(&limit) = 0xA8;
-    this->AdjustLightmap(&color, &this->m_m2DiffuseColor, limit, &this->unk_00C0, 96);
+    *reinterpret_cast<uint32_t*>(&limit) = MIN_INTERIOR_DIRCOLOR;
+    this->AdjustLightmap(&color, &this->m_m2DiffuseColor, limit, &this->m_targetAmbientColor, MAX_AMBIENT);
 
     if (!flag) {
-        this->unk_007C &= ~0x1000;
+        this->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_BLEND_OUTDOOR_LIGHT;
         return result;
     }
 
@@ -613,10 +616,10 @@ bool CMapEntity::QueryInteriorLighting(CMapObjDef* mapObjDef, int32_t groupNum, 
 
     if (alpha) {
         this->m_m2DiffuseColor.InterpColor(alpha, &info->m_light1.m_diffuse);
-        this->unk_00C0.InterpColor(alpha, &info->m_light1.m_ambient);
+        this->m_targetAmbientColor.InterpColor(alpha, &info->m_light1.m_ambient);
     }
 
-    this->unk_007C |= 0x1000;
+    this->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_BLEND_OUTDOOR_LIGHT;
     this->m_m2DiffuseColor.a = color.a;
     return result;
 }
@@ -697,7 +700,7 @@ bool CMapEntity::QueryMapObjAreaTable(WMOAreaTableRec** groupRec, WMOAreaTableRe
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             break;
         }
 
@@ -724,7 +727,7 @@ bool CMapEntity::QueryMapObjIDs(int32_t* wmoId, int32_t* wmoHash, int32_t* group
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             break;
         }
 
@@ -750,7 +753,7 @@ int32_t CMapEntity::QueryInterior() {
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             break;
         }
 
@@ -778,7 +781,7 @@ int32_t CMapEntity::QueryMapObjFileName(const char** fileName) {
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             *fileName = nullptr;
             return 0;
         }
@@ -803,7 +806,7 @@ bool CMapEntity::QueryMapObjMinimap(CAaBox* box, TSStackArray<MINIMAPQUADINFO>* 
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             return false;
         }
 
@@ -834,7 +837,7 @@ bool CMapEntity::QueryMapObjMatrix(C44Matrix* matrix, C44Matrix* invMatrix) {
     for (CMapBaseObjLink* link = this->m_parentLinkList.Head(); link; link = this->m_parentLinkList.Next(link)) {
         CMapBaseObj* ref = link->m_ref;
 
-        if (ref->m_type & 0x4) {
+        if (ref->m_type & CMapBaseObj::Type_Chunk) {
             return false;
         }
 

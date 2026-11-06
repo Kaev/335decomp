@@ -16,6 +16,7 @@
 #include "Engine/Source/Frame/CSimpleFrame.h"
 #include "Engine/Source/Frame/CSimpleRender.h"
 #include "Engine/Source/Frame/CSimpleTexture.h"
+#include "Engine/Source/Frame/CSimpleTitleRegion.h"
 #include "Engine/Source/Gx/CGxDevice/CGxDevice.h"
 #include "Engine/Source/Gx/Gx.h"
 #include "Engine/Source/Gxu/GxuFont.h"
@@ -197,7 +198,7 @@ int32_t CSimpleTop::StartMoveOrResizeFrame(CSimpleFrame* frame, MOVERESIZE_REASO
     }
 
     frame->Raise();
-    frame->SetFrameFlag(0x1000, true);
+    frame->SetFrameFlag(CSimpleFrame::FrameFlags::FRAME_USER_PLACED, true);
 
     this->m_moveResizeLast.x = x;
     this->m_moveResizeReason = reason;
@@ -268,7 +269,7 @@ int32_t CSimpleTop::OnChar(const void* data, void* param) {
 
     CCharEvent evt;
     evt.m_data = *charData;
-    evt.m_id = 0x40060067;
+    evt.m_id = EVENT_CHAR;
 
     for (int32_t strata = FRAME_STRATA_TOOLTIP; strata >= 0; strata--) {
         if (handled) {
@@ -301,7 +302,7 @@ int32_t CSimpleTop::OnIme(const void* data, void* param) {
 
     CImeEvent evt;
     evt.m_data = *imeData;
-    evt.m_id = 0x40060068;
+    evt.m_id = EVENT_IME;
 
     for (int32_t strata = FRAME_STRATA_TOOLTIP; strata >= 0; strata--) {
         if (handled) {
@@ -335,7 +336,7 @@ int32_t CSimpleTop::OnKeyDown(const void* data, void* param) {
     CKeyEvent evt;
     evt.m_data = *keyData;
     CSimpleTop::s_eventTime = evt.m_data.m_time;
-    evt.m_id = 0x40060064;
+    evt.m_id = EVENT_KEY_DOWN;
 
     if (top->m_keyDownCallback) {
         top->m_keyDownCallback(evt);
@@ -381,7 +382,7 @@ int32_t CSimpleTop::OnKeyUp(const void* data, void* param) {
     if (frame) {
         CKeyEvent evt;
         evt.m_data = *keyData;
-        evt.m_id = 0x40060066;
+        evt.m_id = EVENT_KEY_UP;
         frame->OnLayerKeyUp(evt);
         handled = 1;
     } else if (keyData->m_key == KEY_PRINTSCREEN) {
@@ -404,7 +405,7 @@ int32_t CSimpleTop::OnKeyDownRepeat(const void* data, void* param) {
     if (frame) {
         CKeyEvent evt;
         evt.m_data = *keyData;
-        evt.m_id = 0x40060065;
+        evt.m_id = EVENT_KEY_REPEAT;
         frame->OnLayerKeyDownRepeat(evt);
         handled = 1;
     }
@@ -596,7 +597,7 @@ int32_t CSimpleTop::OnFocusChanged(const void* data, void* param) {
     if (callback) {
         CFocusEvent evt;
         evt.m_data = *focusData;
-        evt.m_id = 0x40040065;
+        evt.m_id = EVENT_WINDOW_FOCUS;
         callback(evt);
     }
 
@@ -612,7 +613,7 @@ CSimpleFrame* CFrameStrata::GetHitFrame(const C2Vector& pt) {
 
         for (CSimpleFrame* frame = node->m_frames.Head(); frame; frame = node->m_frames.Next(frame)) {
             if (frame->TestHitRect(pt)) {
-                while (!(frame->m_frameFlags & 1)) {
+                while (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_TOPLEVEL)) {
                     frame = frame->m_parent;
 
                     if (!frame) {
@@ -672,8 +673,8 @@ void CFrameStrata::CheckOcclusion() {
         CFrameStrataNode* node = this->m_levels[level];
 
         for (CSimpleFrame* frame = node->m_frames.Head(); frame; frame = node->m_frames.Next(frame)) {
-            if (frame->m_frameFlags & 1) {
-                frame->SetFrameFlag(0x10, this->FrameOccluded(frame));
+            if (frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_TOPLEVEL) {
+                frame->SetFrameFlag(CSimpleFrame::FrameFlags::FRAME_OCCLUDED, this->FrameOccluded(frame));
             }
         }
     }
@@ -806,7 +807,7 @@ void CSimpleTop::CompressStrata(int32_t strata) {
 // VERIFY: ca612c34 manual
 // OFFSET: 0x004951A0
 int32_t CSimpleTop::RaiseFrame(CSimpleFrame* frame, int32_t checkOcclusion) {
-    while (!(frame->m_frameFlags & 1)) {
+    while (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_TOPLEVEL)) {
         frame = frame->m_parent;
 
         if (!frame) {
@@ -815,14 +816,14 @@ int32_t CSimpleTop::RaiseFrame(CSimpleFrame* frame, int32_t checkOcclusion) {
     }
 
     if (checkOcclusion) {
-        if (!(frame->m_layoutFlags & 0x100) || frame->IsResizePending()) {
+        if (!(frame->m_layoutFlags & CLayoutFrame::LayoutFlags::LAYOUT_RECT_VALID) || frame->IsResizePending()) {
             frame->Resize(1);
         }
 
-        frame->SetFrameFlag(0x10, this->m_strata[frame->m_strata]->FrameOccluded(frame));
+        frame->SetFrameFlag(CSimpleFrame::FrameFlags::FRAME_OCCLUDED, this->m_strata[frame->m_strata]->FrameOccluded(frame));
     }
 
-    if (frame->m_frameFlags & 0x10) {
+    if (frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_OCCLUDED) {
         this->CompressStrata(frame->m_strata);
         frame->SetFrameLevel(this->m_strata[frame->m_strata]->m_topLevel, 1);
         this->m_checkFocus = 1;
@@ -852,10 +853,10 @@ int32_t CSimpleTop::StartMoveOrResizeFrame(const CMouseEvent& evt, MOVERESIZE_RE
     }
 
     if (resize) {
-        if (!(frame->m_frameFlags & 0x200)) {
+        if (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_RESIZABLE)) {
             return 0;
         }
-    } else if (!(frame->m_frameFlags & 0x100)) {
+    } else if (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_MOVABLE)) {
         return 0;
     }
 
@@ -969,7 +970,7 @@ int32_t CSimpleTop::OnDisplaySizeChanged(const void* data, void* param) {
     if (callback) {
         CSizeEvent evt;
         evt.m_data = *sizeData;
-        evt.m_id = 0x40040064;
+        evt.m_id = EVENT_WINDOW_SIZE;
         callback(evt);
     }
 
@@ -1041,7 +1042,7 @@ void CSimpleTop::UnregisterForEvent(CSimpleFrame* frame, CSimpleEventType event,
                 this->m_mouseFocus = nullptr;
                 this->m_checkFocus = 1;
 
-                if (frame->unk_00AC != 3) {
+                if (frame->m_initialized_state != CSimpleFrame::INITIALIZED_STATE::STATE_DELETED) {
                     frame->OnLayerCursorExit(0, 1);
                 }
             }
@@ -1054,18 +1055,18 @@ void CSimpleTop::UnregisterForEvent(CSimpleFrame* frame, CSimpleEventType event,
 // VERIFY: f41311c7 auto
 // OFFSET: 0x004959F0
 void CSimpleTop::EnableEvents() {
-    EventRegisterEx(EVENT_ID_CHAR, &CSimpleTop::OnChar, this, 1.0f);
-    EventRegisterEx(EVENT_ID_IME, &CSimpleTop::OnIme, this, 1.0f);
-    EventRegisterEx(EVENT_ID_KEYDOWN, &CSimpleTop::OnKeyDown, this, 1.0f);
-    EventRegisterEx(EVENT_ID_KEYUP, &CSimpleTop::OnKeyUp, this, 1.0f);
-    EventRegisterEx(EVENT_ID_KEYDOWN_REPEATING, &CSimpleTop::OnKeyDownRepeat, this, 1.0f);
-    EventRegisterEx(EVENT_ID_MOUSEMOVE, &CSimpleTop::OnMouseMove, this, 1.0f);
-    EventRegisterEx(EVENT_ID_MOUSEMOVE_RELATIVE, &CSimpleTop::OnMouseMoveRelative, this, 1.0f);
-    EventRegisterEx(EVENT_ID_MOUSEDOWN, &CSimpleTop::OnMouseDown, this, 1.0f);
-    EventRegisterEx(EVENT_ID_MOUSEUP, &CSimpleTop::OnMouseUp, this, 1.0f);
-    EventRegisterEx(EVENT_ID_MOUSEWHEEL, &CSimpleTop::OnMouseWheel, this, 1.0f);
-    EventRegisterEx(EVENT_ID_SIZE, &CSimpleTop::OnDisplaySizeChanged, this, 1.0f);
-    EventRegisterEx(EVENT_ID_FOCUS, &CSimpleTop::OnFocusChanged, this, 1.0f);
+    EventRegisterEx(EVENT_ID_CHAR, &CSimpleTop::OnChar, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_IME, &CSimpleTop::OnIme, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_KEYDOWN, &CSimpleTop::OnKeyDown, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_KEYUP, &CSimpleTop::OnKeyUp, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_KEYDOWN_REPEATING, &CSimpleTop::OnKeyDownRepeat, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_MOUSEMOVE, &CSimpleTop::OnMouseMove, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_MOUSEMOVE_RELATIVE, &CSimpleTop::OnMouseMoveRelative, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_MOUSEDOWN, &CSimpleTop::OnMouseDown, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_MOUSEUP, &CSimpleTop::OnMouseUp, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_MOUSEWHEEL, &CSimpleTop::OnMouseWheel, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_SIZE, &CSimpleTop::OnDisplaySizeChanged, this, EVENT_PRIORITY_ABOVE_NORMAL);
+    EventRegisterEx(EVENT_ID_FOCUS, &CSimpleTop::OnFocusChanged, this, EVENT_PRIORITY_ABOVE_NORMAL);
 }
 
 // VERIFY: 8b4e6642 auto
@@ -1116,7 +1117,7 @@ void CFrameStrata::AddFrame(CSimpleFrame* frame) {
         TSExplicitList<CSimpleFrame, offsetof(CSimpleFrame, m_strataLink)>* list = node->m_pendingFrame ? &node->m_pendingFrames : &node->m_frames;
         list->LinkToTail(frame);
 
-        if (!(frame->m_frameFlags & 0x2000)) {
+        if (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_BEING_SCROLLED)) {
             node->m_batchDirty = -1;
         }
     }
@@ -1138,7 +1139,7 @@ CSimpleTop::CSimpleTop() {
     this->m_focusChangedCallback = nullptr;
     this->m_keyDownCallback = nullptr;
     this->m_allowProtectedActions = 1;
-    this->unk_1250 = 0;
+    this->unused_1250 = 0;
     this->m_actionBlockedCallback = nullptr;
 
     CSimpleTop::s_instance = this;
@@ -1148,7 +1149,7 @@ CSimpleTop::CSimpleTop() {
     memset(this->m_keydownCapture, 0, sizeof(this->m_keydownCapture));
 
     NDCToDDC(1.0f, 1.0f, &this->m_rect.maxX, &this->m_rect.maxY);
-    this->m_layoutFlags |= 0x100;
+    this->m_layoutFlags |= CLayoutFrame::LayoutFlags::LAYOUT_RECT_VALID;
 
     this->m_moveResizeEnabled = 0;
     this->m_moveResizeFrame = nullptr;

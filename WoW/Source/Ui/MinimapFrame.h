@@ -8,6 +8,7 @@
 #include "Engine/Source/Gx/CGxTex.h"
 #include "Engine/Source/Tempest/C3Vector.h"
 #include "Engine/Source/Tempest/C2Vector.h"
+#include "Engine/Source/Tempest/C2iVector.h"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "WoW/Source/Object/WGUID.h"
 #include "Engine/Source/Tempest/CRect.h"
@@ -43,8 +44,7 @@ struct MINIMAPTILE {
     /* 008C */ float m_depth;
     /* 0090 */ CTexture* m_texture;
     /* 0094 */ uint32_t m_flags;
-    /* 0098 */ int32_t m_x;
-    /* 009C */ int32_t m_y;
+    /* 0098 */ C2iVector m_tileCoords; // Signed texture tile/quad indices; LeaveWorld resets both to -1.
     /* 00A0 */ int32_t m_groupId;
 
     void BuildQuad(const CRect& rect, uint32_t index, const C2Vector* center, float scale, const CRect& bounds, float layoutScale, float width);
@@ -67,8 +67,7 @@ struct MINIMAPINDOOR {
 
 struct MINIMAPQUADINFO {
     /* 0000 */ int32_t m_groupId;
-    /* 0004 */ int32_t m_x;
-    /* 0008 */ int32_t m_y;
+    /* 0004 */ C2iVector m_quad; // Integer x/y indices of the WMO group's minimap texture quad.
     /* 000C */ CAaBox m_bounds;
 };
 
@@ -82,7 +81,7 @@ struct OBJINFO {
     /* 001B */ uint8_t m_pad;
     /* 001C */ int32_t m_icon;
     /* 0020 */ float m_facing;
-    /* 0024 */ uint32_t unk_0024;
+    /* 0024 */ uint32_t unused_0024;
 };
 
 struct MEMBERINFO {
@@ -114,7 +113,7 @@ struct POIDIRECTIONDATA {
 
 struct POIINFO {
     /* 0000 */ int32_t m_icon;
-    /* 0004 */ uint8_t unk_0004[48];
+    /* 0004 */ uint8_t unused_0004[48];
     /* 0034 */ C2Vector m_position;
     /* 003C */ const char* m_name;
 };
@@ -125,7 +124,7 @@ struct MINIMAPMD5NAME : public TSHashObject<MINIMAPMD5NAME, HASHKEY_STRI> {
 
 struct TrackingTypeInfo {
     /* 0000 */ int32_t m_type;
-    /* 0004 */ uint32_t m_npcFlags;
+    /* 0004 */ uint32_t m_npcFlags; // m_type 1: UNIT_NPC_FLAGS mask; m_type 2: gameobject type ID.
     /* 0008 */ const char* m_name;
     /* 000C */ const char* m_texture;
     /* 0010 */ uint32_t m_classMask;
@@ -180,7 +179,7 @@ class CGMinimapFrame : public CSimpleFrame {
     /* 02A0 */ CSimpleTexture* m_playerTexture;
     /* 02A4 */ float m_facing;
     /* 02A8 */ CScriptRegion* m_compassTexture;
-    /* 02AC */ uint32_t unk_02AC;
+    /* 02AC */ uint32_t m_lastUpdateTime;
 
     ~CGMinimapFrame() override;
     int32_t GetScriptMetaTable() override;
@@ -191,7 +190,7 @@ class CGMinimapFrame : public CSimpleFrame {
     void OnLayerUpdate(float elapsedSec) override;
     int32_t OnLayerTrackUpdate(const CMouseEvent& evt) override;
     void OnFrameRender(CRenderBatch* batch, uint32_t layer) override;
-    void OnLayerCursorExit(int32_t a2, int32_t a3) override;
+    void OnLayerCursorExit(int32_t motion, int32_t a3) override;
     bool UpdateScale(bool force) override;
 
     CGMinimapFrame(CSimpleFrame* parent);

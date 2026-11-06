@@ -12,21 +12,41 @@ struct CVar;
 struct lua_State;
 
 struct ComSatEvent {
-    /* 0000 */ uint32_t m_type;
-    /* 0004 */ uint32_t unk_0004;
+    enum COMMAND : uint32_t {
+        SET_SESSION_VOLUME = 1,
+        ENABLE_LOCAL_TALKER = 2,
+        SET_TALKER_THRESHOLD = 3,
+        MUTE_TALKER = 4,
+        SELECT_SESSION = 5,
+        SET_SESSION_PRIORITY = 6,
+        MUTE_SESSION = 7,
+        SET_SEQUENCE_DELAY = 8,
+        SET_SOUND_OUTPUT_DELAY = 9,
+        UPDATE_PUSH_TO_TALK_KEY = 10,
+    };
+
+    /* 0000 */ COMMAND m_type;
+    /* 0004 */ uint32_t unused_0004;
     /* 0008 */ uint64_t m_guid;
     /* 0010 */ union {
         uint32_t m_uintValue;
         float m_floatValue;
     };
-    /* 0014 */ uint32_t unk_0014;
+    /* 0014 */ uint32_t unused_0014;
 };
 
 struct ComSatCallback {
-    /* 0000 */ uint32_t m_type;
-    /* 0004 */ uint32_t unk_0004;
-    /* 0008 */ uint64_t unk_0008;
-    /* 0010 */ uint64_t unk_0010;
+    enum TYPE : uint32_t {
+        LOCAL_TALKER_START = 0,
+        LOCAL_TALKER_STOP = 1,
+        TALKER_START = 2,
+        TALKER_STOP = 3,
+    };
+
+    /* 0000 */ TYPE m_type;
+    /* 0004 */ uint32_t unused_0004;
+    /* 0008 */ uint64_t m_sessionId;
+    /* 0010 */ uint64_t m_guid;
 };
 
 struct MUTEDPLAYER : public TSHashObject<MUTEDPLAYER, CHashKeyGUID> {
@@ -75,12 +95,20 @@ void VoiceStop();
 struct COMSATMEMBER {
     /* 0000 */ WOWGUID m_guid;
     /* 0008 */ uint8_t m_flags;
-    /* 0009 */ uint8_t unk_0009[7];
+    /* 0009 */ uint8_t unused_0009[7];
 };
 
 struct COMSATDATA {
+    enum SESSION_TYPE : int32_t {
+        CHANNEL = 0,
+        BATTLEGROUND = 1,
+        PARTY = 2,
+        RAID = 3,
+        NONE = 4,
+    };
+
     /* 0000 */ uint64_t m_sessionID;
-    /* 0008 */ int32_t m_type;
+    /* 0008 */ SESSION_TYPE m_type;
     /* 000C */ char m_name[128];
     /* 008C */ uint32_t m_numMembers;
     /* 0090 */ COMSATMEMBER m_members[40];
@@ -106,7 +134,7 @@ extern int32_t s_voiceChatWasEnabled;
 extern const char* s_sessionTypeNames[3];
 
 void AddComSatEvent(uint32_t type, uint32_t value, uint64_t guid);
-void AddComSatCallback(uint32_t type, uint64_t a2, uint64_t a3);
+void AddComSatCallback(uint32_t type, uint64_t sessionId, uint64_t guid);
 void ComSatClient_SendEvent(int32_t event, WOWGUID guid);
 int32_t ComSatClient_SetCurrentSession(int32_t type, const char* name);
 void ComSatClient_DisableCurrentSession();
@@ -146,7 +174,7 @@ struct VoiceRosterMember {
     /* 0009 */ char m_address[32];
     /* 0029 */ uint8_t m_talkerPriority;
     /* 002A */ uint8_t m_flags;
-    /* 002B */ uint8_t unk_002B[5];
+    /* 002B */ uint8_t unused_002B[5];
 };
 
 int32_t ComSatClient_IsCurrentSession(uint64_t session);

@@ -59,7 +59,7 @@ static Grunt::ServerLink::Feature s_serverFeatures[] = {
 // INLINED
 Grunt::Pending::Pending(uint32_t timeout) {
     this->m_timeout = timeout;
-    this->unk_0008 = 0;
+    this->unused_0008 = 0;
 }
 
 // INLINED
@@ -293,7 +293,7 @@ void Grunt::Timer::Insert(Grunt::Timer::Event& event) {
 
     for (Grunt::Timer::Event* existing = this->m_list.Head(); !this->m_list.IsEnd(existing); existing = this->m_list.RawNext(existing)) {
         if (static_cast<int32_t>(event.m_nextTime - existing->m_nextTime) < 0) {
-            this->m_list.LinkNode(&event, 2, existing);
+            this->m_list.LinkNode(&event, TSLIST_LINK_BEFORE, existing);
             this->m_lock.Leave();
             return;
         }
@@ -1084,7 +1084,7 @@ void Grunt::ClientLink::FileComplete() {
 
 // INLINED
 const char* Grunt::ServerLink::GetLinkTypeName() const {
-    return this->m_linkType <= 1 ? s_linkTypeNames[this->m_linkType] : "None";
+    return this->m_linkType <= Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET ? s_linkTypeNames[this->m_linkType] : "None";
 }
 
 // VERIFY: 24f16393 manual
@@ -1408,12 +1408,12 @@ int32_t Grunt::ServerLink::CmdGruntHello(CDataStore& msg) {
         return 1;
     }
 
-    this->unk_0094 = value;
+    this->unused_0094 = value;
 
     CDataStoreCache<1024> reply;
     reply.Put(static_cast<uint8_t>(0x20));
 
-    if (this->m_linkType != 0 && this->m_linkType != 1) {
+    if (this->m_linkType != Grunt::SERVER_LINK_TYPE::SERVER_LINK_GRUNT && this->m_linkType != Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET) {
         return 1;
     }
 
@@ -1421,12 +1421,12 @@ int32_t Grunt::ServerLink::CmdGruntHello(CDataStore& msg) {
     uint8_t revision = 0;
 
     switch (this->m_linkType) {
-        case 0:
+        case Grunt::SERVER_LINK_TYPE::SERVER_LINK_GRUNT:
             typeName = "Grunt";
             revision = 0x20;
             break;
 
-        case 1:
+        case Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET:
             typeName = "Battle.net";
             revision = 0x21;
             break;
@@ -1491,13 +1491,13 @@ int32_t Grunt::ServerLink::CmdGruntHello(CDataStore& msg) {
     reply.m_read = 0;
     this->Send(reply);
 
-    if (this->m_linkType == 1) {
+    if (this->m_linkType == Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET) {
         this->m_response->HelloComplete();
     }
 
     this->m_state = 3;
 
-    if (this->m_linkType == 1) {
+    if (this->m_linkType == Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET) {
         this->SendFeatures();
     }
 
@@ -1560,7 +1560,7 @@ int32_t Grunt::ServerLink::CmdGruntProveSession(CDataStore& msg) {
         msg.Get(info.m_referrerAccountId);
         msg.Get(reinterpret_cast<uint32_t&>(info.m_referralTime));
 
-        if (this->m_linkType == 1) {
+        if (this->m_linkType == Grunt::SERVER_LINK_TYPE::SERVER_LINK_BATTLENET) {
             msg.Get(info.unk_007C);
         }
 

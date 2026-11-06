@@ -2,6 +2,8 @@
 #include "Engine/Source/Os/TimeManager.h"
 #include "Engine/Source/Storm/H/storm.h"
 
+static const float MAXMINUTES_PER_SECOND = 60.0f;
+
 // STATIC: 0x00D37F98
 CGameTime g_clientGameTime;
 
@@ -33,8 +35,8 @@ float CGameTime::GameTimeSetMinutesPerSecond(float minutesPerSecond) {
 
     if (minutesPerSecond < 1.0f / 60.0f) {
         this->m_minutesPerSecond = 1.0f / 60.0f;
-    } else if (minutesPerSecond > 60.0f) {
-        this->m_minutesPerSecond = 60.0f;
+    } else if (minutesPerSecond > MAXMINUTES_PER_SECOND) {
+        this->m_minutesPerSecond = MAXMINUTES_PER_SECOND;
     } else {
         this->m_minutesPerSecond = minutesPerSecond;
     }
@@ -47,12 +49,12 @@ float CGameTime::GameTimeSetMinutesPerSecond(float minutesPerSecond) {
 CGameTime::CGameTime() {
     this->m_minutesPerSecond = 1.0f / 60.0f;
     this->m_fracMinutes = 0.0f;
-    this->unk_0020 = 0;
+    this->unused_0020 = 0;
     this->m_baseMinuteOfDay = 0.0f;
     this->m_minuteOffset = 0;
-    this->unk_0048 = 0.0f;
+    this->unused_0048 = 0.0f;
     this->m_dayOffset = 0;
-    this->unk_004C = 0.0f;
+    this->unused_004C = 0.0f;
     this->m_minuteTicks = 0;
     this->m_elapsedMinutes = 0;
     this->m_lastTickMs = 0;
@@ -255,7 +257,7 @@ TIMESTAMPCALLBACK* CGameTime::GameTimeRegisterCallback(const WowTime* time, void
         stamp = this->m_timeStamps.New(minutes, key, 0, 0);
     }
 
-    TIMESTAMPCALLBACK* node = stamp->m_callbacks.NewNode(2, 0, 0);
+    TIMESTAMPCALLBACK* node = stamp->m_callbacks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_param = param;
     node->m_callback = callback;
     return node;

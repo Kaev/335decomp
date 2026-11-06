@@ -23,7 +23,7 @@
 // VERIFY: 35618cea auto
 // OFFSET: 0x00586730
 static int32_t Script_CancelTradeAccept(lua_State* L) {
-    if (CGGameUI::CanPerformAction(7) && CGTradeInfo::m_playerAccepted) {
+    if (CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_TRADE_ACCEPT) && CGTradeInfo::m_playerAccepted) {
         CGTradeInfo::m_playerAccepted = 0;
         FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_ACCEPT_UPDATE, "%d%d", 0, CGTradeInfo::m_targetAccepted);
         Trade_C_UnacceptTrade();
@@ -57,7 +57,7 @@ static int32_t Script_GetTradeTargetItemLink(lua_State* L) {
 
     uint32_t index = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
 
-    if (index > 6) {
+    if (index > TRADE_SLOT_NONTRADED) {
         return 0;
     }
 
@@ -87,7 +87,7 @@ static int32_t Script_GetTradeTargetItemLink(lua_State* L) {
 // VERIFY: 54f3c718 auto
 // OFFSET: 0x005866E0
 static int32_t Script_AcceptTrade(lua_State* L) {
-    if (CGGameUI::CanPerformAction(7) && CGTradeInfo::m_playerAccepted != 1) {
+    if (CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_TRADE_ACCEPT) && CGTradeInfo::m_playerAccepted != 1) {
         CGTradeInfo::m_playerAccepted = 1;
         FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_ACCEPT_UPDATE, "%d%d", 1, CGTradeInfo::m_targetAccepted);
         Trade_C_AcceptTrade();
@@ -138,7 +138,7 @@ static int32_t Script_ClickTargetTradeButton(lua_State* L) {
         if (CGTradeInfo::AddMoney(CGGameUI::m_cursorMoney)) {
             CGGameUI::ClearCursor(1, 0);
         }
-    } else if (static_cast<int32_t>(lua_tonumber(L, 1)) - 1 == 6) {
+    } else if (static_cast<int32_t>(lua_tonumber(L, 1)) - 1 == TRADE_SLOT_NONTRADED) {
         CGGameUI::TargetTradeItem();
     }
 
@@ -154,8 +154,8 @@ static int32_t Script_GetTradePlayerItemLink(lua_State* L) {
     }
 
     uint32_t index = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
-    WOWGUID guid = index > 6 ? WOWGUID() : CGTradeInfo::m_playerItems[index];
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    WOWGUID guid = index > TRADE_SLOT_NONTRADED ? WOWGUID() : CGTradeInfo::m_playerItems[index];
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return 0;
@@ -217,10 +217,10 @@ static int32_t Script_ClickTradeButton(lua_State* L) {
         if (item) {
             CGTradeInfo::SetPlayerItem(slot, WOWGUID(), WOWGUID(), 0);
             CGGameUI::UnlockItem(item);
-            CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
             if (object) {
-                SndInterfacePlayItemSound(1, object);
+                SndInterfacePlayItemSound(ITEMSOUND_DROP, object);
             }
         }
 
@@ -239,14 +239,14 @@ static int32_t Script_ClickTradeButton(lua_State* L) {
     WOWGUID cursorContainer;
     uint32_t cursorSlot;
     CGGameUI::GetCursorItem(cursorItem, cursorContainer, cursorSlot);
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(cursorItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(cursorItem, TYPE_ITEM, __FILE__, __LINE__));
 
-    if (slot < 6 && item) {
+    if (slot < NUM_TRADED_ITEM_SLOTS && item) {
         if (item->IsPermanentlyBoundForTrade()) {
             WOWGUID none = WOWGUID();
             ItemStats_C* stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, none, nullptr, nullptr, false);
 
-            if (stats && stats->m_bonding == 4) {
+            if (stats && stats->m_bonding == ITEM_BINDING::ITEM_BINDING_QUEST) {
                 CGGameUI::DisplayError(ERR_TRADE_QUEST_ITEM);
             } else {
                 CGGameUI::DisplayError(ERR_TRADE_BOUND_ITEM);
@@ -260,7 +260,7 @@ static int32_t Script_ClickTradeButton(lua_State* L) {
             return 0;
         }
 
-        if (item->m_obj->m_type & TYPEMASK_CONTAINER) {
+        if (item->m_obj->m_type & TYPE_CONTAINER) {
             CGBag_C* bag = item->GetBag();
 
             if (bag) {
@@ -306,7 +306,7 @@ static int32_t Script_GetTradeTargetItemInfo(lua_State* L) {
     int32_t itemId;
     ItemStats_C* stats;
 
-    if (index > 6 || !(itemId = CGTradeInfo::m_targetItemID[index]) || !(stats = g_itemDBCache.GetRecord(itemId, CGTradeInfo::m_tradingPlayer, &TradeItemStatsCallback, nullptr, false))) {
+    if (index > TRADE_SLOT_NONTRADED || !(itemId = CGTradeInfo::m_targetItemID[index]) || !(stats = g_itemDBCache.GetRecord(itemId, CGTradeInfo::m_tradingPlayer, &TradeItemStatsCallback, nullptr, false))) {
         lua_pushnil(L);
         lua_pushnil(L);
         lua_pushnumber(L, 0.0);
@@ -319,7 +319,7 @@ static int32_t Script_GetTradeTargetItemInfo(lua_State* L) {
     char name[256];
     CGItem_C::BuildItemName(name, sizeof(name), itemId, CGTradeInfo::m_targetRandomPropertyID[index]);
     lua_pushstring(L, name);
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
     char texture[260];
     SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(stats->m_displayId));
     lua_pushstring(L, texture);
@@ -334,7 +334,7 @@ static int32_t Script_GetTradeTargetItemInfo(lua_State* L) {
         lua_pushnil(L);
     }
 
-    if (index == 6) {
+    if (index == TRADE_SLOT_NONTRADED) {
         int32_t spellId = Trade_C_GetEnchantSpell(0);
 
         if (spellId) {
@@ -360,8 +360,8 @@ static int32_t Script_GetTradePlayerItemInfo(lua_State* L) {
     }
 
     uint32_t index = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
-    WOWGUID guid = index > 6 ? WOWGUID() : CGTradeInfo::m_playerItems[index];
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    WOWGUID guid = index > TRADE_SLOT_NONTRADED ? WOWGUID() : CGTradeInfo::m_playerItems[index];
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         lua_pushnil(L);
@@ -375,7 +375,7 @@ static int32_t Script_GetTradePlayerItemInfo(lua_State* L) {
     char name[256];
     item->GetFullItemName(name, sizeof(name));
     lua_pushstring(L, name);
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
     char texture[260];
     SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", item->GetInventoryArt());
     lua_pushstring(L, texture);
@@ -384,7 +384,7 @@ static int32_t Script_GetTradePlayerItemInfo(lua_State* L) {
     ItemStats_C* stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, requester, &TradeItemStatsCallback, nullptr, false);
     lua_pushnumber(L, stats && stats->m_inventoryType ? static_cast<int32_t>(stats->m_quality) : -1);
 
-    if (index == 6) {
+    if (index == TRADE_SLOT_NONTRADED) {
         int32_t spellId = Trade_C_GetEnchantSpell(1);
 
         if (spellId) {

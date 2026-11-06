@@ -7,6 +7,7 @@
 #include "Engine/Source/Model2/Types.h"
 #include "Engine/Source/Tempest/C3Vector.h"
 #include "Engine/Source/Tempest/C44Matrix.h"
+#include "Engine/Source/Tempest/CRange.h"
 #include "Engine/Source/Storm/H/stpl.h"
 
 class C3Vector;
@@ -22,14 +23,13 @@ class CShaderEffect;
 class M2HitRec {
     public:
     /* 0000 */ CM2Model* m_model;
-    /* 0004 */ float m_tNear;
-    /* 0008 */ float m_tFar;
+    /* 0004 */ CRange m_interval; // Near/far distances along the query ray, clamped to its length.
     /* 000C */ uint32_t m_priority;
 };
 
 class M2Element {
     public:
-    /* 0000 */ int32_t m_type;
+    /* 0000 */ M2_ELEMENT_TYPE m_type;
     /* 0004 */ CM2Model* m_model;
     /* 0008 */ uint32_t m_flags;
     /* 000C */ float m_alpha;
@@ -53,6 +53,14 @@ class M2Element {
 
 class CM2Scene {
     public:
+    // Local world-animation,hit-test and callback scopes;M2Element flags are separate.
+    enum SCENE_FLAGS : uint32_t {
+        NONE = 0,
+        WORLD_ANIMATION_ACTIVE = 1,
+        HIT_TEST_ACTIVE = 2,
+        PROCESSING_CALLBACKS = 4,
+    };
+
     /* 0000 */ int32_t m_refCount;
     /* 0004 */ CM2Cache* m_cache;
     /* 0008 */ CM2Model* m_modelList;
@@ -130,8 +138,8 @@ class CM2Scene {
     void TransformHitTestVerticesBlendSSE(const CM2Model* model, const M2SkinProfile* skinData, const M2SkinSection* section, int32_t normals, const C3Vector& dir, float d);
 };
 
-extern const uint32_t s_blendModes[3][7];
-extern const uint32_t s_localLighting[7];
+extern const uint32_t s_blendModes[3][M2BLEND_COUNT];
+extern const uint32_t s_localLighting[M2BLEND_COUNT];
 
 uint32_t ParticleBlendToM2Blend(uint32_t blend);
 uint32_t ParticleFlagsToM2Flags(uint32_t flags);

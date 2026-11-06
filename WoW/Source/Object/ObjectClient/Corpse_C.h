@@ -15,15 +15,22 @@ class CM2Model;
 
 class CGCorpse_C : public CGObject_C, public CGCorpse {
     public:
+    // Local normal-cache/pose word;replicated CORPSE_FIELD_FLAGS is separate.
+    enum RUNTIME_FLAGS : uint32_t {
+        NONE = 0,
+        GROUND_NORMAL_CACHED = 0x1,
+        DROWNED_POSE = 0x2,
+    };
+
     static void Initialize();
     /* 00D8 */ CPassenger m_passenger;
-    /* 0108 */ TSList<void> m_corpseMirrorLists [30];
+    /* 0108 */ TSList<void> m_corpseMirrorLists [CGCorpseData::NUM_FIELDS];
     /* 0270 */ CCharacterComponent* m_component;
     /* 0274 */ C3Vector m_groundNormal;
     /* 0280 */ uint32_t m_corpseFlags;
     /* 0284 */ float m_selectionRadius;
     /* 0288 */ CM2Model* m_lootEffect;
-    /* 028C */ uint8_t unk_028C [4];
+    /* 028C */ uint8_t unknown_028C [4];
 
     ~CGCorpse_C() override;
     int32_t ShouldFadeout() override;
@@ -37,7 +44,7 @@ class CGCorpse_C : public CGObject_C, public CGCorpse {
     int32_t GetModelFileName(const char** name) const override;
     void RenderTargetSelection() const override;
     int32_t Animate(float elapsed) override;
-    void ShouldRender(uint32_t flags, int32_t& render, int32_t& a3) override;
+    void ShouldRender(uint32_t flags, int32_t& render, int32_t& hidden) override;
     void OnRightClick() override;
 
     CGCorpse_C(uint32_t time, const CClientObjCreate& create);

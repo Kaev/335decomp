@@ -37,7 +37,7 @@ Liquid::IMaterial* Liquid::CMaterialBank::GetMaterial(uint32_t liquidType) {
     LiquidTypeRec* typeRec;
 
     while (true) {
-        if (!Liquid::s_unk_D43AFC) {
+        if (!Liquid::s_materialBankRefCount) {
             return nullptr;
         }
 
@@ -47,7 +47,7 @@ Liquid::IMaterial* Liquid::CMaterialBank::GetMaterial(uint32_t liquidType) {
             break;
         }
 
-        SysMsgPrintf(STATUS_ERROR, 2, "Material Bank: Liquid type [%d] not found, defaulting to water!", liquidType);
+        SysMsgPrintf(SYSMSG_ERROR, 2, "Material Bank: Liquid type [%d] not found, defaulting to water!", liquidType);
         liquidType = 1;
     }
 

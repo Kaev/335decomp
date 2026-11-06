@@ -203,7 +203,7 @@ void CMapObj::CreateMaterial(uint8_t texture) {
 // VERIFY: 03cc8920 manual
 // OFFSET: 0x007D78C0
 CMapObjGroup* CMapObj::AttenTransVerts(CMapObjGroup* group) {
-    group->m_unkLoadedFlag |= 0x2;
+    group->m_unkLoadedFlag |= CMapObjGroup::RUNTIME_FLAGS::TRANS_VERTEX_ATTENUATION_HANDLED;
 
     if (!group->m_transparencyBatchesCount) {
         return group;
@@ -305,7 +305,7 @@ void CMapObjGroup::CreateOptionalDataPointers(SIffChunk* dataChunk) {
         uint32_t faceSize = chunk->m_size;
         uint16_t* faces = reinterpret_cast<uint16_t*>(&chunk->m_data);
         chunk = reinterpret_cast<SIffChunk*>(reinterpret_cast<uint8_t*>(&chunk->m_data) + faceSize);
-        this->m_cAaBspNodePtr1.Set(nodes, nodeSize >> 4, faces, faceSize >> 1, this->m_bbox);
+        this->m_aaBsp.Set(nodes, nodeSize >> 4, faces, faceSize >> 1, this->m_bbox);
     }
 
     if (this->m_flags & 0x400) {
@@ -335,7 +335,7 @@ void CMapObjGroup::CreateOptionalDataPointers(SIffChunk* dataChunk) {
 
         uint16_t materialId = *reinterpret_cast<uint16_t*>(&header[7]);
         uint8_t* data = reinterpret_cast<uint8_t*>(&header[7]) + 2;
-        this->m_liquidVertexList = reinterpret_cast<SMOLiquidVert*>(data);
+        this->m_liquidVertexList = reinterpret_cast<SMOLVert*>(data);
         data += 8 * this->m_liquidVerts.x * this->m_liquidVerts.y;
         this->m_liquidTileList = reinterpret_cast<SMOLTile*>(data);
         data += this->m_liquidTiles.x * this->m_liquidTiles.y;
@@ -418,7 +418,7 @@ void CMapObj::PostloadCallback(void* arg) {
     mapObj->m_asyncLoadLink.Unlink();
     mapObj->Load();
     mapObj->CreateMaterials();
-    mapObj->m_argbColor = *reinterpret_cast<CImVector*>(&mapObj->m_header->m_ambColor);
+    mapObj->m_argbColor = mapObj->m_header->m_ambColor;
     mapObj->m_bbox = mapObj->m_header->m_boundingBox;
     mapObj->m_mapObjGroupCount = mapObj->m_groupInfoCount;
 
@@ -534,17 +534,17 @@ void CMapObjGroup::Create() {
         mapObj->CreateMaterial(this->m_batchList[i].m_texture);
     }
 
-    this->m_unkLoadedFlag = (this->m_unkLoadedFlag & ~0x2) | 0x1;
+    this->m_unkLoadedFlag = (this->m_unkLoadedFlag & ~CMapObjGroup::RUNTIME_FLAGS::TRANS_VERTEX_ATTENUATION_HANDLED) | CMapObjGroup::RUNTIME_FLAGS::LOADED;
 
     if (mapObj->m_header->m_flags & 0x1) {
-        this->m_unkLoadedFlag |= 0x2;
+        this->m_unkLoadedFlag |= CMapObjGroup::RUNTIME_FLAGS::TRANS_VERTEX_ATTENUATION_HANDLED;
     }
 
     if (!SStrCmp(this->m_groupName, "antiportal", STORM_MAX_STR)) {
         this->HandleAntiportal();
     }
 
-    this->m_unkLoadedFlag |= 0x4;
+    this->m_unkLoadedFlag |= CMapObjGroup::RUNTIME_FLAGS::ALL_BATCHES_OPAQUE;
 
     uint32_t batchCount = this->m_batchListCount;
 
@@ -561,7 +561,7 @@ void CMapObjGroup::Create() {
         SMOBatch& batch = this->m_batchList[i];
 
         if (mapObj->m_materialList[batch.m_texture].m_blendMode) {
-            this->m_unkLoadedFlag &= ~0x4;
+            this->m_unkLoadedFlag &= ~CMapObjGroup::RUNTIME_FLAGS::ALL_BATCHES_OPAQUE;
             break;
         }
 
@@ -586,7 +586,7 @@ void CMapObjGroup::Create() {
 
     for (uint32_t i = 0; i < batchCount; i++) {
         if (mapObj->m_materialList[this->m_batchList[i].m_texture].m_shader == 6) {
-            this->m_unkLoadedFlag |= 0x8;
+            this->m_unkLoadedFlag |= CMapObjGroup::RUNTIME_FLAGS::EXTENDED_VERTEX_FORMAT;
             return;
         }
     }

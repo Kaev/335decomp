@@ -4,6 +4,412 @@
 #include <cstddef>
 #include <cstdint>
 
+// Byte-sized aura-visual eligibility flags, separate from AuraData packet flags.
+enum AURA_VISION_FLAGS : uint8_t {
+    AURA_VISION_FLAG_STEALTH_DETECT = 0x20,
+    AURA_VISION_FLAG_INVISIBILITY_DETECT = 0x40,
+    AURA_VISION_FLAG_ALL = 0xFF,
+};
+
+// Native melee reach values; retain the original single-precision literals.
+constexpr float MELEE_RANGE_MIN = 5.0f;
+constexpr float MELEE_COMBAT_REACH_OFFSET = 1.3333334f;
+constexpr float MELEE_MOVING_TARGET_BONUS = 2.6666667f;
+
+// CreatureType.dbc IDs; creature-type masks use (1 << (type - 1)).
+// https://github.com/TrinityCore/TrinityCore/blob/3.3.5/src/server/shared/SharedDefines.h
+enum CREATURE_TYPE : int32_t {
+    CREATURE_TYPE_BEAST = 1,
+    CREATURE_TYPE_DRAGONKIN = 2,
+    CREATURE_TYPE_DEMON = 3,
+    CREATURE_TYPE_ELEMENTAL = 4,
+    CREATURE_TYPE_GIANT = 5,
+    CREATURE_TYPE_UNDEAD = 6,
+    CREATURE_TYPE_HUMANOID = 7,
+    CREATURE_TYPE_CRITTER = 8,
+    CREATURE_TYPE_MECHANICAL = 9,
+    CREATURE_TYPE_NOT_SPECIFIED = 10,
+    CREATURE_TYPE_TOTEM = 11,
+    CREATURE_TYPE_NON_COMBAT_PET = 12,
+    CREATURE_TYPE_GAS_CLOUD = 13,
+};
+
+// CGUnitData::m_visFlags. Unknown bits retain their complete byte value.
+enum UNIT_VIS_FLAGS : uint8_t {
+    UNIT_VIS_FLAG_NONE = 0x00,
+    UNIT_VIS_FLAG_UNKNOWN_0 = 0x01, // Changes regenerate the name/nameplate.
+    UNIT_VIS_FLAG_CREEP = 0x02, // Stealth posture, name display and tracking checks.
+    UNIT_VIS_FLAG_UNTRACKABLE = 0x04,
+    UNIT_VIS_FLAG_UNKNOWN_3 = 0x08,
+    UNIT_VIS_FLAG_UNKNOWN_4 = 0x10,
+    UNIT_VIS_FLAG_UNKNOWN_5 = 0x20,
+    UNIT_VIS_FLAG_UNKNOWN_6 = 0x40,
+    UNIT_VIS_FLAG_UNKNOWN_7 = 0x80,
+};
+
+// CGUnitData::m_pvpFlags. Bit 1 participates in native reaction tests;
+// its individual meaning remains unresolved.
+enum UNIT_PVP_FLAGS : uint8_t {
+    UNIT_PVP_FLAG_NONE = 0x00,
+    UNIT_PVP_FLAG_PVP = 0x01,
+    UNIT_PVP_FLAG_UNKNOWN_1 = 0x02,
+    UNIT_PVP_FLAG_FFA = 0x04,
+    UNIT_PVP_FLAG_SANCTUARY = 0x08,
+    UNIT_PVP_FLAG_UNKNOWN_4 = 0x10,
+    UNIT_PVP_FLAG_UNKNOWN_5 = 0x20,
+    UNIT_PVP_FLAG_UNKNOWN_6 = 0x40,
+    UNIT_PVP_FLAG_UNKNOWN_7 = 0x80,
+};
+
+// CGUnitData::m_petFlags; native pet rename/abandon UI capabilities.
+enum UNIT_PET_FLAGS : uint8_t {
+    UNIT_PET_FLAG_NONE = 0x00,
+    UNIT_PET_FLAG_CAN_BE_RENAMED = 0x01,
+    UNIT_PET_FLAG_CAN_BE_ABANDONED = 0x02,
+    UNIT_PET_FLAG_UNKNOWN_2 = 0x04,
+    UNIT_PET_FLAG_UNKNOWN_3 = 0x08,
+    UNIT_PET_FLAG_UNKNOWN_4 = 0x10,
+    UNIT_PET_FLAG_UNKNOWN_5 = 0x20,
+    UNIT_PET_FLAG_UNKNOWN_6 = 0x40,
+    UNIT_PET_FLAG_UNKNOWN_7 = 0x80,
+};
+
+// CGUnitData::m_animTier and AnimationDataRec::m_behaviorTier.
+// The target's fallback table maps SWIM/SUBMERGED to ground; only HOVER/FLY
+// participate in the explicit ground/air transition predicate.
+enum ANIMATION_TIER : uint8_t {
+    ANIM_TIER_GROUND = 0,
+    ANIM_TIER_SWIM = 1,
+    ANIM_TIER_HOVER = 2,
+    ANIM_TIER_FLY = 3,
+    ANIM_TIER_SUBMERGED = 4,
+    ANIM_TIER_COUNT = 5,
+};
+
+// CGPlayerData::m_playerFlags; names describe the 3.3.5 client behavior.
+// Behavioral names are reconstructed where the original names are unknown.
+// https://github.com/TrinityCore/TrinityCore/blob/3.3.5/src/server/game/Entities/Player/Player.h
+enum PLAYER_FLAGS : uint32_t {
+    PLAYER_FLAG_GROUP_LEADER                       = 0x00000001u,
+    PLAYER_FLAG_AFK                                = 0x00000002u,
+    PLAYER_FLAG_DND                                = 0x00000004u,
+    PLAYER_FLAG_GM                                 = 0x00000008u,
+    PLAYER_FLAG_GHOST                              = 0x00000010u,
+    PLAYER_FLAG_RESTING                            = 0x00000020u,
+    // Called VOICE_CHAT in some references; current meaning is not established.
+    PLAYER_FLAG_UNKNOWN_6                          = 0x00000040u,
+    // Legacy FFA PvP name; current meaning is not established.
+    PLAYER_FLAG_UNKNOWN_7                          = 0x00000080u,
+    PLAYER_FLAG_CONTESTED_PVP                      = 0x00000100u,
+    // GetPVPDesired()/the manual PvP toggle request, separate from the unit PvP state.
+    PLAYER_FLAG_PVP_DESIRED                        = 0x00000200u,
+    PLAYER_FLAG_HIDE_HELM                          = 0x00000400u,
+    PLAYER_FLAG_HIDE_CLOAK                         = 0x00000800u,
+    // PartialPlayTime() status; historically PLAYED_LONG_TIME.
+    PLAYER_FLAG_PARTIAL_PLAY_TIME                  = 0x00001000u,
+    // NoPlayTime() status; historically PLAYED_TOO_LONG.
+    PLAYER_FLAG_NO_PLAY_TIME                       = 0x00002000u,
+    PLAYER_FLAG_OUT_OF_BOUNDS                      = 0x00004000u,
+    // Shows the <Dev> tag and suppresses the ordinary GM tag.
+    PLAYER_FLAG_DEVELOPER                          = 0x00008000u,
+    PLAYER_FLAG_LOW_LEVEL_RAID_ENABLED             = 0x00010000u,
+    PLAYER_FLAG_TAXI_BENCHMARK                     = 0x00020000u,
+    PLAYER_FLAG_PVP_TIMER_ACTIVE                   = 0x00040000u,
+    // CommentatorGetMode() returns mode 1; not the privileged mode-2 bit.
+    PLAYER_FLAG_COMMENTATOR                        = 0x00080000u,
+    PLAYER_FLAG_UNKNOWN_20                         = 0x00100000u,
+    PLAYER_FLAG_UNKNOWN_21                         = 0x00200000u,
+    // Commentator mode 2, with instance/player administration privileges.
+    PLAYER_FLAG_COMMENTATOR_UBER                   = 0x00400000u,
+    // Casting is restricted to ATTACK effects or spells using the ranged slot.
+    PLAYER_FLAG_RESTRICT_NON_ATTACK_SPELLS         = 0x00800000u,
+    // Blocks attacks and abilities that initiate combat or modify the next swing.
+    PLAYER_FLAG_DISABLE_ATTACKS                    = 0x01000000u,
+    PLAYER_FLAG_NO_XP_GAIN                         = 0x02000000u,
+    PLAYER_FLAG_UNKNOWN_26                         = 0x04000000u,
+    PLAYER_FLAG_UNKNOWN_27                         = 0x08000000u,
+    PLAYER_FLAG_UNKNOWN_28                         = 0x10000000u,
+    PLAYER_FLAG_UNKNOWN_29                         = 0x20000000u,
+    PLAYER_FLAG_UNKNOWN_30                         = 0x40000000u,
+    PLAYER_FLAG_UNKNOWN_31                         = 0x80000000u,
+
+    PLAYER_FLAG_NAME_TAGS_MASK = PLAYER_FLAG_AFK
+        | PLAYER_FLAG_DND
+        | PLAYER_FLAG_GM
+        | PLAYER_FLAG_DEVELOPER,
+    PLAYER_FLAG_PVP_STATUS_MASK = PLAYER_FLAG_CONTESTED_PVP
+        | PLAYER_FLAG_PVP_DESIRED
+        | PLAYER_FLAG_PVP_TIMER_ACTIVE,
+    PLAYER_FLAG_HIDE_EQUIPMENT_MASK = PLAYER_FLAG_HIDE_HELM
+        | PLAYER_FLAG_HIDE_CLOAK,
+    PLAYER_FLAG_PLAY_TIME_MASK = PLAYER_FLAG_PARTIAL_PLAY_TIME
+        | PLAYER_FLAG_NO_PLAY_TIME,
+    PLAYER_FLAG_SPELL_RESTRICTIONS_MASK = PLAYER_FLAG_RESTRICT_NON_ATTACK_SPELLS
+        | PLAYER_FLAG_DISABLE_ATTACKS,
+};
+
+// CGUnitData::m_unitDynamicFlags; a server-authored, viewer-specific update field.
+// UNUSED means no individual use in the 3.3.5 client; preserve all wire bits.
+enum UNIT_DYNAMIC_FLAGS : uint32_t {
+    UNIT_DYNFLAG_NONE = 0x00000000u,
+    // Loot eligibility/effects; the server filters this for each viewer.
+    UNIT_DYNFLAG_LOOTABLE = 0x00000001u,
+    // Explicit tracking eligibility; CanTrackUnit retains its other checks.
+    UNIT_DYNFLAG_TRACK_UNIT = 0x00000002u,
+    // Tap marker exposed by UnitIsTapped; changes send the faction/color signal.
+    UNIT_DYNFLAG_TAPPED = 0x00000004u,
+    // UnitIsTappedByPlayer; the producer includes the loot recipient and group.
+    UNIT_DYNFLAG_TAPPED_BY_PLAYER = 0x00000008u,
+    // SPECIALINFO in the producer: enables the empathy tooltip details.
+    UNIT_DYNFLAG_EMPATHY_INFO = 0x00000010u,
+    // Death presentation/life notifications, also used for feign death. Health is separate.
+    UNIT_DYNFLAG_DEAD = 0x00000020u,
+    // Recruit-a-friend linkage; also copied into remote party state.
+    UNIT_DYNFLAG_REFER_A_FRIEND = 0x00000040u,
+    // Exposed by UnitIsTappedByAllThreatList; no stronger loot rule inferred here.
+    UNIT_DYNFLAG_TAPPED_BY_ALL_THREAT_LIST = 0x00000080u,
+    UNIT_DYNFLAG_UNUSED_8 = 0x00000100u,
+    UNIT_DYNFLAG_UNUSED_9 = 0x00000200u,
+    UNIT_DYNFLAG_UNUSED_10 = 0x00000400u,
+    UNIT_DYNFLAG_UNUSED_11 = 0x00000800u,
+    UNIT_DYNFLAG_UNUSED_12 = 0x00001000u,
+    UNIT_DYNFLAG_UNUSED_13 = 0x00002000u,
+    UNIT_DYNFLAG_UNUSED_14 = 0x00004000u,
+    UNIT_DYNFLAG_UNUSED_15 = 0x00008000u,
+    UNIT_DYNFLAG_UNUSED_16 = 0x00010000u,
+    UNIT_DYNFLAG_UNUSED_17 = 0x00020000u,
+    UNIT_DYNFLAG_UNUSED_18 = 0x00040000u,
+    UNIT_DYNFLAG_UNUSED_19 = 0x00080000u,
+    UNIT_DYNFLAG_UNUSED_20 = 0x00100000u,
+    UNIT_DYNFLAG_UNUSED_21 = 0x00200000u,
+    UNIT_DYNFLAG_UNUSED_22 = 0x00400000u,
+    UNIT_DYNFLAG_UNUSED_23 = 0x00800000u,
+    UNIT_DYNFLAG_UNUSED_24 = 0x01000000u,
+    UNIT_DYNFLAG_UNUSED_25 = 0x02000000u,
+    UNIT_DYNFLAG_UNUSED_26 = 0x04000000u,
+    UNIT_DYNFLAG_UNUSED_27 = 0x08000000u,
+    UNIT_DYNFLAG_UNUSED_28 = 0x10000000u,
+    UNIT_DYNFLAG_UNUSED_29 = 0x20000000u,
+    UNIT_DYNFLAG_UNUSED_30 = 0x40000000u,
+    UNIT_DYNFLAG_UNUSED_31 = 0x80000000u,
+};
+
+// CGUnitData::m_unitNpcFlags; server-authored NPC services and tracking categories.
+// Keep the complete word: even unknown bits contribute to nonzero interaction gates.
+enum UNIT_NPC_FLAGS : uint32_t {
+    UNIT_NPC_FLAG_NONE = 0x00000000u,
+    UNIT_NPC_FLAG_GOSSIP = 0x00000001u,
+    UNIT_NPC_FLAG_QUEST_GIVER = 0x00000002u,
+    // No bit-specific meaning established; nonzero interaction gates still see it.
+    UNIT_NPC_FLAG_UNKNOWN_2 = 0x00000004u,
+    UNIT_NPC_FLAG_UNKNOWN_3 = 0x00000008u,
+    // Generic trainer service; class/profession bits below are minimap filters.
+    UNIT_NPC_FLAG_TRAINER = 0x00000010u,
+    UNIT_NPC_FLAG_TRAINER_CLASS = 0x00000020u,
+    UNIT_NPC_FLAG_TRAINER_PROFESSION = 0x00000040u,
+    // Generic shop service; vendor subtypes below are separate minimap filters.
+    UNIT_NPC_FLAG_VENDOR = 0x00000080u,
+    UNIT_NPC_FLAG_VENDOR_AMMO = 0x00000100u,
+    UNIT_NPC_FLAG_VENDOR_FOOD = 0x00000200u,
+    UNIT_NPC_FLAG_VENDOR_POISON = 0x00000400u,
+    UNIT_NPC_FLAG_VENDOR_REAGENT = 0x00000800u,
+    UNIT_NPC_FLAG_REPAIR = 0x00001000u,
+    UNIT_NPC_FLAG_FLIGHT_MASTER = 0x00002000u,
+    UNIT_NPC_FLAG_SPIRIT_HEALER = 0x00004000u,
+    UNIT_NPC_FLAG_SPIRIT_GUIDE = 0x00008000u,
+    UNIT_NPC_FLAG_INNKEEPER = 0x00010000u,
+    UNIT_NPC_FLAG_BANKER = 0x00020000u,
+    // PETITIONER plus TABARD_DESIGNER identifies the guild registrar in this client.
+    UNIT_NPC_FLAG_PETITIONER = 0x00040000u,
+    UNIT_NPC_FLAG_TABARD_DESIGNER = 0x00080000u,
+    UNIT_NPC_FLAG_BATTLEMASTER = 0x00100000u,
+    UNIT_NPC_FLAG_AUCTIONEER = 0x00200000u,
+    UNIT_NPC_FLAG_STABLE_MASTER = 0x00400000u,
+    // Guild bank activation sends CMSG_GUILD_BANK_ACTIVATE (0x3E6 in the target).
+    UNIT_NPC_FLAG_GUILD_BANKER = 0x00800000u,
+    // Spell-click eligibility also checks unit flags/group policy; sends CMSG_SPELL_CLICK (0x3F8).
+    UNIT_NPC_FLAG_SPELL_CLICK = 0x01000000u,
+    // Producer marks player vehicles; client uses the nonzero word plus vehicle/seat/group checks.
+    UNIT_NPC_FLAG_PLAYER_VEHICLE = 0x02000000u,
+    // NPC mailbox service; separate from the gameobject mailbox type ID.
+    UNIT_NPC_FLAG_MAILBOX = 0x04000000u,
+    // No bit-specific meanings established; preserve their contribution to nonzero tests.
+    UNIT_NPC_FLAG_UNKNOWN_27 = 0x08000000u,
+    UNIT_NPC_FLAG_UNKNOWN_28 = 0x10000000u,
+    UNIT_NPC_FLAG_UNKNOWN_29 = 0x20000000u,
+    UNIT_NPC_FLAG_UNKNOWN_30 = 0x40000000u,
+    UNIT_NPC_FLAG_UNKNOWN_31 = 0x80000000u,
+};
+
+// Masks for CGUnitData::m_unitFieldFlags and m_unitFieldFlags2.
+// Names adapted from the 3.3.5 UnitFlags/UnitFlags2 definitions:
+// https://github.com/TrinityCore/TrinityCore/blob/3.3.5/src/server/game/Entities/Unit/UnitDefines.h
+
+enum UNIT_FLAGS : uint32_t {
+    UNIT_FLAG_SERVER_CONTROLLED                   = 0x00000001u,
+    UNIT_FLAG_SPAWNING                            = 0x00000002u, // Spawning state; prevents attacks on this unit.
+    UNIT_FLAG_REMOVE_CLIENT_CONTROL               = 0x00000004u,
+    UNIT_FLAG_PLAYER_CONTROLLED                   = 0x00000008u,
+    UNIT_FLAG_EVADING_HOME                        = 0x00000010u,
+    UNIT_FLAG_PREPARATION                         = 0x00000020u,
+    UNIT_FLAG_UNKNOWN_6                           = 0x00000040u,
+    UNIT_FLAG_NON_ATTACKABLE_1                    = 0x00000080u,
+    UNIT_FLAG_IMMUNE_TO_PC                        = 0x00000100u,
+    UNIT_FLAG_IMMUNE_TO_NPC                       = 0x00000200u,
+    UNIT_FLAG_LOOTING                             = 0x00000400u,
+    UNIT_FLAG_PET_IN_COMBAT                       = 0x00000800u,
+    UNIT_FLAG_PVP_ENABLING                        = 0x00001000u, // Legacy PvP flag; current PvP state is in m_pvpFlags.
+    UNIT_FLAG_SILENCED                            = 0x00002000u,
+    UNIT_FLAG_CANNOT_SWIM                         = 0x00004000u,
+    UNIT_FLAG_CAN_SWIM                            = 0x00008000u,
+    UNIT_FLAG_NON_ATTACKABLE_2                    = 0x00010000u,
+    UNIT_FLAG_PACIFIED                            = 0x00020000u,
+    UNIT_FLAG_STUNNED                             = 0x00040000u,
+    UNIT_FLAG_IN_COMBAT                           = 0x00080000u,
+    UNIT_FLAG_ON_TAXI                             = 0x00100000u,
+    UNIT_FLAG_DISARMED                            = 0x00200000u,
+    UNIT_FLAG_CONFUSED                            = 0x00400000u,
+    UNIT_FLAG_FLEEING                             = 0x00800000u,
+    UNIT_FLAG_POSSESSED                           = 0x01000000u,
+    UNIT_FLAG_UNINTERACTIBLE                      = 0x02000000u,
+    UNIT_FLAG_SKINNABLE                           = 0x04000000u,
+    UNIT_FLAG_MOUNT                               = 0x08000000u,
+    UNIT_FLAG_DONT_PLAY_LOOT_ANIM                 = 0x10000000u, // Suppresses loot kneeling; verified at Wow.exe 3.3.5a 0x007222A0.
+    UNIT_FLAG_PREVENT_EMOTES_FROM_CHAT_TEXT       = 0x20000000u,
+    UNIT_FLAG_SHEATHE                             = 0x40000000u,
+    UNIT_FLAG_IMMUNE                              = 0x80000000u,
+};
+
+enum UNIT_FLAGS2 : uint32_t {
+    UNIT_FLAG2_FEIGN_DEATH                        = 0x00000001u,
+    UNIT_FLAG2_HIDE_BODY                          = 0x00000002u, // Hide the body while retaining equipped models.
+    UNIT_FLAG2_IGNORE_REPUTATION                  = 0x00000004u,
+    UNIT_FLAG2_COMPREHEND_LANGUAGES               = 0x00000008u,
+    UNIT_FLAG2_MIRROR_IMAGE                       = 0x00000010u,
+    UNIT_FLAG2_DO_NOT_FADE_IN                     = 0x00000020u,
+    UNIT_FLAG2_FORCE_MOVEMENT                     = 0x00000040u,
+    UNIT_FLAG2_DISARM_OFFHAND                     = 0x00000080u,
+    UNIT_FLAG2_DISABLE_PREDICTED_STATS            = 0x00000100u, // Disable client-side stat and power prediction.
+    UNIT_FLAG2_UNKNOWN_9                          = 0x00000200u,
+    UNIT_FLAG2_DISARM_RANGED                      = 0x00000400u,
+    UNIT_FLAG2_REGENERATE_POWER                   = 0x00000800u,
+    UNIT_FLAG2_RESTRICT_PARTY_INTERACTION         = 0x00001000u,
+    UNIT_FLAG2_PREVENT_SPELL_CLICK                = 0x00002000u,
+    UNIT_FLAG2_ALLOW_ENEMY_INTERACTION            = 0x00004000u,
+    UNIT_FLAG2_CANNOT_TURN                        = 0x00008000u,
+    UNIT_FLAG2_UNKNOWN_16                         = 0x00010000u, // Checked for shared-vehicle attack restrictions; broader meaning unverified.
+    UNIT_FLAG2_PLAY_DEATH_ANIMATION               = 0x00020000u,
+    UNIT_FLAG2_ALLOW_DEBUG_SPELLS                 = 0x00040000u, // Allows SPELL_ATTR7_DEBUG_SPELL casts.
+    UNIT_FLAG2_UNKNOWN_19                         = 0x00080000u, // Bits 19-31 have no verified 3.3.5 meaning here.
+    UNIT_FLAG2_UNKNOWN_20                         = 0x00100000u,
+    UNIT_FLAG2_UNKNOWN_21                         = 0x00200000u,
+    UNIT_FLAG2_UNKNOWN_22                         = 0x00400000u,
+    UNIT_FLAG2_UNKNOWN_23                         = 0x00800000u,
+    UNIT_FLAG2_UNKNOWN_24                         = 0x01000000u,
+    UNIT_FLAG2_UNKNOWN_25                         = 0x02000000u,
+    UNIT_FLAG2_UNKNOWN_26                         = 0x04000000u,
+    UNIT_FLAG2_UNKNOWN_27                         = 0x08000000u,
+    UNIT_FLAG2_UNKNOWN_28                         = 0x10000000u,
+    UNIT_FLAG2_UNKNOWN_29                         = 0x20000000u,
+    UNIT_FLAG2_UNKNOWN_30                         = 0x40000000u,
+    UNIT_FLAG2_UNKNOWN_31                         = 0x80000000u,
+};
+
+enum ITEM_STATIC_FLAGS : uint32_t {
+    // Masks for ItemStats_C::m_flags[0]; m_flags[1] is a separate domain.
+    ITEM_FLAG_NO_PICKUP                               = 0x00000001u,
+    ITEM_FLAG_CONJURED                                = 0x00000002u,
+    ITEM_FLAG_HAS_LOOT                                = 0x00000004u,
+    ITEM_FLAG_HEROIC_TOOLTIP                          = 0x00000008u,
+    ITEM_FLAG_DEPRECATED                              = 0x00000010u,
+    ITEM_FLAG_NO_USER_DESTROY                         = 0x00000020u,
+    ITEM_FLAG_PLAYERCAST                              = 0x00000040u,
+    ITEM_FLAG_NO_EQUIP_COOLDOWN                       = 0x00000080u,
+    ITEM_FLAG_MULTI_LOOT_QUEST                        = 0x00000100u,
+    ITEM_FLAG_IS_WRAPPER                              = 0x00000200u,
+    ITEM_FLAG_USES_RESOURCES                          = 0x00000400u,
+    ITEM_FLAG_MULTI_DROP                              = 0x00000800u,
+    ITEM_FLAG_ITEM_PURCHASE_RECORD                    = 0x00001000u,
+    ITEM_FLAG_PETITION                                = 0x00002000u,
+    ITEM_FLAG_HAS_TEXT                                = 0x00004000u,
+    ITEM_FLAG_NO_DISENCHANT                           = 0x00008000u,
+    ITEM_FLAG_REAL_DURATION                           = 0x00010000u,
+    ITEM_FLAG_NO_CREATOR                              = 0x00020000u,
+    ITEM_FLAG_IS_PROSPECTABLE                         = 0x00040000u,
+    ITEM_FLAG_UNIQUE_EQUIPPABLE                       = 0x00080000u,
+    ITEM_FLAG_IGNORE_FOR_AURAS                        = 0x00100000u,
+    ITEM_FLAG_IGNORE_DEFAULT_ARENA_RESTRICTIONS       = 0x00200000u,
+    ITEM_FLAG_NO_DURABILITY_LOSS                      = 0x00400000u,
+    ITEM_FLAG_USE_WHEN_SHAPESHIFTED                   = 0x00800000u,
+    ITEM_FLAG_HAS_QUEST_GLOW                          = 0x01000000u,
+    ITEM_FLAG_HIDE_UNUSABLE_RECIPE                    = 0x02000000u,
+    ITEM_FLAG_NOT_USEABLE_IN_ARENA                    = 0x04000000u,
+    ITEM_FLAG_IS_BOUND_TO_ACCOUNT                     = 0x08000000u,
+    ITEM_FLAG_NO_REAGENT_COST                         = 0x10000000u,
+    ITEM_FLAG_IS_MILLABLE                             = 0x20000000u,
+    ITEM_FLAG_REPORT_TO_GUILD_CHAT                    = 0x40000000u,
+    ITEM_FLAG_NO_PROGRESSIVE_LOOT                     = 0x80000000u,
+};
+
+enum ITEM_STATIC_FLAGS2 : uint32_t {
+    // Masks for ItemStats_C::m_flags[1]; higher bits have no verified 3.3.5 meaning here.
+    ITEM_FLAG2_FACTION_HORDE                 = 0x00000001u,
+    ITEM_FLAG2_FACTION_ALLIANCE              = 0x00000002u,
+    ITEM_FLAG2_DONT_IGNORE_BUY_PRICE         = 0x00000004u,
+    ITEM_FLAG2_CLASSIFY_AS_CASTER            = 0x00000008u,
+    ITEM_FLAG2_CLASSIFY_AS_PHYSICAL          = 0x00000010u,
+    ITEM_FLAG2_EVERYONE_CAN_ROLL_NEED        = 0x00000020u,
+    ITEM_FLAG2_NO_TRADE_BIND_ON_ACQUIRE      = 0x00000040u,
+    ITEM_FLAG2_CAN_TRADE_BIND_ON_ACQUIRE     = 0x00000080u,
+    ITEM_FLAG2_CAN_ONLY_ROLL_GREED           = 0x00000100u,
+    ITEM_FLAG2_CASTER_WEAPON                 = 0x00000200u,
+    ITEM_FLAG2_DELETE_ON_LOGIN               = 0x00000400u,
+    ITEM_FLAG2_INTERNAL_ITEM                 = 0x00000800u,
+    ITEM_FLAG2_NO_VENDOR_VALUE               = 0x00001000u,
+    ITEM_FLAG2_SHOW_BEFORE_DISCOVERED        = 0x00002000u,
+    ITEM_FLAG2_OVERRIDE_GOLD_COST            = 0x00004000u,
+};
+
+enum ITEM_DYNAMIC_FLAGS : uint32_t {
+    ITEM_DFLAG_BOUND = 1,
+    ITEM_DFLAG_TRANSLATED = 2,
+    ITEM_DFLAG_UNLOCKED = 4,
+    ITEM_DFLAG_WRAPPED = 8,
+};
+
+enum DYNAMIC_OBJECT_TYPE : uint8_t {
+    // DYNAMIC_OBJECT_PORTAL = 0,
+    DYNAMIC_OBJECT_AREA_SPELL = 1,
+    DYNAMIC_OBJECT_FARSIGHT_FOCUS = 2,
+};
+
+enum VIRTUAL_MONSTER_SLOT : uint32_t {
+    VIRTUAL_MONSTER_SLOT_MAINHAND = 0,
+    VIRTUAL_MONSTER_SLOT_OFFHAND = 1,
+    VIRTUAL_MONSTER_SLOT_RANGED = 2,
+    NUM_VIRTUAL_MONSTER_SLOTS = 3,
+};
+
+// Divisors from raw client power units to the displayed values.
+enum POWER_DISPLAY_DIVISOR : uint32_t {
+    POWER_DISPLAY_DIVISOR_UNSCALED = 1,
+    POWER_DISPLAY_DIVISOR_RAGE = 10,
+    POWER_DISPLAY_DIVISOR_HAPPINESS = 1000,
+    POWER_DISPLAY_DIVISOR_RUNIC_POWER = 10,
+};
+
+enum POWER_TYPE : int32_t {
+    POWER_TYPE_HEALTH = -2,
+    POWER_TYPE_MANA = 0,
+    POWER_TYPE_RAGE = 1,
+    POWER_TYPE_FOCUS = 2,
+    POWER_TYPE_ENERGY = 3,
+    POWER_TYPE_HAPPINESS = 4,
+    POWER_TYPE_RUNES = 5,
+    POWER_TYPE_RUNIC_POWER = 6,
+    NUM_POWER_TYPES = 7,
+};
+
 enum MoveEventId {
     MOVEEVENT_START_FORWARD = 0,
     MOVEEVENT_START_BACKWARD = 1,
@@ -65,7 +471,32 @@ enum MoveEventId {
     MOVEEVENT_UNSET_CAN_TRANSITION_BETWEEN_SWIM_AND_FLY = 57,
     MOVEEVENT_SET_COLLISION_HEIGHT = 58,
     NUM_MOVE_EVENTS = 59,
+
+    // PLAYER_MOVE_EVT names in the expanded current event domain.
+    PMOVE_MOVE_START_FWD = 0,
+    PMOVE_MOVE_START_BWD = 1,
+    PMOVE_MOVE_STOP = 2,
+    PMOVE_STRAFE_START_LFT = 3,
+    PMOVE_STRAFE_START_RGT = 4,
+    PMOVE_STRAFE_STOP = 5,
+    PMOVE_FALL = 9,
+    PMOVE_JUMP = 10,
+    PMOVE_TURN_START_LFT = 11,
+    PMOVE_TURN_START_RGT = 12,
+    PMOVE_TURN_STOP = 13,
+    PMOVE_PITCH_START_UP = 14,
+    PMOVE_PITCH_START_DOWN = 15,
+    PMOVE_PITCH_STOP = 16,
+    PMOVE_SET_RUN_MODE = 17,
+    PMOVE_SET_WALK_MODE = 18,
+    PMOVE_SET_FACING = 19,
+    PMOVE_SET_PITCH = 20,
+    PMOVE_MOVE_START_SWIM = 21,
+    PMOVE_MOVE_STOP_SWIM = 22,
+    NUM_PMOVE_EVTS = 59,
 };
+
+using PLAYER_MOVE_EVT = MoveEventId;
 
 enum OBJECT_FIELDS {
     OBJECT_FIELD_GUID = 0,
@@ -76,17 +507,31 @@ enum OBJECT_FIELDS {
     OBJECT_END = 6,
 };
 
-enum TypeMask {
-    TYPEMASK_OBJECT = 1,
-    TYPEMASK_ITEM = 2,
-    TYPEMASK_CONTAINER = 4,
-    TYPEMASK_UNIT = 8,
-    TYPEMASK_PLAYER = 16,
-    TYPEMASK_GAMEOBJECT = 32,
-    TYPEMASK_DYNAMICOBJECT = 64,
-    TYPEMASK_CORPSE = 128,
+enum OBJECT_TYPE {
+    TYPE_OBJECT = 0x1,
+    TYPE_ITEM = 0x2,
+    TYPE_CONTAINER = 0x4,
+    TYPE_UNIT = 0x8,
+    TYPE_PLAYER = 0x10,
+    TYPE_GAMEOBJECT = 0x20,
+    TYPE_DYNAMICOBJECT = 0x40,
+    TYPE_CORPSE = 0x80,
+    // TYPE_AIGROUP = 0x100,
+    // TYPE_AREATRIGGER = 0x200,
+    HEIR_TYPE_OBJECT = TYPE_OBJECT, // 0x1
+    HEIR_TYPE_ITEM = TYPE_OBJECT | TYPE_ITEM, // 0x3
+    HEIR_TYPE_CONTAINER = TYPE_OBJECT | TYPE_ITEM | TYPE_CONTAINER, //0x7
+    HEIR_TYPE_UNIT = TYPE_OBJECT | TYPE_UNIT ,// 0x9,
+    HEIR_TYPE_PLAYER = TYPE_OBJECT | TYPE_UNIT | TYPE_PLAYER, // 0x19,
+    HEIR_TYPE_GAMEOBJECT = TYPE_OBJECT | TYPE_GAMEOBJECT , // 0x21,
+    HEIR_TYPE_DYNAMICOBJECT = TYPE_OBJECT | TYPE_DYNAMICOBJECT, // 0x41,
+    HEIR_TYPE_CORPSE = TYPE_OBJECT | TYPE_CORPSE, // 0x81,
+    // HEIR_TYPE_AIGROUP = 0x101,
+    // HEIR_TYPE_AREATRIGGER = 0x201,
+
 };
 
+// 3.3.5 bit masks; later-client ordinal bit positions are not interchangeable.
 enum MovementFlags : uint32_t {
     MOVEMENTFLAG_NONE = 0x00000000,
     MOVEMENTFLAG_FORWARD = 0x00000001,
@@ -121,6 +566,39 @@ enum MovementFlags : uint32_t {
     MOVEMENTFLAG_SAFE_FALL = 0x20000000,
     MOVEMENTFLAG_HOVER = 0x40000000,
     MOVEMENTFLAG_STATUS_APPLIED = 0x80000000,
+
+    MOVEMENTFLAG_MOVE_MASK = MOVEMENTFLAG_FORWARD | MOVEMENTFLAG_BACKWARD,
+    MOVEMENTFLAG_STRAFE_MASK = MOVEMENTFLAG_STRAFE_LEFT | MOVEMENTFLAG_STRAFE_RIGHT,
+    MOVEMENTFLAG_TURN_MASK = MOVEMENTFLAG_TURN_LEFT | MOVEMENTFLAG_TURN_RIGHT,
+    MOVEMENTFLAG_PITCH_MASK = MOVEMENTFLAG_PITCH_UP | MOVEMENTFLAG_PITCH_DOWN,
+    // Directional input bits; ascending/descending are separate in 3.3.5.
+    MOVEMENTFLAG_MOTION_MASK = MOVEMENTFLAG_MOVE_MASK
+        | MOVEMENTFLAG_STRAFE_MASK
+        | MOVEMENTFLAG_TURN_MASK
+        | MOVEMENTFLAG_PITCH_MASK,
+    MOVEMENTFLAG_HORIZONTAL_MOVE_MASK = MOVEMENTFLAG_MOVE_MASK | MOVEMENTFLAG_STRAFE_MASK,
+    MOVEMENTFLAG_ASCEND_DESCEND_MASK = MOVEMENTFLAG_ASCENDING | MOVEMENTFLAG_DESCENDING,
+    MOVEMENTFLAG_TRANSLATION_MASK = MOVEMENTFLAG_HORIZONTAL_MOVE_MASK | MOVEMENTFLAG_ASCEND_DESCEND_MASK,
+    MOVEMENTFLAG_FALL_MASK = MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR,
+    // Exact 0x00C0100F mask used by client movement/animation checks.
+    MOVEMENTFLAG_MOVING_MASK = MOVEMENTFLAG_TRANSLATION_MASK | MOVEMENTFLAG_FALLING,
+    // Movement-update activity also includes turning and pitching (0x00C010FF).
+    MOVEMENTFLAG_ACTIVE_MASK = MOVEMENTFLAG_MOVING_MASK | MOVEMENTFLAG_TURN_MASK | MOVEMENTFLAG_PITCH_MASK,
+    MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK = MOVEMENTFLAG_SWIMMING | MOVEMENTFLAG_FLYING,
+    MOVEMENTFLAG_LOCOMOTION_MASK = MOVEMENTFLAG_MOVING_MASK | MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK,
+    MOVEMENTFLAG_PENDING_MOVE_MASK = MOVEMENTFLAG_PENDING_FORWARD | MOVEMENTFLAG_PENDING_BACKWARD,
+    MOVEMENTFLAG_PENDING_STRAFE_MASK = MOVEMENTFLAG_PENDING_STRAFE_LEFT | MOVEMENTFLAG_PENDING_STRAFE_RIGHT,
+    MOVEMENTFLAG_PENDING_MOTION_MASK = MOVEMENTFLAG_PENDING_STOP
+        | MOVEMENTFLAG_PENDING_STRAFE_STOP
+        | MOVEMENTFLAG_PENDING_MOVE_MASK
+        | MOVEMENTFLAG_PENDING_STRAFE_MASK,
+    MOVEMENTFLAG_PENDING_MASK = MOVEMENTFLAG_PENDING_MOTION_MASK | MOVEMENTFLAG_PENDING_ROOT,
+    // Input and pending bits cleared when movement is stopped for a root.
+    MOVEMENTFLAG_STOP_MOTION_MASK = MOVEMENTFLAG_MOTION_MASK
+        | MOVEMENTFLAG_ASCEND_DESCEND_MASK
+        | MOVEMENTFLAG_PENDING_MASK,
+    // Locally maintained state excluded from ordinary status/event flag merges.
+    MOVEMENTFLAG_LOCAL_MASK = MOVEMENTFLAG_ONTRANSPORT | MOVEMENTFLAG_SPLINE_ENABLED | MOVEMENTFLAG_STATUS_APPLIED,
 };
 
 enum MovementFlags2 : uint32_t {
@@ -134,13 +612,23 @@ enum MovementFlags2 : uint32_t {
     MOVEMENTFLAG2_VEHICLE_EXIT_VOLUNTARY = 0x00000040,
     MOVEMENTFLAG2_JUMP_SPLINE_IN_AIR = 0x00000080,
     MOVEMENTFLAG2_ANIM_TIER_IN_TRANS = 0x00000100,
-    MOVEMENTFLAG2_UNK_0200 = 0x00000200,
+    // Suppresses water-walk pitch special cases; broader intent is unverified.
+    MOVEMENTFLAG2_UNKNOWN_9 = 0x00000200,
     MOVEMENTFLAG2_INTERPOLATED_MOVEMENT = 0x00000400,
     MOVEMENTFLAG2_INTERPOLATED_TURNING = 0x00000800,
     MOVEMENTFLAG2_INTERPOLATED_PITCHING = 0x00001000,
-    MOVEMENTFLAG2_UNK_2000 = 0x00002000,
+    MOVEMENTFLAG2_WAIT_FOR_VEHICLE_TRANSITION_ANIM = 0x00002000,
     MOVEMENTFLAG2_CAN_TRANSITION_BETWEEN_SWIM_AND_FLY = 0x00004000,
-    MOVEMENTFLAG2_UNK_8000 = 0x00008000,
+    // No native 3.3.5 consumer; preserve the bit when copying/serializing raw words.
+    MOVEMENTFLAG2_UNUSED_15 = 0x00008000,
+
+    MOVEMENTFLAG2_INTERPOLATED_MASK = MOVEMENTFLAG2_INTERPOLATED_MOVEMENT
+        | MOVEMENTFLAG2_INTERPOLATED_TURNING
+        | MOVEMENTFLAG2_INTERPOLATED_PITCHING,
+    // Only these extra flags are merged from a queued teleport event.
+    MOVEMENTFLAG2_TELEPORT_MASK = MOVEMENTFLAG2_VEHICLE_EXIT_VOLUNTARY | MOVEMENTFLAG2_WAIT_FOR_VEHICLE_TRANSITION_ANIM,
+    // The serialized/stored extra-flags word is 16 bits; enum ABI remains uint32_t.
+    MOVEMENTFLAG2_ALL_MASK = 0x0000FFFF,
 };
 
 enum SplineFlags : uint32_t {
@@ -163,6 +651,21 @@ enum SplineFlags : uint32_t {
     SPLINEFLAG_TRANSPORT_ENTER = 0x00800000,
     SPLINEFLAG_TRANSPORT_EXIT = 0x01000000,
     SPLINEFLAG_BACKWARD = 0x08000000,
+
+    // Unused by native 3.3.5 spline consumers; retained in raw packet words.
+    SPLINEFLAG_UNUSED_25 = 0x02000000u,
+    SPLINEFLAG_UNUSED_26 = 0x04000000u,
+    SPLINEFLAG_UNUSED_28 = 0x10000000u,
+    SPLINEFLAG_UNUSED_29 = 0x20000000u,
+    SPLINEFLAG_UNUSED_30 = 0x40000000u,
+    SPLINEFLAG_UNUSED_31 = 0x80000000u,
+
+    // Low byte is an animation tier/ID payload, not eight independent flags.
+    SPLINEFLAG_ANIMATION_ID_MASK = 0x000000FF,
+    SPLINEFLAG_FINAL_FACING_MASK = SPLINEFLAG_FINAL_POINT | SPLINEFLAG_FINAL_TARGET | SPLINEFLAG_FINAL_ANGLE,
+    SPLINEFLAG_CATMULLROM_MASK = SPLINEFLAG_FLYING | SPLINEFLAG_CATMULLROM,
+    SPLINEFLAG_FALL_MASK = SPLINEFLAG_FALLING | SPLINEFLAG_PARABOLIC,
+    SPLINEFLAG_TRANSPORT_MASK = SPLINEFLAG_TRANSPORT_ENTER | SPLINEFLAG_TRANSPORT_EXIT,
 };
 
 #endif

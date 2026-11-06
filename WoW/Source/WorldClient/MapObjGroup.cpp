@@ -1,4 +1,5 @@
 #include "MapObjGroup.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include "WoW/Source/WorldClient/BspQuery_SegmentLink.h"
 #include "WoW/Source/WorldClient/Map.h"
 #include "Engine/Source/Tempest/CFacet.h"
@@ -56,7 +57,7 @@ uint32_t World::TriData::faceIndexCursor;
 uint32_t World::TriData::indexCursor;
 
 // STATIC: 0x00CB7538
-uint32_t World::TriData::unk_CB7538;
+uint32_t World::TriData::matrixPoolCount;
 
 // STATIC: 0x00CB7540
 uint16_t World::TriData::faceIndexPool[0x4000];
@@ -95,12 +96,12 @@ class LiquidSoundQuery : public SpanRasterizer {
     /* 0010 */ C3Vector m_position;
     /* 001C */ int32_t m_liquidType;
     /* 0020 */ const SMOLTile* m_tiles;
-    /* 0024 */ const SMOLiquidVert* m_verts;
+    /* 0024 */ const SMOLVert* m_verts;
     /* 0028 */ TSGrowableArray<World::LiquidQueryResult>* m_results;
     /* 002C */ float m_radiusSq;
     /* 0030 */ uint8_t m_found;
 
-    LiquidSoundQuery(const C2iVector& size, SpanRange* spans, const C3Vector& position, int32_t liquidType, const SMOLTile* tiles, const SMOLiquidVert* verts, TSGrowableArray<World::LiquidQueryResult>* results);
+    LiquidSoundQuery(const C2iVector& size, SpanRange* spans, const C3Vector& position, int32_t liquidType, const SMOLTile* tiles, const SMOLVert* verts, TSGrowableArray<World::LiquidQueryResult>* results);
     void VisitSpan(int32_t x0, int32_t x1, int32_t y) override;
 };
 
@@ -238,7 +239,7 @@ void SpanRasterizer::AddRing(int32_t x, int32_t y, int32_t radius) {
 
 // VERIFY: fc3235a2 auto
 // OFFSET: 0x0079B700
-LiquidSoundQuery::LiquidSoundQuery(const C2iVector& size, SpanRange* spans, const C3Vector& position, int32_t liquidType, const SMOLTile* tiles, const SMOLiquidVert* verts, TSGrowableArray<World::LiquidQueryResult>* results) : SpanRasterizer(size, spans) {
+LiquidSoundQuery::LiquidSoundQuery(const C2iVector& size, SpanRange* spans, const C3Vector& position, int32_t liquidType, const SMOLTile* tiles, const SMOLVert* verts, TSGrowableArray<World::LiquidQueryResult>* results) : SpanRasterizer(size, spans) {
     this->m_position = position;
     this->m_liquidType = liquidType;
     this->m_results = results;
@@ -269,7 +270,7 @@ void CMapObjGroup::QueryLiquidSounds(const C3Vector& pos, TSGrowableArray<World:
         }
 
         float ring = s_liquidSoundRings[i];
-        query.m_radiusSq = 4.1666665f * ring * (4.1666665f * ring);
+        query.m_radiusSq = SMOLTILE_SIZE * ring * (SMOLTILE_SIZE * ring);
         query.AddRing(tileX, tileY, static_cast<int32_t>(ring));
     }
 }
@@ -278,7 +279,7 @@ void CMapObjGroup::QueryLiquidSounds(const C3Vector& pos, TSGrowableArray<World:
 // OFFSET: 0x0079C1A0
 void LiquidSoundQuery::VisitSpan(int32_t x0, int32_t x1, int32_t y) {
     const SMOLTile* tile = &this->m_tiles[x0 + y * this->m_width];
-    const SMOLiquidVert* vert = &this->m_verts[x0 + y * (this->m_width + 1)];
+    const SMOLVert* vert = &this->m_verts[x0 + y * (this->m_width + 1)];
 
     for (int32_t x = x0; x <= x1; x++, tile++, vert++) {
         if ((tile->m_flags & 0xF) == 0xF) {
@@ -305,8 +306,8 @@ void LiquidSoundQuery::VisitSpan(int32_t x0, int32_t x1, int32_t y) {
         }
 
         result->m_liquidType = this->m_liquidType;
-        result->m_offset.x = x * 4.1666665f - this->m_position.x;
-        result->m_offset.y = y * 4.1666665f - this->m_position.y;
+        result->m_offset.x = x * SMOLTILE_SIZE - this->m_position.x;
+        result->m_offset.y = y * SMOLTILE_SIZE - this->m_position.y;
         result->m_offset.z = dz;
         this->m_found = 1;
     }
@@ -371,28 +372,28 @@ bool BspQuery_Segment::GetFaceIndicesUsingCache(const CAaBsp& aaBsp, const CAaBs
         return false;
     }
 
-    float maxX = this->m_seg.t.x;
-    float maxY = this->m_seg.t.y;
-    float minX = this->m_seg.b.x;
-    float maxZ = this->m_seg.t.z;
+    float maxX = this->m_seg.end.x;
+    float maxY = this->m_seg.end.y;
+    float minX = this->m_seg.start.x;
+    float maxZ = this->m_seg.end.z;
 
     if (minX > maxX) {
-        minX = this->m_seg.t.x;
-        maxX = this->m_seg.b.x;
+        minX = this->m_seg.end.x;
+        maxX = this->m_seg.start.x;
     }
 
-    float minY = this->m_seg.b.y;
+    float minY = this->m_seg.start.y;
 
     if (minY > maxY) {
-        minY = this->m_seg.t.y;
-        maxY = this->m_seg.b.y;
+        minY = this->m_seg.end.y;
+        maxY = this->m_seg.start.y;
     }
 
-    float minZ = this->m_seg.b.z;
+    float minZ = this->m_seg.start.z;
 
     if (minZ > maxZ) {
-        minZ = this->m_seg.t.z;
-        maxZ = this->m_seg.b.z;
+        minZ = this->m_seg.end.z;
+        maxZ = this->m_seg.start.z;
     }
 
     minX -= 0.0099999998f;
@@ -556,15 +557,15 @@ BspQuery_Segment::BspQuery_Segment(SMOPoly* faces, C3Vector* vertexList, uint16_
     this->m_indices = indices;
     this->m_overflowFlags = nullptr;
     this->m_hitT = hitT;
-    this->m_seg.b = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_seg.t = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_seg.start = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_seg.end = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_ray.origin = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_ray.dir = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_materials = materials;
     this->m_faceIgnoreFlags = faceIgnoreFlags | 0x80;
-    this->unk_0054 = CMap::s_useSSE;
-    this->m_ray.origin = seg.b;
-    this->m_ray.dir = C3Vector(seg.t.x - seg.b.x, seg.t.y - seg.b.y, seg.t.z - seg.b.z);
+    this->unused_0054 = CMap::s_useSSE;
+    this->m_ray.origin = seg.start;
+    this->m_ray.dir = C3Vector(seg.end.x - seg.start.x, seg.end.y - seg.start.y, seg.end.z - seg.start.z);
 
     float length = sqrtf(this->m_ray.dir.z * this->m_ray.dir.z + this->m_ray.dir.y * this->m_ray.dir.y + this->m_ray.dir.x * this->m_ray.dir.x);
     this->m_maxT = *hitT * length;
@@ -693,7 +694,7 @@ void CMapObjGroup::InitPtrs() {
     this->m_liquidVertArray = nullptr;
     this->m_portalStart = 0;
     this->m_portalCount = 0;
-    this->unk_014C = 0;
+    this->unused_014C = 0;
     this->m_polyListSize = 0;
     this->m_vertexListCount = 0;
     this->m_normalListCount = 0;
@@ -725,7 +726,7 @@ void VBBList_Block::Set(uint32_t itemSize, uint32_t itemCount, uint32_t offset) 
 
     this->m_buffer->m_index = index;
     g_theGxDevicePtr->BufSizeSet(this->m_buffer, itemSize, itemCount - 1);
-    this->m_buffer->unk_001C = 0;
+    this->m_buffer->m_hasData = 0;
 }
 
 // VERIFY: 79b8e8c1 manual
@@ -787,7 +788,7 @@ void CMapObjGroup::FillVertexVB(CGxBuf* buf, EGxVertexBufferFormat format) {
         }
 
         g_theGxDevicePtr->BufUnlock(buf, 0);
-        buf->unk_001C = 1;
+        buf->m_hasData = 1;
         return;
     }
 
@@ -890,7 +891,7 @@ void CMapObjGroup::FillVertexVB(CGxBuf* buf, EGxVertexBufferFormat format) {
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 745d4cbb manual
@@ -924,7 +925,7 @@ void CMapObjGroup::FillTransparencyVB(CGxBuf* buf) {
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 58db9069 auto
@@ -933,7 +934,7 @@ void CMapObjGroup::UploadIndexBuffer(CGxBuf* buf) {
     char* data = g_theGxDevicePtr->BufLock(buf);
     memcpy(data, this->m_indices, sizeof(uint16_t) * this->m_indicesCount);
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 12c31afd auto
@@ -955,12 +956,12 @@ int32_t CMapObjGroup::FindLiquidType() {
 // VERIFY: f0e93fe5 auto
 // OFFSET: 0x007C9BC0
 void CMapObjGroup::Init() {
-    this->m_unkLoadedFlag &= ~0xF;
-    this->unk_0190 = 0.0f;
+    this->m_unkLoadedFlag &= ~CMapObjGroup::RUNTIME_FLAGS::RUNTIME_STATE_MASK;
+    this->unused_0190 = 0.0f;
     this->m_flags = 0;
     this->m_bbox.b = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_bbox.t = C3Vector(0.0f, 0.0f, 0.0f);
-    this->unk_00D0 = 0;
+    this->unused_00D0 = 0;
     this->m_minimapTag = 0;
     this->m_filePtr = nullptr;
     this->m_fileSize = 0;
@@ -997,14 +998,14 @@ void CMapObjGroup::SetVertexVB() {
     EGxVertexBufferFormat format = GxVBF_PNCT;
     uint32_t vertexSize = sizeof(CGxVertexPNCT);
 
-    if (this->m_unkLoadedFlag & 0x8) {
+    if (this->m_unkLoadedFlag & CMapObjGroup::RUNTIME_FLAGS::EXTENDED_VERTEX_FORMAT) {
         format = GxVBF_PNC2T2;
         vertexSize = sizeof(CGxVertexPNC2T2);
     }
 
     CGxBuf* buf = this->m_vertsBlock ? this->m_vertsBlock->m_buffer : g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, vertexSize, this->m_vertexListCount);
 
-    if (!buf->unk_001C || !buf->unk_001D) {
+    if (!buf->m_hasData || !buf->m_valid) {
         this->FillVertexVB(buf, format);
     }
 
@@ -1016,7 +1017,7 @@ void CMapObjGroup::SetVertexVB() {
 void CMapObjGroup::SetTransparencyVB() {
     CGxBuf* buf = this->m_transparencyVertsBlock ? this->m_transparencyVertsBlock->m_buffer : g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(CGxVertexPNCT), this->m_batchList[this->m_transparencyBatchesCount - 1].m_vertexEnd + 1);
 
-    if (!buf->unk_001C || !buf->unk_001D) {
+    if (!buf->m_hasData || !buf->m_valid) {
         this->FillTransparencyVB(buf);
     }
 
@@ -1028,7 +1029,7 @@ void CMapObjGroup::SetTransparencyVB() {
 void CMapObjGroup::SetIndexVB() {
     CGxBuf* buf = this->m_indicesBlock ? this->m_indicesBlock->m_buffer : g_theGxDevicePtr->BufStream(GxPoolTarget_Index, sizeof(uint16_t), this->m_indicesCount);
 
-    if (!buf->unk_001C || !buf->unk_001D) {
+    if (!buf->m_hasData || !buf->m_valid) {
         this->UploadIndexBuffer(buf);
     }
 
@@ -1043,9 +1044,9 @@ bool CMapObjGroup::GetTris(const C3Segment& seg, float* dist, uint32_t flags, ui
 
     BspQuery_Segment query(this->m_polyList, this->m_vertexList, this->m_indices, seg, dist, faceIgnoreFlags, materials);
     CAaBsp_Query_Segment<BspQuery_Segment> bspQuery;
-    bspQuery.m_aaBsp = &this->m_cAaBspNodePtr1;
+    bspQuery.m_aaBsp = &this->m_aaBsp;
     bspQuery.m_f = &query;
-    bspQuery.GetFaceIndices(0, seg, this->m_cAaBspNodePtr1.m_aaBox);
+    bspQuery.GetFaceIndices(0, seg, this->m_aaBsp.m_aaBox);
     this->GetTrisFromQuery(triData, &query, mapObjDef, 0);
 
     if ((flags & 0x30000) && (this->m_flags & 0x1000)) {
@@ -1070,7 +1071,7 @@ VBBList_Block* VBBList::AllocBlock() {
 
         block->m_link.Unlink();
         block->m_listHead = nullptr;
-        block->unk_0008 = 0.0f;
+        block->unused_0008 = 0.0f;
         block->m_pool = nullptr;
         return block;
     }
@@ -1078,7 +1079,7 @@ VBBList_Block* VBBList::AllocBlock() {
     void* mem = SMemAlloc(sizeof(VBBList_Block), __FILE__, __LINE__, 0x8);
     VBBList_Block* block = mem ? new (mem) VBBList_Block : nullptr;
     this->unk_001C.LinkToTail(block);
-    block->unk_0008 = 0.0f;
+    block->unused_0008 = 0.0f;
     block->m_offset = 0;
     block->m_capacity = 0;
     block->m_listHead = nullptr;
@@ -1227,8 +1228,8 @@ bool CMapObjGroup::QueryLiquid(const C3Vector& pos, int32_t* liquidType, float* 
         return true;
     }
 
-    float fx = (pos.x - this->m_liquidCorner.x) * 0.24f;
-    float fy = (pos.y - this->m_liquidCorner.y) * 0.24f;
+    float fx = (pos.x - this->m_liquidCorner.x) * OO_COORD_TO_SUBCHUNK;
+    float fy = (pos.y - this->m_liquidCorner.y) * OO_COORD_TO_SUBCHUNK;
 
     C2iVector tile;
     tile.x = static_cast<int32_t>(floor(fx));
@@ -1248,7 +1249,7 @@ bool CMapObjGroup::QueryLiquid(const C3Vector& pos, int32_t* liquidType, float* 
     int32_t v1 = this->m_liquidVerts.x + v0;
     float offset = (g_liquidTypeDB.GetRecord(type)->m_flags & 0x4) ? 0.0099999998f : 0.0f;
 
-    const SMOLiquidVert* verts = this->m_liquidVertexList;
+    const SMOLVert* verts = this->m_liquidVertexList;
     float h0 = verts[v0].m_waterVert.m_height;
     float top = h0 + (verts[v0 + 1].m_waterVert.m_height - h0) * dx;
     float h2 = verts[v1].m_waterVert.m_height;
@@ -1294,7 +1295,7 @@ void CMapObjGroup::GenLiquidVerts() {
     float x = this->m_liquidCorner.x;
     float y = this->m_liquidCorner.y;
     C3Vector* out = this->m_liquidVertArray->m_verts.m_data;
-    const SMOLiquidVert* vert = this->m_liquidVertexList;
+    const SMOLVert* vert = this->m_liquidVertexList;
 
     this->m_liquidHeight = vert->m_waterVert.m_height;
     this->m_liquidMaxHeight = vert->m_waterVert.m_height;
@@ -1311,11 +1312,11 @@ void CMapObjGroup::GenLiquidVerts() {
             this->m_liquidMaxHeight = height < this->m_liquidMaxHeight ? this->m_liquidMaxHeight : height;
 
             vert++;
-            x += 4.1666665f;
+            x += SMOLTILE_SIZE;
         }
 
         x = this->m_liquidCorner.x;
-        y += 4.1666665f;
+        y += SMOLTILE_SIZE;
     }
 }
 
@@ -1357,7 +1358,7 @@ void VBBList::FreeVBB(VBBList_Block* block) {
 
         block->Set(capacity, 1, offset);
         *block->m_listHead = nullptr;
-        block->unk_0008 = 0.0f;
+        block->unused_0008 = 0.0f;
         block->m_listHead = nullptr;
     } else {
         if (block->m_buffer) {
@@ -1389,7 +1390,7 @@ void VBBList::FreeVBB(VBBList_Block* block) {
 // OFFSET: 0x007CBB30
 void VBBList::AssignBlock(VBBList_Block* block, VBBList_Block** slot, uint32_t itemSize, uint32_t itemCount) {
     VBBList_Block* rest = this->AllocBlock();
-    this->unk_001C.LinkNode(rest, 1, block);
+    this->unk_001C.LinkNode(rest, TSLIST_LINK_AFTER, block);
     rest->Set(1, block->m_capacity - itemSize * (itemCount + 1), itemSize * (itemCount + 1) + block->m_offset);
     block->Set(itemSize, itemCount + 1, block->m_offset);
     block->m_listHead = slot;
@@ -1443,7 +1444,7 @@ void VBBList::AllocVBB(VBBList_Block** slot, uint32_t itemSize, uint32_t itemCou
 // OFFSET: 0x007CBCB0
 void CMapObjGroup::AllocVB() {
     if (!this->m_vertsBlock) {
-        uint32_t vertexSize = (this->m_unkLoadedFlag & 0x8) ? sizeof(CGxVertexPNC2T2) : sizeof(CGxVertexPNCT);
+        uint32_t vertexSize = (this->m_unkLoadedFlag & CMapObjGroup::RUNTIME_FLAGS::EXTENDED_VERTEX_FORMAT) ? sizeof(CGxVertexPNC2T2) : sizeof(CGxVertexPNCT);
         CMapObjGroup::vertexVBList.AllocVBB(&this->m_vertsBlock, vertexSize, this->m_vertexListCount);
     }
 
@@ -1482,12 +1483,12 @@ void CMapObjGroup::FreeVB() {
 void CMapObjGroup::AllocLiquidVB(EGxVertexBufferFormat format, uint32_t vertexCount, uint32_t indexCount, CGxBatch** batch) {
     if (!this->m_liquidVertsBlock) {
         CMapObjGroup::vertexVBList.AllocVBB(&this->m_liquidVertsBlock, GxVertexSize(format), vertexCount);
-        this->m_liquidVertsBlock->m_buffer->unk_001C = 0;
+        this->m_liquidVertsBlock->m_buffer->m_hasData = 0;
     }
 
     if (!this->m_liquidIndicesBlock) {
         CMapObjGroup::indexVBList.AllocVBB(&this->m_liquidIndicesBlock, 2, indexCount);
-        this->m_liquidIndicesBlock->m_buffer->unk_001C = 0;
+        this->m_liquidIndicesBlock->m_buffer->m_hasData = 0;
     }
 
     *batch = &this->m_liquidBatch;
@@ -1527,7 +1528,7 @@ void CMapObjGroup::Clear() {
         this->m_asyncObjPtr = nullptr;
     }
 
-    this->m_cAaBspNodePtr1.Clear();
+    this->m_aaBsp.Clear();
     this->FreeVB();
 
     if (this->m_liquidVertArray) {
@@ -1553,7 +1554,7 @@ void CMapObjGroup::Clear() {
         occluder = next;
     }
 
-    this->m_unkLoadedFlag &= ~1u;
+    this->m_unkLoadedFlag &= ~CMapObjGroup::RUNTIME_FLAGS::LOADED;
 }
 
 // VERIFY: ed59eece manual
@@ -1725,13 +1726,13 @@ bool CMapObjGroup::VectorIntersectLiquidTiles(const C3Segment& seg, float* t, ui
         return false;
     }
 
-    float dx = seg.t.x - seg.b.x;
-    float dy = seg.t.y - seg.b.y;
-    float dz = seg.t.z - seg.b.z;
+    float dx = seg.end.x - seg.start.x;
+    float dy = seg.end.y - seg.start.y;
+    float dz = seg.end.z - seg.start.z;
     float invLength = 1.0f / sqrt(dx * dx + dz * dz + dy * dy);
 
     C3Ray ray;
-    ray.origin = seg.b;
+    ray.origin = seg.start;
     ray.dir.x = dx * invLength;
     ray.dir.y = dy * invLength;
     ray.dir.z = invLength * dz;
@@ -1821,9 +1822,9 @@ bool CMapObjGroup::VectorIntersectLiquidTiles(const C3Segment& seg, float* t, ui
 // VERIFY: 4c425802 auto
 // OFFSET: 0x007C9DD0
 bool CMapObjGroup::VectorIntersectLiquid(const C3Segment& seg, float* t, uint32_t flags, World::TriData* triData, CMapObjDef* mapObjDef) {
-    float sizeY = this->m_liquidTiles.y * 4.1666665f - 0.1f;
+    float sizeY = this->m_liquidTiles.y * SMOLTILE_SIZE - 0.1f;
     sizeY = sizeY > 0.0f ? sizeY : 0.0f;
-    float sizeX = 4.1666665f * this->m_liquidTiles.x - 0.1f;
+    float sizeX = SMOLTILE_SIZE * this->m_liquidTiles.x - 0.1f;
     sizeX = sizeX > 0.0f ? sizeX : 0.0f;
 
     CAaBox box;
@@ -1834,8 +1835,8 @@ bool CMapObjGroup::VectorIntersectLiquid(const C3Segment& seg, float* t, uint32_
     box.t.y = sizeY + this->m_liquidCorner.y;
     box.t.z = this->m_liquidMaxHeight;
 
-    C3Vector start = seg.b;
-    C3Vector end = seg.t;
+    C3Vector start = seg.start;
+    C3Vector end = seg.end;
     C3Vector dir;
     dir.x = end.x - start.x;
     dir.y = end.y - start.y;
@@ -1852,7 +1853,7 @@ bool CMapObjGroup::VectorIntersectLiquid(const C3Segment& seg, float* t, uint32_
 
     if (!box.ContainsPoint(start)) {
         C3Ray ray;
-        ray.origin = seg.b;
+        ray.origin = seg.start;
         ray.dir = dir;
         float rayT = 1.0f;
 
@@ -1878,12 +1879,12 @@ bool CMapObjGroup::VectorIntersectLiquid(const C3Segment& seg, float* t, uint32_
     uint32_t tileCount = 0;
     uint8_t tiles[0x800];
 
-    start.x = (start.x - this->m_liquidCorner.x) * 0.24f;
-    start.y = (start.y - this->m_liquidCorner.y) * 0.24f;
-    start.z = start.z * 0.24f;
-    end.x = (end.x - this->m_liquidCorner.x) * 0.24f;
-    end.y = (end.y - this->m_liquidCorner.y) * 0.24f;
-    end.z = 0.24f * end.z;
+    start.x = (start.x - this->m_liquidCorner.x) * OO_COORD_TO_SUBCHUNK;
+    start.y = (start.y - this->m_liquidCorner.y) * OO_COORD_TO_SUBCHUNK;
+    start.z = start.z * OO_COORD_TO_SUBCHUNK;
+    end.x = (end.x - this->m_liquidCorner.x) * OO_COORD_TO_SUBCHUNK;
+    end.y = (end.y - this->m_liquidCorner.y) * OO_COORD_TO_SUBCHUNK;
+    end.z = OO_COORD_TO_SUBCHUNK * end.z;
 
     float deltaX = end.x - start.x;
     float deltaY = fabs(end.y - start.y);
@@ -1925,10 +1926,10 @@ bool CMapObjGroup::GetLiquidTris(const CAaBox& box, uint32_t flags, World::TriDa
     CAaBox bounds = CAaBox::Bounding(points, 2);
 
     CiRect rect;
-    rect.maxX = static_cast<int32_t>(floor(bounds.t.x * 0.24f));
-    rect.maxY = static_cast<int32_t>(floor(bounds.t.y * 0.24f));
-    rect.minY = static_cast<int32_t>(floor(bounds.b.y * 0.24f));
-    rect.minX = static_cast<int32_t>(floor(bounds.b.x * 0.24f));
+    rect.maxX = static_cast<int32_t>(floor(bounds.t.x * OO_COORD_TO_SUBCHUNK));
+    rect.maxY = static_cast<int32_t>(floor(bounds.t.y * OO_COORD_TO_SUBCHUNK));
+    rect.minY = static_cast<int32_t>(floor(bounds.b.y * OO_COORD_TO_SUBCHUNK));
+    rect.minX = static_cast<int32_t>(floor(bounds.b.x * OO_COORD_TO_SUBCHUNK));
 
     if (rect.maxX < 0 || rect.maxY < 0 || rect.minX >= this->m_liquidTiles.x || rect.minY >= this->m_liquidTiles.y) {
         return false;
@@ -2064,10 +2065,10 @@ bool CMapObjGroup::GetLiquidTris(const CFrustum& frustum, uint32_t flags, World:
     CAaBox bounds = CAaBox::Bounding(localFrustum.corners, 8);
 
     CiRect rect;
-    rect.maxX = static_cast<int32_t>(floor(bounds.t.x * 0.24f));
-    rect.maxY = static_cast<int32_t>(floor(bounds.t.y * 0.24f));
-    rect.minY = static_cast<int32_t>(floor(bounds.b.y * 0.24f));
-    rect.minX = static_cast<int32_t>(floor(bounds.b.x * 0.24f));
+    rect.maxX = static_cast<int32_t>(floor(bounds.t.x * OO_COORD_TO_SUBCHUNK));
+    rect.maxY = static_cast<int32_t>(floor(bounds.t.y * OO_COORD_TO_SUBCHUNK));
+    rect.minY = static_cast<int32_t>(floor(bounds.b.y * OO_COORD_TO_SUBCHUNK));
+    rect.minX = static_cast<int32_t>(floor(bounds.b.x * OO_COORD_TO_SUBCHUNK));
 
     if (rect.maxX < 0 || rect.maxY < 0 || rect.minX >= this->m_liquidTiles.x || rect.minY >= this->m_liquidTiles.y) {
         return false;
@@ -2186,7 +2187,7 @@ bool CMapObjGroup::GetLiquidFacets(const CAaBox& box, uint32_t flags, World::Fac
     World::TriData::nBatches = 0;
     World::TriData::faceIndexCursor = 0;
     World::TriData::indexCursor = 0;
-    World::TriData::unk_CB7538 = 0;
+    World::TriData::matrixPoolCount = 0;
 
     World::TriData triData;
     this->GetLiquidTris(box, flags, &triData, mapObjDef);
@@ -2332,9 +2333,9 @@ bool CMapObjGroup::GetTris(const CAaBox& box, uint32_t flags, uint16_t faceIgnor
     query.m_volume = &box;
     query.m_faceIgnoreFlags = faceIgnoreFlags | 0x80;
     CAaBsp_Query_AaBox<BspQuery_Volume<CAaBox>> bspQuery;
-    bspQuery.m_aaBsp = &this->m_cAaBspNodePtr1;
+    bspQuery.m_aaBsp = &this->m_aaBsp;
     bspQuery.m_f = &query;
-    bspQuery.GetFaceIndices(0, box, this->m_cAaBspNodePtr1.m_aaBox);
+    bspQuery.GetFaceIndices(0, box, this->m_aaBsp.m_aaBox);
     this->GetTrisFromQuery(triData, &query, mapObjDef, overflow);
 
     if (flags & 0x30000) {
@@ -2350,9 +2351,9 @@ bool CMapObjGroup::Intersect(C3Segment& seg, float* dist, uint32_t flags, uint16
     bool hit = false;
     BspQuery_Segment query(this->m_polyList, this->m_vertexList, this->m_indices, seg, dist, faceIgnoreFlags, this->m_parent->m_materialList);
     CAaBsp_Query_Segment<BspQuery_Segment> bspQuery;
-    bspQuery.m_aaBsp = &this->m_cAaBspNodePtr1;
+    bspQuery.m_aaBsp = &this->m_aaBsp;
     bspQuery.m_f = &query;
-    bspQuery.GetFaceIndices(0, seg, this->m_cAaBspNodePtr1.m_aaBox);
+    bspQuery.GetFaceIndices(0, seg, this->m_aaBsp.m_aaBox);
 
     if (BspQuery::hitFaceSub) {
         *hitIndex = BspQuery::hitFaces[0];
@@ -2372,9 +2373,9 @@ bool CMapObjGroup::Intersect(C3Segment& seg, float* dist, uint32_t flags, uint16
 bool CMapObjGroup::GetFacesForLinking(C3Segment& seg, float* t0, int32_t* face0, float* t1, int32_t* face1) {
     BspQuery_SegmentLink query(this->m_polyList, this->m_vertexList, this->m_indices, seg, *t0, *t1);
     CAaBsp_Query_Segment<BspQuery_SegmentLink> bspQuery;
-    bspQuery.m_aaBsp = &this->m_cAaBspNodePtr1;
+    bspQuery.m_aaBsp = &this->m_aaBsp;
     bspQuery.m_f = &query;
-    bspQuery.GetFaceIndices(0, seg, this->m_cAaBspNodePtr1.m_aaBox);
+    bspQuery.GetFaceIndices(0, seg, this->m_aaBsp.m_aaBox);
     return query.GetHits(t0, face0, t1, face1);
 }
 
@@ -2526,9 +2527,9 @@ bool CMapObjGroup::GetTris(const CWFrustum& frustum, uint32_t flags, uint16_t fa
         query.m_faceIgnoreFlags = faceIgnoreFlags | 0x80;
         CAaBox box = CAaBox::Bounding(frustum.corners, 8);
         CAaBsp_Query_AaBox<BspQuery_Volume<CWFrustum>> bspQuery;
-        bspQuery.m_aaBsp = &this->m_cAaBspNodePtr1;
+        bspQuery.m_aaBsp = &this->m_aaBsp;
         bspQuery.m_f = &query;
-        bspQuery.GetFaceIndices(0, box, this->m_cAaBspNodePtr1.m_aaBox);
+        bspQuery.GetFaceIndices(0, box, this->m_aaBsp.m_aaBox);
         this->GetTrisFromQuery(triData, &query, mapObjDef, overflow);
     }
 

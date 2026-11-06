@@ -14,6 +14,28 @@ PetAction* GetPetAction(uint32_t index);
 
 class CGActionBar {
     public:
+    static constexpr int32_t MULTICAST_ACTION_FIRST = 132;
+    static constexpr int32_t NUM_MULTICAST_ACTION_SLOTS = 12;
+    static constexpr int32_t NUM_ACTION_SLOTS = 144;
+
+    // Top-nibble client action tags; a zero complete word still means an empty slot.
+    enum ACTION_TAG : uint32_t {
+        ACTION_TAG_SPELL                    = 0x00000000,
+        ACTION_TAG_PET_ACTION               = 0x10000000,
+        ACTION_TAG_EQUIPMENT_SET            = 0x20000000,
+        ACTION_TAG_MACRO                    = 0x40000000,
+        ACTION_TAG_ITEM                     = 0x80000000,
+    };
+
+    // Each ID/index mask clears only its own tag bit; other raw bits are retained.
+    enum ACTION_MASK : uint32_t {
+        ACTION_MASK_TAG                      = 0xF0000000,
+        ACTION_MASK_PET_ACTION_INDEX         = 0xEFFFFFFF,
+        ACTION_MASK_EQUIPMENT_SET_ID         = 0xDFFFFFFF,
+        ACTION_MASK_MACRO_ID                 = 0xBFFFFFFF,
+        ACTION_MASK_ITEM_ID                  = 0x7FFFFFFF,
+    };
+
     static void LeaveWorld();
     static void SignalUpdateCooldown();
     static uint32_t m_tempPageActiveFlags;
@@ -23,10 +45,10 @@ class CGActionBar {
     static uint32_t GetSlotSpellAction(uint32_t slot);
     static void UpdateTemporaryActionBar(int32_t (*getSpell)(uint32_t index, const void* data), const void* data);
     static void EnterWorld();
-    static int32_t m_slotNoMana[144];
-    static int32_t m_slotUsable[144];
-    static int32_t m_slotItemCount[144];
-    static uint32_t m_slotActions[144];
+    static int32_t m_slotNoMana[NUM_ACTION_SLOTS];
+    static int32_t m_slotUsable[NUM_ACTION_SLOTS];
+    static int32_t m_slotItemCount[NUM_ACTION_SLOTS];
+    static uint32_t m_slotActions[NUM_ACTION_SLOTS];
 
     static int32_t IsMacro(uint32_t slot);
     static void OnAuraChanged(int32_t spellId);

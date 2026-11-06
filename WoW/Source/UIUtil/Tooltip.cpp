@@ -1,4 +1,8 @@
 #include "Tooltip.h"
+#include "Engine/Source/Tempest/Color.h"
+#include "WoW/Source/Object/Types.h"
+#include "WoW/Common/ComponentCore/Types.h"
+#include "WoW/Common/Types.h"
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -50,6 +54,7 @@
 #include "WoW/Source/DB/Rec/TotemCategoryRec.h"
 #include "WoW/Source/Game/GameClient/NameCache.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Magic/MagicClient/SpellTable.h"
 #include "WoW/Source/Object/CreatureStats.h"
 #include "WoW/Source/Object/Item.h"
@@ -113,6 +118,13 @@
 #include "WoW/Source/Ui/UIMacros.h"
 #include "WoW/Source/UIUtil/Cursor.h"
 
+static const float LINE_SPACING = 2.0f;
+static const float COLUMN_SPACING = 38.400002f;
+static const float XOFFSET = 10.24f;
+static const float YOFFSET = 10.24f;
+static const float WORDWRAP_MIN_WIDTH = 230.39999f;
+static const float TOOLTIP_FADE_TIME = 2.0f;
+
 // STATIC: 0x00AD2AAC
 static const char* s_spellLinkColorString = "|cff71d5ff";
 
@@ -135,25 +147,25 @@ static const char* s_itemQualityColorStrings[8] = { "|cff9d9d9d", "|cffffffff", 
 uint32_t s_tooltipTitleColor = 0xFFFFD200;
 
 // STATIC: 0x00AD2D30
-uint32_t s_tooltipTextColor = 0xFFFFFFFF;
+uint32_t s_tooltipTextColor = COLOR_WHITE_ARGB;
 
 // STATIC: 0x00AD2D34
 static uint32_t s_tooltipRedColor = 0xFFFF2020;
 
 // STATIC: 0x00AD2D38
-static uint32_t s_tooltipGrayColor = 0xFF808080;
+static uint32_t s_tooltipGrayColor = COLOR_GRAY_128_ARGB;
 
 // STATIC: 0x00AD2D40
-static uint32_t s_tooltipGreenColor = 0xFF00FF00;
+static uint32_t s_tooltipGreenColor = COLOR_GREEN_ARGB;
 
 // STATIC: 0x00AD2D70
-static uint32_t s_threatStatusColors[5] = { 0xFFFFFFFF, 0xFFB0B0B0, 0xFFFFFF77, 0xFFFF9900, 0xFFFF0000 };
+static uint32_t s_threatStatusColors[5] = { COLOR_WHITE_ARGB, 0xFFB0B0B0, 0xFFFFFF77, 0xFFFF9900, COLOR_RED_ARGB };
 
 // STATIC: 0x00AD2E6C
 static const char* s_classificationTokens[6] = { nullptr, "ELITE", "ELITE", nullptr, nullptr, nullptr };
 
 // STATIC: 0x00AD2D84
-static uint32_t s_itemQualityColors[8] = { 0xFF9D9D9D, 0xFFFFFFFF, 0xFF1EFF00, 0xFF0070DD, 0xFFA335EE, 0xFFFF8000, 0xFFE6CC80, 0xFFE6CC80 };
+static uint32_t s_itemQualityColors[8] = { 0xFF9D9D9D, COLOR_WHITE_ARGB, 0xFF1EFF00, 0xFF0070DD, 0xFFA335EE, 0xFFFF8000, 0xFFE6CC80, 0xFFE6CC80 };
 
 // STATIC: 0x00AD2ADC
 const char* CGTooltip::s_objectTypeName = "GameTooltip";
@@ -171,13 +183,13 @@ static const char* s_questDifficultyColorStrings[5] = {
 };
 
 // STATIC: 0x00AD2D48
-static uint32_t s_tooltipBrightRedColor = 0xFFFF0000;
+static uint32_t s_tooltipBrightRedColor = COLOR_RED_ARGB;
 
 // STATIC: 0x00AD2D50
 static uint32_t s_tooltipItemSetColor = 0xFFFFFF97;
 
 // STATIC: 0x00AD2D54
-static uint32_t s_skillColors[5] = { 0xFF808080, 0xFF40C040, 0xFFFFFF00, 0xFFFF8040, 0xFFFF2020 };
+static uint32_t s_skillColors[5] = { COLOR_GRAY_128_ARGB, 0xFF40C040, COLOR_YELLOW_ARGB, 0xFFFF8040, 0xFFFF2020 };
 
 // STATIC: 0x00AD2DA4
 static uint32_t s_tooltipGlyphColor = 0xFF66BBFF;
@@ -198,7 +210,7 @@ static const char* s_colorblindSuffixes[5] = { "", "[+] ", "[++] ", "[+++] ", "[
 static const char* s_colorStrings[4] = { "|cffffffff", "|cff808080", "|cffff2020", "|cff00ff00" };
 
 // STATIC: 0x00AC7FD8
-const char* s_inventoryTypeTokens[29] = { "", "INVTYPE_HEAD", "INVTYPE_NECK", "INVTYPE_SHOULDER", "INVTYPE_BODY", "INVTYPE_CHEST", "INVTYPE_WAIST", "INVTYPE_LEGS", "INVTYPE_FEET", "INVTYPE_WRIST", "INVTYPE_HAND", "INVTYPE_FINGER", "INVTYPE_TRINKET", "INVTYPE_WEAPON", "INVTYPE_SHIELD", "INVTYPE_RANGED", "INVTYPE_CLOAK", "INVTYPE_2HWEAPON", "INVTYPE_BAG", "INVTYPE_TABARD", "INVTYPE_ROBE", "INVTYPE_WEAPONMAINHAND", "INVTYPE_WEAPONOFFHAND", "INVTYPE_HOLDABLE", "INVTYPE_AMMO", "INVTYPE_THROWN", "INVTYPE_RANGEDRIGHT", "INVTYPE_QUIVER", "INVTYPE_RELIC" };
+const char* s_inventoryTypeTokens[INVTYPE_COUNT] = { "", "INVTYPE_HEAD", "INVTYPE_NECK", "INVTYPE_SHOULDER", "INVTYPE_BODY", "INVTYPE_CHEST", "INVTYPE_WAIST", "INVTYPE_LEGS", "INVTYPE_FEET", "INVTYPE_WRIST", "INVTYPE_HAND", "INVTYPE_FINGER", "INVTYPE_TRINKET", "INVTYPE_WEAPON", "INVTYPE_SHIELD", "INVTYPE_RANGED", "INVTYPE_CLOAK", "INVTYPE_2HWEAPON", "INVTYPE_BAG", "INVTYPE_TABARD", "INVTYPE_ROBE", "INVTYPE_WEAPONMAINHAND", "INVTYPE_WEAPONOFFHAND", "INVTYPE_HOLDABLE", "INVTYPE_AMMO", "INVTYPE_THROWN", "INVTYPE_RANGEDRIGHT", "INVTYPE_QUIVER", "INVTYPE_RELIC" };
 
 // STATIC: 0x00AD6640
 const char* s_itemModTokens[49] = { "ITEM_MOD_MANA", "ITEM_MOD_HEALTH", "", "ITEM_MOD_AGILITY", "ITEM_MOD_STRENGTH", "ITEM_MOD_INTELLECT", "ITEM_MOD_SPIRIT", "ITEM_MOD_STAMINA", "", "", "", "", "ITEM_MOD_DEFENSE_SKILL_RATING", "ITEM_MOD_DODGE_RATING", "ITEM_MOD_PARRY_RATING", "ITEM_MOD_BLOCK_RATING", "ITEM_MOD_HIT_MELEE_RATING", "ITEM_MOD_HIT_RANGED_RATING", "ITEM_MOD_HIT_SPELL_RATING", "ITEM_MOD_CRIT_MELEE_RATING", "ITEM_MOD_CRIT_RANGED_RATING", "ITEM_MOD_CRIT_SPELL_RATING", "ITEM_MOD_HIT_TAKEN_MELEE_RATING", "ITEM_MOD_HIT_TAKEN_RANGED_RATING", "ITEM_MOD_HIT_TAKEN_SPELL_RATING", "ITEM_MOD_CRIT_TAKEN_MELEE_RATING", "ITEM_MOD_CRIT_TAKEN_RANGED_RATING", "ITEM_MOD_CRIT_TAKEN_SPELL_RATING", "ITEM_MOD_HASTE_MELEE_RATING", "ITEM_MOD_HASTE_RANGED_RATING", "ITEM_MOD_HASTE_SPELL_RATING", "ITEM_MOD_HIT_RATING", "ITEM_MOD_CRIT_RATING", "ITEM_MOD_HIT_TAKEN_RATING", "ITEM_MOD_CRIT_TAKEN_RATING", "ITEM_MOD_RESILIENCE_RATING", "ITEM_MOD_HASTE_RATING", "ITEM_MOD_EXPERTISE_RATING", "ITEM_MOD_ATTACK_POWER", "ITEM_MOD_RANGED_ATTACK_POWER", "", "ITEM_MOD_SPELL_HEALING_DONE", "ITEM_MOD_SPELL_DAMAGE_DONE", "ITEM_MOD_MANA_REGENERATION", "ITEM_MOD_ARMOR_PENETRATION_RATING", "ITEM_MOD_SPELL_POWER", "ITEM_MOD_HEALTH_REGEN", "ITEM_MOD_SPELL_PENETRATION", "ITEM_MOD_BLOCK_VALUE" };
@@ -286,18 +298,18 @@ static TSGrowableArray<FrameStackInfo> s_frameStack;
 void CGItemStatsSummary::Create() {
     memset(this->m_stats, 0, sizeof(this->m_stats));
     this->m_dps = 0.0f;
-    this->m_flags = 0;
+    this->m_flags = SUMMARY_FLAGS::SUMMARY_NONE;
 }
 
 // VERIFY: 7ea645b6 manual
 // OFFSET: 0x0061B5E0
 void CGItemStatsSummary::AddSpellEffects(const SpellRec* spell) {
-    if (!(spell->m_attributes & 0x40)) {
+    if (!(spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE)) {
         return;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
-        if (spell->m_effect[i] != 6) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+        if (spell->m_effect[i] != SPELL_EFFECT_APPLY_AURA) {
             continue;
         }
 
@@ -305,11 +317,11 @@ void CGItemStatsSummary::AddSpellEffects(const SpellRec* spell) {
         int32_t misc = spell->m_effectMiscValue[i];
 
         switch (spell->m_effectAura[i]) {
-            case 13:
+            case SPELL_AURA_MOD_DAMAGE_DONE:
                 this->m_stats[53] += value;
                 break;
 
-            case 22:
+            case SPELL_AURA_MOD_RESISTANCE:
                 for (uint32_t r = 0; r < 7; r++) {
                     if (misc & (1 << r)) {
                         this->m_stats[r] += value;
@@ -318,39 +330,39 @@ void CGItemStatsSummary::AddSpellEffects(const SpellRec* spell) {
 
                 break;
 
-            case 85:
+            case SPELL_AURA_MOD_POWER_REGEN:
                 this->m_stats[misc + 61] += value;
                 break;
 
-            case 99:
+            case SPELL_AURA_MOD_ATTACK_POWER:
                 this->m_stats[8] += value;
                 break;
 
-            case 123:
+            case SPELL_AURA_MOD_TARGET_RESISTANCE:
                 this->m_stats[58] += -1 - spell->m_effectBasePoints[i];
                 break;
 
-            case 124:
+            case SPELL_AURA_MOD_RANGED_ATTACK_POWER:
                 this->m_stats[9] += value;
                 break;
 
-            case 135:
+            case SPELL_AURA_MOD_HEALING_DONE:
                 this->m_stats[52] += value;
                 break;
 
-            case 150:
+            case SPELL_AURA_MOD_SHIELD_BLOCKVALUE_PCT:
                 this->m_stats[26] += value;
                 break;
 
-            case 158:
+            case SPELL_AURA_MOD_SHIELD_BLOCKVALUE:
                 this->m_stats[60] += value;
                 break;
 
-            case 161:
+            case SPELL_AURA_MOD_HEALTH_REGEN_IN_COMBAT:
                 this->m_stats[68] += value;
                 break;
 
-            case 189:
+            case SPELL_AURA_MOD_RATING:
                 for (int32_t r = 0; r < 25; r++) {
                     if ((misc & (1 << r)) && s_combatRatingStats[r] != -1) {
                         this->m_stats[s_combatRatingStats[r] + 11] += value;
@@ -368,7 +380,7 @@ void CGItemStatsSummary::AddSpellEffects(const SpellRec* spell) {
 // VERIFY: 8aff4a3b auto
 // OFFSET: 0x0061B8E0
 void CGItemStatsSummary::AddResistances(const ItemStats_C* stats) {
-    this->m_flags |= 0x8;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_RESISTANCES;
 
     for (uint32_t i = 0; i < 7; i++) {
         this->m_stats[i] += stats->m_resistances[i];
@@ -378,7 +390,7 @@ void CGItemStatsSummary::AddResistances(const ItemStats_C* stats) {
 // VERIFY: 1662301b manual
 // OFFSET: 0x0061B930
 void CGItemStatsSummary::GetSocketFlags(const ItemStats_C* stats) {
-    this->m_flags |= 0x10;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_SOCKETS;
 
     for (uint32_t i = 0; i < 3; i++) {
         uint32_t color = stats->m_socketColor[i];
@@ -404,7 +416,7 @@ void CGItemStatsSummary::GetSocketFlags(const ItemStats_C* stats) {
 // VERIFY: 59d9b28c manual
 // OFFSET: 0x0061B990
 void CGItemStatsSummary::AddStatMods(const ItemStats_C* stats) {
-    this->m_flags |= 0x20;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_STAT_MODS;
 
     for (int32_t i = 0; i < stats->m_statsCount; i++) {
         uint32_t type = stats->m_statType[i];
@@ -521,7 +533,7 @@ char* CGItem_C::GetStatName(uint32_t stat, char* buffer, int32_t size) {
 // VERIFY: 1bfb61f6 manual
 // OFFSET: 0x0061BF10
 static int32_t HealthUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         CSimpleStatusBar* statusBar = static_cast<CSimpleStatusBar*>(param);
@@ -535,7 +547,7 @@ static int32_t HealthUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t 
 // VERIFY: 30f0882c manual
 // OFFSET: 0x0061BF80
 static int32_t ObjHealthUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__));
+    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(guid, TYPE_GAMEOBJECT, __FILE__, __LINE__));
 
     if (object) {
         CSimpleStatusBar* statusBar = static_cast<CSimpleStatusBar*>(param);
@@ -844,7 +856,7 @@ void CGTooltip::FadeOut() {
         this->m_fading = 0;
     } else {
         this->m_fading = 1;
-        this->m_fadeTime = 2.0f;
+        this->m_fadeTime = TOOLTIP_FADE_TIME;
     }
 }
 
@@ -905,8 +917,8 @@ void CGTooltip::ClearTooltip() {
 
     this->m_unitGuid = WOWGUID();
     this->m_objectGuid = WOWGUID();
-    this->unk_0338 = 0;
-    this->unk_033C = 0;
+    this->unused_0338 = 0;
+    this->unused_033C = 0;
     this->m_corpseGuid.m_guid = 0;
     this->m_healthGuid = WOWGUID();
     this->m_itemId = 0;
@@ -971,7 +983,7 @@ void CGTooltip::CalculateSize() {
             float lineWidth = 0.0f;
 
             if (this->m_leftStrings.m_data[i]->m_shown && this->m_rightStrings.m_data[i]->m_shown) {
-                lineWidth = NDCToDDCWidth(38.400002f / (CoordinateGetAspectCompensation() * 1024.0f));
+                lineWidth = NDCToDDCWidth(COLUMN_SPACING / (CoordinateGetAspectCompensation() * 1024.0f));
             }
 
             if (this->m_leftStrings.m_data[i]->m_shown) {
@@ -1002,8 +1014,8 @@ void CGTooltip::CalculateSize() {
 
         float stringWidth = this->m_leftStrings.m_data[i]->GetStringWidth();
 
-        if (stringWidth >= NDCToDDCWidth(230.39999f / (CoordinateGetAspectCompensation() * 1024.0f))) {
-            stringWidth = NDCToDDCWidth(230.39999f / (CoordinateGetAspectCompensation() * 1024.0f));
+        if (stringWidth >= NDCToDDCWidth(WORDWRAP_MIN_WIDTH / (CoordinateGetAspectCompensation() * 1024.0f))) {
+            stringWidth = NDCToDDCWidth(WORDWRAP_MIN_WIDTH / (CoordinateGetAspectCompensation() * 1024.0f));
         }
 
         float lineWidth = stringWidth;
@@ -1064,15 +1076,15 @@ void CGTooltip::CalculateSize() {
         }
 
         if (height != 0.0f) {
-            height = NDCToDDCWidth(2.0f / (CoordinateGetAspectCompensation() * 1024.0f)) + height;
+            height = NDCToDDCWidth(LINE_SPACING / (CoordinateGetAspectCompensation() * 1024.0f)) + height;
         }
 
         height = this->m_leftStrings.m_data[i]->GetHeight() + height;
     }
 
-    float borderX = NDCToDDCWidth(10.24f / (CoordinateGetAspectCompensation() * 1024.0f));
+    float borderX = NDCToDDCWidth(XOFFSET / (CoordinateGetAspectCompensation() * 1024.0f));
     float totalWidth = borderX + borderX + this->m_padding + width;
-    float borderY = NDCToDDCWidth(10.24f / (CoordinateGetAspectCompensation() * 1024.0f));
+    float borderY = NDCToDDCWidth(YOFFSET / (CoordinateGetAspectCompensation() * 1024.0f));
     float totalHeight = borderY + borderY + height;
     this->SetWidth(totalWidth);
     this->SetHeight(totalHeight);
@@ -1112,8 +1124,8 @@ CGTooltip::CGTooltip(CSimpleFrame* parent) : CSimpleFrame(parent) {
     this->m_numTextures = 0;
     this->m_unitGuid = WOWGUID();
     this->m_objectGuid = WOWGUID();
-    this->unk_0338 = 0;
-    this->unk_033C = 0;
+    this->unused_0338 = 0;
+    this->unused_033C = 0;
     this->m_itemGuid = WOWGUID();
     this->m_corpseGuid.m_guid = 0;
     this->m_healthGuid = WOWGUID();
@@ -1205,7 +1217,7 @@ int32_t CGTooltip::HideThis() {
 // OFFSET: 0x0061F2B0
 void CGItemStatsSummary::AddEnchantEffect(int32_t type, int32_t arg, int32_t amount) {
     switch (type) {
-        case 3: {
+        case ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_EQUIP_SPELL: {
             SpellRec spell;
 
             if (g_spellDB.GetRecord(arg, &spell)) {
@@ -1215,11 +1227,11 @@ void CGItemStatsSummary::AddEnchantEffect(int32_t type, int32_t arg, int32_t amo
             break;
         }
 
-        case 4:
+        case ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_RESISTANCE:
             this->m_stats[arg] += amount;
             break;
 
-        case 5:
+        case ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_STAT:
             this->m_stats[arg + 11] += amount;
 
             if (arg == 38) {
@@ -1236,9 +1248,9 @@ void CGItemStatsSummary::AddEnchantEffect(int32_t type, int32_t arg, int32_t amo
 // VERIFY: a73b50c1 auto
 // OFFSET: 0x0061F350
 void CGItemStatsSummary::ScanEnchantSpells(const ItemStats_C* stats) {
-    this->m_flags |= 0x1;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_ITEM_SPELLS;
 
-    for (uint32_t i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
         if (static_cast<int32_t>(stats->m_spellId[i]) <= 0) {
             continue;
         }
@@ -1254,14 +1266,14 @@ void CGItemStatsSummary::ScanEnchantSpells(const ItemStats_C* stats) {
 // VERIFY: 6294a102 manual
 // OFFSET: 0x0061F410
 void CGItemStatsSummary::AccumulateDpsStat(const ItemStats_C* stats) {
-    this->m_flags |= 0x4;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_DPS;
     float mainAverage = (stats->m_damageMax[0] + stats->m_damageMin[0]) * 0.5f;
-    this->m_dps = mainAverage / (stats->m_delay * 0.001f) + this->m_dps;
+    this->m_dps = mainAverage / (stats->m_delay * TIME_SECONDS_PER_MILLISECOND_FLOAT) + this->m_dps;
     float offAverage = 0.5f * (stats->m_damageMax[1] + stats->m_damageMin[1]);
-    this->m_dps = offAverage / (0.001f * stats->m_delay) + this->m_dps;
+    this->m_dps = offAverage / (TIME_SECONDS_PER_MILLISECOND_FLOAT * stats->m_delay) + this->m_dps;
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && player->m_unit->m_unitFieldBytes0[1] == 11) {
+    if (player && player->m_unit->m_classID == CLASS_DRUID) {
         this->m_stats[10] += this->m_stats[8] + GetFeralAttackPower(stats, mainAverage + offAverage);
     }
 }
@@ -1271,14 +1283,14 @@ void CGItemStatsSummary::AccumulateDpsStat(const ItemStats_C* stats) {
 void CGItemStatsSummary::AccumulateStats(const ItemStats_C* stats) {
     this->AddStatMods(stats);
     this->ScanEnchantSpells(stats);
-    this->m_flags |= 0x8;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_RESISTANCES;
 
     for (uint32_t i = 0; i < 7; i++) {
         this->m_stats[i] += stats->m_resistances[i];
     }
 
     this->GetSocketFlags(stats);
-    this->m_flags |= 0x40;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_BLOCK;
     this->m_stats[60] += stats->m_block;
     this->AccumulateDpsStat(stats);
 }
@@ -1286,7 +1298,7 @@ void CGItemStatsSummary::AccumulateStats(const ItemStats_C* stats) {
 // VERIFY: b9de4bb7 manual
 // OFFSET: 0x0061F550
 void CGItemStatsSummary::FillOutScalingItem(const ItemStats_C* stats, int32_t level) {
-    this->m_flags |= 0x80;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_SCALING_ITEM;
 
     if (!level) {
         level = CGTooltip::GetDisplayedScalingItemLevel(stats, nullptr, WOWGUID(), 0);
@@ -1325,13 +1337,13 @@ void CGItemStatsSummary::FillOutScalingItem(const ItemStats_C* stats, int32_t le
         this->AddStatMods(stats);
     }
 
-    if (stats->m_scalingStatValue & 0xF801E0) {
+    if (stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::ARMOR_MASK) {
         this->m_stats[0] += GetScalingStatArmor(values, stats->m_scalingStatValue);
     } else {
         this->AddResistances(stats);
     }
 
-    if (stats->m_scalingStatValue & 0x7E00) {
+    if (stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_MASK) {
         float minDamage;
         float maxDamage;
         GetScalingStatDamage(values, stats->m_scalingStatValue, &minDamage, &maxDamage);
@@ -1340,14 +1352,14 @@ void CGItemStatsSummary::FillOutScalingItem(const ItemStats_C* stats, int32_t le
         float damage = total * stats->m_delay * 0.00050000002f;
         CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-        if (player && player->m_unit->m_unitFieldBytes0[1] == 11) {
+        if (player && player->m_unit->m_classID == CLASS_DRUID) {
             this->m_stats[10] += this->m_stats[8] + GetFeralAttackPower(stats, damage);
         }
     } else {
         this->AccumulateDpsStat(stats);
     }
 
-    if (stats->m_scalingStatValue & 0x8000) {
+    if (stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::SPELL_POWER) {
         this->m_stats[56] += values->m_spellPower;
     }
 }
@@ -1371,7 +1383,7 @@ void CGItemStatsSummary::AddEnchantment(const SpellItemEnchantmentRec* enchant, 
 // VERIFY: b5f42f92 manual
 // OFFSET: 0x0061FA20
 void CGItemStatsSummary::FillOutRandomProperties(int32_t randomPropertiesId, uint32_t seed) {
-    this->m_flags |= 0x2;
+    this->m_flags |= SUMMARY_FLAGS::SUMMARY_RANDOM_PROPERTIES;
 
     if (randomPropertiesId > 0) {
         ItemRandomPropertiesRec* properties = g_itemRandomPropertiesDB.GetRecord(randomPropertiesId);
@@ -1470,7 +1482,7 @@ void CGTooltip::GetSummonedByString(CGUnit_C* unit, char* buffer, uint32_t size)
         return;
     }
 
-    CGUnit_C* ownerUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(owner, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* ownerUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(owner, TYPE_UNIT, __FILE__, __LINE__));
 
     if (ownerUnit && *ownerUnit->GetCharmerOrCreatorGuid()) {
         owner = *ownerUnit->GetCharmerOrCreatorGuid();
@@ -1481,13 +1493,13 @@ void CGTooltip::GetSummonedByString(CGUnit_C* unit, char* buffer, uint32_t size)
 
     if (g_spellDB.GetRecord(unit->m_unit->m_unitCreatedBySpell, &spell)) {
         for (uint32_t i = 0; i < sizeof(spell.m_effect) / sizeof(spell.m_effect[0]); i++) {
-            if (spell.m_effect[i] != 28) {
+            if (spell.m_effect[i] != SPELL_EFFECT_SUMMON) {
                 continue;
             }
 
             SummonPropertiesRec* properties = g_summonPropertiesDB.GetRecord(spell.m_effectMiscValueB[i]);
 
-            if (properties && properties->m_title != -1) {
+            if (properties && properties->m_title != SUMMON_TYPE_DEFAULT_TITLE) {
                 if (properties->m_title) {
                     SStrPrintf(token, sizeof(token), "UNITNAME_SUMMON_TITLE%d", properties->m_title);
                     SStrPrintf(buffer, size, FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE), GetObjectNameFromGuid(owner));
@@ -1500,7 +1512,7 @@ void CGTooltip::GetSummonedByString(CGUnit_C* unit, char* buffer, uint32_t size)
         }
     }
 
-    if (unit->GetCreatureType() == 1) {
+    if (unit->GetCreatureType() == CREATURE_TYPE_BEAST) {
         SStrPrintf(token, sizeof(token), "UNITNAME_SUMMON_TITLE1");
     } else {
         SStrPrintf(token, sizeof(token), "UNITNAME_SUMMON_TITLE3");
@@ -1611,7 +1623,7 @@ int32_t CGItemStatsSummary::Create(CGItem_C* item, int32_t level) {
 int32_t CGItemStatsSummary::Fill(const char* link) {
     memset(this->m_stats, 0, sizeof(this->m_stats));
     this->m_dps = 0.0f;
-    this->m_flags = 0;
+    this->m_flags = SUMMARY_FLAGS::SUMMARY_NONE;
     int32_t randomPropertiesId = 0;
     uint32_t seed = 0;
     int32_t level = 0;
@@ -1731,9 +1743,9 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
 
     this->ClearTooltip();
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (!healthGuid && unit && unit->HasAuraEffect(279)) {
+    if (!healthGuid && unit && unit->HasAuraEffect(SPELL_AURA_INITIALIZE_IMAGES)) {
         SpellRec spell;
 
         for (uint32_t i = 0; i < unit->GetAuraCount(); i++) {
@@ -1744,7 +1756,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
             }
 
             for (uint32_t j = 0; j < sizeof(spell.m_effectAura) / sizeof(spell.m_effectAura[0]); j++) {
-                if (spell.m_effectAura[j] == 279 && ((1 << j) & aura->m_flags)) {
+                if (spell.m_effectAura[j] == SPELL_AURA_INITIALIZE_IMAGES && ((1 << j) & aura->m_flags)) {
                     return this->SetUnit(aura->m_creator, showHealth, guid, 0);
                 }
             }
@@ -1763,7 +1775,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
         uint32_t high = static_cast<uint32_t>(guid.m_guid >> 32);
         WOWGUID requester = { 0 };
 
-        if (((high & 0xF0F00000) != 0xF0300000 && (high & 0xF0F00000) != 0xF0500000) || !(creature = g_creatureDBCache.GetRecord((guid.m_guid >> 24) & 0xFFFFFFF, requester, nullptr, nullptr, false))) {
+        if (((high & 0xF0F00000) != 0xF0300000 && (high & 0xF0F00000) != 0xF0500000) || !(creature = g_creatureDBCache.GetRecord((guid.m_guid >> WOWGUID_ENTRY_SHIFT) & WOWGUID_ENTRY_MASK, requester, nullptr, nullptr, false))) {
             if (!name) {
                 this->Hide();
                 return 0;
@@ -1777,8 +1789,8 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
 
     if (this->m_statusBar && showHealth) {
         this->m_healthGuid = healthGuid ? healthGuid : this->m_unitGuid;
-        CGUnit_C* healthUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_healthGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
-        ClntObjMgrSetObjMirrorHandler(this->m_healthGuid, ID_UNIT, offsetof(CGUnitData, m_unitFieldHealth), sizeof(int32_t), HealthUpdateHandler, this->m_statusBar, static_cast<HANDLER_PRIORITY>(0), 0);
+        CGUnit_C* healthUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_healthGuid, TYPE_UNIT, __FILE__, __LINE__));
+        ClntObjMgrSetObjMirrorHandler(this->m_healthGuid, ID_UNIT, offsetof(CGUnitData, m_unitFieldHealth), sizeof(int32_t), HealthUpdateHandler, this->m_statusBar, HANDLER_PRIORITY_NORMAL, 0);
 
         float maxHealth;
 
@@ -1795,7 +1807,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
         float health;
 
         if (healthUnit) {
-            health = (healthUnit->m_unit->m_unitDynamicFlags & 0x20) ? 0.0f : static_cast<float>(healthUnit->m_unit->m_unitFieldHealth);
+            health = (healthUnit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD) ? 0.0f : static_cast<float>(healthUnit->m_unit->m_unitFieldHealth);
         } else if (state) {
             health = static_cast<float>(state->m_health);
         } else {
@@ -1821,7 +1833,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
 
         this->AddLine(title, nullptr, titleColor, titleColor, 0);
 
-        if (unit->m_obj->m_type & TYPEMASK_PLAYER) {
+        if (unit->m_obj->m_type & TYPE_PLAYER) {
             uint32_t guildId = static_cast<CGPlayer_C*>(unit)->m_player->m_playerGuildid;
 
             if (guildId) {
@@ -1850,17 +1862,17 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
     CGPlayer_C* player = nullptr;
     const char* subName = nullptr;
 
-    if (colorblind && colorblind->m_intValue && (player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__))) != nullptr) {
+    if (colorblind && colorblind->m_intValue && (player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__))) != nullptr) {
         if (unit) {
             line[0] = 0;
-            FRAMESCRIPT_GENDER gender = player->m_unit->m_unitFieldBytes0[2] == 1 ? GENDER_FEMALE : GENDER_MALE;
+            FRAMESCRIPT_GENDER gender = player->m_unit->m_sex == UNITSEX_FEMALE ? GENDER_FEMALE : GENDER_MALE;
             SStrPrintf(line, sizeof(line), "FACTION_STANDING_LABEL%d", unit->UnitReaction(player) + 1);
             this->AddLine(FrameScript_GetText(line, 0, gender), nullptr, textColor, textColor, 0);
         }
     }
 
     if (!subName) {
-        if (unit && !(unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+        if (unit && !(unit->m_obj->m_type & TYPE_PLAYER)) {
             subName = unit->GetUnitTitle();
         } else if (creature) {
             subName = creature->m_subName;
@@ -1883,26 +1895,26 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
     char type[64] = {};
     char level[32];
 
-    CGPlayer_C* activePlayer = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* activePlayer = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     int32_t dead = 0;
     CreatureTypeRec* creatureType = nullptr;
     int32_t unitLevel = 0;
     int32_t showLevel = 1;
 
     if (unit) {
-        dead = unit->m_unit->m_unitFieldHealth <= 0 || (unit->m_unit->m_unitDynamicFlags & 0x20);
+        dead = unit->m_unit->m_unitFieldHealth <= 0 || (unit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD);
         unitLevel = unit->m_unit->m_unitFieldLevel;
 
-        if (unit->GetCreatureType() != 10) {
+        if (unit->GetCreatureType() != CREATURE_TYPE_NOT_SPECIFIED) {
             if (activePlayer) {
-                if (activePlayer->UnitReaction(unit) < 4 && !activePlayer->IsTreatAsRaidUnit()) {
+                if (activePlayer->UnitReaction(unit) < UNIT_REACTION_FRIENDLY && !activePlayer->IsTreatAsRaidUnit()) {
                     creatureType = g_creatureTypeDB.GetRecord(unit->GetCreatureType());
                 }
             }
         }
 
-        if (unit->GetCreatureType() == 10 || activePlayer) {
-            if (activePlayer && unit->UnitReaction(activePlayer) <= 1 && static_cast<int32_t>(activePlayer->m_unit->m_unitFieldLevel) <= unitLevel - 10) {
+        if (unit->GetCreatureType() == CREATURE_TYPE_NOT_SPECIFIED || activePlayer) {
+            if (activePlayer && unit->UnitReaction(activePlayer) <= UNIT_REACTION_HOSTILE && static_cast<int32_t>(activePlayer->m_unit->m_unitFieldLevel) <= unitLevel - 10) {
                 showLevel = 0;
             }
         }
@@ -1926,7 +1938,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
     if (showLevel && unitLevel > 0) {
         int32_t displayLevel = unitLevel;
 
-        if (activePlayer && ((activePlayer->m_player->m_playerBytes3[1]) || activePlayer->m_player->m_playerFakeInebriation) && unit && activePlayer->CanAttack(unit)) {
+        if (activePlayer && ((activePlayer->m_player->inebriation) || activePlayer->m_player->m_playerFakeInebriation) && unit && activePlayer->CanAttack(unit)) {
             displayLevel = unitLevel - RoundToInt64(activePlayer->GetDrunknessTurnValue() * 5.0f);
 
             if (displayLevel < 1) {
@@ -1945,7 +1957,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
 
     if (dead) {
         SStrCopy(className, FrameScript_GetText("CORPSE", -1, GENDER_NOT_APPLICABLE), sizeof(className));
-    } else if ((unit && (unit->m_obj->m_type & TYPEMASK_PLAYER)) || name) {
+    } else if ((unit && (unit->m_obj->m_type & TYPE_PLAYER)) || name) {
         const char* raceName = CGUnit_C::GetDisplayRaceName(unit, name);
         const char* classNameText = CGUnit_C::GetDisplayClassName(unit, name);
 
@@ -1962,7 +1974,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
     if (unit) {
         classification = unit->IsBossMob() ? "BOSS" : s_classificationTokens[unit->GetCreatureClassification()];
 
-        if (unit->m_obj->m_type & TYPEMASK_PLAYER) {
+        if (unit->m_obj->m_type & TYPE_PLAYER) {
             SStrCopy(type, FrameScript_GetText("PLAYER", -1, GENDER_NOT_APPLICABLE), sizeof(type));
         } else if (name) {
             SStrCopy(type, FrameScript_GetText("PLAYER", -1, GENDER_NOT_APPLICABLE), sizeof(type));
@@ -1971,7 +1983,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
         }
     } else {
         if (creature) {
-            classification = (creature->m_typeFlags & 0x4) ? "BOSS" : s_classificationTokens[creature->m_rank];
+            classification = (creature->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_BOSS_MOB) ? "BOSS" : s_classificationTokens[creature->m_rank];
         }
 
         if (name) {
@@ -2021,7 +2033,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
                 uint32_t raceMask = faction->m_reputationRaceMask[i];
                 uint32_t classMask = faction->m_reputationClassMask[i];
 
-                if ((!raceMask || ((1 << (activePlayer->m_unit->m_unitFieldBytes0[0] - 1)) & raceMask)) && (raceMask || classMask) && (!classMask || ((1 << (activePlayer->m_unit->m_unitFieldBytes0[1] - 1)) & classMask))) {
+                if ((!raceMask || ((1 << (activePlayer->m_unit->m_raceID - 1)) & raceMask)) && (raceMask || classMask) && (!classMask || ((1 << (activePlayer->m_unit->m_classID - 1)) & classMask))) {
                     if (!(faction->m_reputationFlags[i] & 0x4)) {
                         this->AddLine(faction->m_name, nullptr, textColor, textColor, 0);
                     }
@@ -2033,19 +2045,19 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
     }
 
     if (unit) {
-        if (((unit->m_obj->m_type & TYPEMASK_PLAYER) && (static_cast<CGPlayer_C*>(unit)->m_player->m_playerFlags & 0x100)) || (unit->m_unit->m_unitFieldBytes2[1] & 0x1)) {
+        if (((unit->m_obj->m_type & TYPE_PLAYER) && (static_cast<CGPlayer_C*>(unit)->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_CONTESTED_PVP)) || (unit->m_unit->m_pvpFlags & UNIT_PVP_FLAG_PVP)) {
             this->AddLine(FrameScript_GetText("PVP_ENABLED", -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
         }
 
-        if (unit->m_unit->m_unitFieldHealth <= 0 && (unit->m_obj->m_type & TYPEMASK_PLAYER) && activePlayer && activePlayer->CanAssist(unit, false)) {
+        if (unit->m_unit->m_unitFieldHealth <= 0 && (unit->m_obj->m_type & TYPE_PLAYER) && activePlayer && activePlayer->CanAssist(unit, false)) {
             this->AddLine(FrameScript_GetText("RESURRECTABLE", -1, GENDER_NOT_APPLICABLE), nullptr, greenColor, greenColor, 0);
         }
 
-        if (unit->m_unit->m_unitDynamicFlags & 0x10) {
+        if (unit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_EMPATHY_INFO) {
             this->AddEmpathyText(unit, line, sizeof(line));
         }
 
-        if ((unit->m_unit->m_unitFieldFlags & 0x4000000) && !(unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+        if ((unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_SKINNABLE) && !(unit->m_obj->m_type & TYPE_PLAYER)) {
             this->AddSkinnableText(unit, line, sizeof(line));
         }
     }
@@ -2064,7 +2076,7 @@ int32_t CGTooltip::SetUnit(const WOWGUID& guid, int32_t showHealth, const WOWGUI
         uint32_t summonedHigh = unit ? static_cast<uint32_t>(unit->m_unit->m_unitFieldSummonedby.m_guid >> 32) : 0;
 
         if (!unit || (summonedHigh & 0xF0000000) || !((summonedHigh & 0xF07FFFFF) | static_cast<uint32_t>(unit->m_unit->m_unitFieldSummonedby.m_guid))) {
-            uint32_t entry = unit ? unit->m_obj->m_entryID : static_cast<uint32_t>((guid.m_guid >> 24) & 0xFFFFFFF);
+            uint32_t entry = unit ? unit->m_obj->m_entryID : static_cast<uint32_t>((guid.m_guid >> WOWGUID_ENTRY_SHIFT) & WOWGUID_ENTRY_MASK);
             QuestLogLeaderBoardParams params;
             params.m_questCallback = TooltipUnitNameCallback;
             params.m_objectCallback = TooltipUnitNameCallback;
@@ -2202,7 +2214,7 @@ void CGTooltip::SetCorpse(const WOWGUID& guid) {
 
     this->ClearTooltip();
 
-    CGCorpse_C* corpse = static_cast<CGCorpse_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_CORPSE, __FILE__, __LINE__));
+    CGCorpse_C* corpse = static_cast<CGCorpse_C*>(ClntObjMgrObjectPtr(guid, TYPE_CORPSE, __FILE__, __LINE__));
 
     if (!corpse) {
         this->Hide();
@@ -2210,8 +2222,8 @@ void CGTooltip::SetCorpse(const WOWGUID& guid) {
     }
 
     this->m_corpseGuid = guid;
-    *reinterpret_cast<WOWGUID*>(&this->unk_0350) = corpse->m_corpse->m_corpseFieldOwner;
-    NameCache* name = g_nameDBCache.GetRecord(reinterpret_cast<WOWGUID*>(&this->unk_0350)->m_guid, *reinterpret_cast<WOWGUID*>(&this->unk_0350), TooltipCorpseCallback, this, true);
+    *reinterpret_cast<WOWGUID*>(&this->m_corpseOwnerGuid) = corpse->m_corpse->m_corpseFieldOwner;
+    NameCache* name = g_nameDBCache.GetRecord(reinterpret_cast<WOWGUID*>(&this->m_corpseOwnerGuid)->m_guid, *reinterpret_cast<WOWGUID*>(&this->m_corpseOwnerGuid), TooltipCorpseCallback, this, true);
 
     if (name) {
         char line[1024];
@@ -2224,7 +2236,7 @@ void CGTooltip::SetCorpse(const WOWGUID& guid) {
 // VERIFY: cbeee45f manual
 // OFFSET: 0x0061E540
 const char* CGTooltip::GetQuestDifficultyColorString(int32_t level) {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return s_questDifficultyColorStrings[2];
@@ -2291,7 +2303,7 @@ void CGTooltip::AppendText(const char* text) {
 // OFFSET: 0x0061E290
 const char* CGTooltip::CreateItemLink(int32_t itemId, uint32_t quality, int32_t enchant, const int32_t* gems, int32_t randomPropertiesId, int32_t seed) {
     uint32_t level = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         level = player->m_unit->m_unitFieldLevel;
@@ -2321,7 +2333,7 @@ const char* CGTooltip::GetItemHyperlinkString(CGItem_C* item) {
     int32_t gems[3];
 
     for (uint32_t i = 0; i < 3; i++) {
-        if (!wrapped && !(item->GetItemStaticFlags(0) & 0x2000)) {
+        if (!wrapped && !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
             gems[i] = item->m_item->m_itemFieldEnchantment[2 + i].m_id;
         } else {
             gems[i] = 0;
@@ -2338,7 +2350,7 @@ const char* CGTooltip::GetItemHyperlinkString(CGItem_C* item) {
     } else {
         randomPropertiesId = item->m_item->m_itemFieldRandomPropertiesId;
         seed = item->m_item->m_itemFieldPropertySeed;
-        enchant = item->GetItemStaticFlags(0) & 0x2000 ? 0 : item->m_item->m_itemFieldEnchantment[0].m_id;
+        enchant = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[0].m_id;
     }
 
     return CGTooltip::CreateItemLink(item->m_obj->m_entryID, stats ? stats->m_quality : 1, enchant, gems, randomPropertiesId, seed);
@@ -2364,7 +2376,7 @@ int32_t TimeFractionBelow(float time, float fraction) {
     } else if (time >= 60000.0f) {
         value = time * 1.6666667e-5f;
     } else {
-        value = time * 0.001f;
+        value = time * TIME_SECONDS_PER_MILLISECOND_FLOAT;
     }
 
     float scaled = static_cast<float>(value);
@@ -2408,7 +2420,7 @@ void CGTooltip::GetDurationString(char* buffer, uint32_t size, uint64_t time, co
         }
     } else {
         if (!seconds) {
-            count = static_cast<uint32_t>(time / 1000);
+            count = static_cast<uint32_t>(time / TIME_MILLISECONDS_PER_SECOND);
         }
 
         SStrPrintf(format, sizeof(format), "%s_SEC", token);
@@ -2445,7 +2457,7 @@ void CGTooltip::GetFloatDurationString(char* buffer, uint32_t size, float time, 
         value = time * 1.6666667e-5f;
         SStrPrintf(format, sizeof(format), "%s_MIN", token);
     } else {
-        value = time * 0.001f;
+        value = time * TIME_SECONDS_PER_MILLISECOND_FLOAT;
         SStrPrintf(format, sizeof(format), "%s_SEC", token);
     }
 
@@ -2562,7 +2574,7 @@ void CGTooltip::AddTalentLearnText(const TalentRec* talent, CGTalentGroup_C* gro
     const CImVector& redColor = *reinterpret_cast<const CImVector*>(&s_tooltipRedColor);
     const CImVector& greenColor = *reinterpret_cast<const CImVector*>(&s_tooltipGreenColor);
 
-    if (!talent || !ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!talent || !ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return;
     }
 
@@ -2597,11 +2609,11 @@ void CGTooltip::AddTalentLearnText(const TalentRec* talent, CGTalentGroup_C* gro
 static int32_t SetSpellPowerCost(char* cost, const SpellRec* spell, const CGUnit_C* caster, int32_t powerCost, const PowerDisplayRec* display) {
     char format[128];
     int32_t costPerSecond = Spell_C_GetPowerCostPerSecond(spell, caster);
-    powerCost = static_cast<uint32_t>(powerCost) / Spell_C_GetPowerDisplayMod(spell->m_powerType);
-    costPerSecond = static_cast<uint32_t>(costPerSecond) / Spell_C_GetPowerDisplayMod(spell->m_powerType);
+    powerCost = static_cast<uint32_t>(powerCost) / Spell_C_GetPowerDisplayMod(static_cast<POWER_TYPE>(spell->m_powerType));
+    costPerSecond = static_cast<uint32_t>(costPerSecond) / Spell_C_GetPowerDisplayMod(static_cast<POWER_TYPE>(spell->m_powerType));
     const char* token = static_cast<uint32_t>(spell->m_powerType) > 6 ? "HEALTH_COST" : s_powerCostTokens[spell->m_powerType];
 
-    if (spell->m_powerType == 5) {
+    if (spell->m_powerType == POWER_TYPE_RUNES) {
         SpellRuneCostRec* runes = g_spellRuneCostDB.GetRecord(spell->m_runeCostID);
 
         if (!runes) {
@@ -2688,8 +2700,8 @@ static void AddSpellRangeLines(CGTooltip* tooltip, const SpellRec* spell, CGUnit
     float friendlyMin = 0.0f;
     float friendlyMax = 0.0f;
 
-    if (!brief && !(spell->m_attributes & 0x404) && !(spell->m_attributesExC & 0x40000000)) {
-        if (SpellRec::IsMeleeRange(spell) && !SpellRec::HasModifier(spell, 5)) {
+    if (!brief && !(spell->m_attributes & (SPELL_ATTR0::SPELL_ATTR0_ON_NEXT_SWING_NO_DAMAGE | SPELL_ATTR0::SPELL_ATTR0_ON_NEXT_SWING)) && !(spell->m_attributesExC & SPELL_ATTR3::SPELL_ATTR3_DO_NOT_DISPLAY_RANGE)) {
+        if (SpellRec::IsMeleeRange(spell) && !SpellRec::HasModifier(spell, SPELLMOD_RANGE)) {
             char format[128];
             FormatString("MELEE_RANGE", -1, GENDER_NOT_APPLICABLE, format, sizeof(format));
             SStrPrintf(range, 128, format);
@@ -2749,11 +2761,11 @@ static int32_t AddSpellCastTimeLine(CGTooltip* tooltip, const SpellRec* spell, i
     char recastTime[128];
     char format[128];
 
-    if (spell->m_effect[0] == 47 || (spell->m_attributes & 0x40)) {
+    if (spell->m_effect[0] == SPELL_EFFECT_TRADE_SKILL || (spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE)) {
         return 1;
     }
 
-    if (spell->m_effect[0] == 78) {
+    if (spell->m_effect[0] == SPELL_EFFECT_ATTACK) {
         return 0;
     }
 
@@ -2762,14 +2774,14 @@ static int32_t AddSpellCastTimeLine(CGTooltip* tooltip, const SpellRec* spell, i
 
     if (time > 0) {
         FormatString(minutes ? "SPELL_CAST_TIME_MIN" : "SPELL_CAST_TIME_SEC", -1, GENDER_NOT_APPLICABLE, format, sizeof(format));
-        SStrPrintf(castTime, sizeof(castTime), format, time / (minutes ? 60000.0f : 1000.0f));
-    } else if (spell->m_attributesEx & 0x44) {
+        SStrPrintf(castTime, sizeof(castTime), format, time / (minutes ? 60000.0f : TIME_MILLISECONDS_PER_SECOND_FLOAT));
+    } else if (spell->m_attributesEx & (SPELL_ATTR1::SPELL_ATTR1_IS_CHANNELLED | SPELL_ATTR1::SPELL_ATTR1_IS_SELF_CHANNELLED)) {
         FormatString("SPELL_CAST_CHANNELED", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
     } else if (time < 0) {
         FormatString("SPELL_CAST_TIME_INSTANT", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
-    } else if (spell->m_attributes & 0x404) {
+    } else if (spell->m_attributes & (SPELL_ATTR0::SPELL_ATTR0_ON_NEXT_SWING_NO_DAMAGE | SPELL_ATTR0::SPELL_ATTR0_ON_NEXT_SWING)) {
         FormatString("SPELL_ON_NEXT_SWING", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
-    } else if (spell->m_attributes & 2) {
+    } else if (spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) {
         FormatString("SPELL_ON_NEXT_RANGED", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
     } else if (!spell->m_powerType && powerCost > 0) {
         FormatString("SPELL_CAST_TIME_INSTANT", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
@@ -2777,12 +2789,12 @@ static int32_t AddSpellCastTimeLine(CGTooltip* tooltip, const SpellRec* spell, i
         FormatString("SPELL_CAST_TIME_INSTANT_NO_MANA", -1, GENDER_NOT_APPLICABLE, castTime, sizeof(castTime));
     }
 
-    if (cooldown <= 0 || (spell->m_attributesExF & 1)) {
+    if (cooldown <= 0 || (spell->m_attributesExF & SPELL_ATTR6::SPELL_ATTR6_NO_COOLDOWN_ON_TOOLTIP)) {
         recastTime[0] = '\0';
     } else {
         int32_t recastMinutes = cooldown >= 60000;
         FormatString(recastMinutes ? "SPELL_RECAST_TIME_MIN" : "SPELL_RECAST_TIME_SEC", -1, GENDER_NOT_APPLICABLE, format, sizeof(format));
-        SStrPrintf(recastTime, sizeof(recastTime), format, cooldown / (recastMinutes ? 60000.0f : 1000.0f));
+        SStrPrintf(recastTime, sizeof(recastTime), format, cooldown / (recastMinutes ? 60000.0f : TIME_MILLISECONDS_PER_SECOND_FLOAT));
     }
 
     tooltip->AddLine(castTime, recastTime, textColor, textColor, 0);
@@ -2867,7 +2879,7 @@ static void AddSpellEquippedItemLine(CGTooltip* tooltip, const SpellRec* spell, 
     char format[128];
     char text[512];
 
-    if ((spell->m_targets & 0x10) || spell->m_equippedItemClass < 0 || !spell->m_equippedItemSubclass) {
+    if ((spell->m_targets & SPELL_TARGET_TYPE::TARGET_FLAG_ITEM) || spell->m_equippedItemClass < 0 || !spell->m_equippedItemSubclass) {
         return;
     }
 
@@ -2886,13 +2898,15 @@ static void AddSpellEquippedItemLine(CGTooltip* tooltip, const SpellRec* spell, 
 
     int32_t first = 1;
     int32_t equipped = 1;
-    uint32_t slotMask = (spell->m_attributesExC & 0x400) ? 0x8000 : (spell->m_attributesExC & 0x1000000) ? 0x10000 : 0xFFFFFFFF;
+    uint32_t slotMask = (spell->m_attributesExC & SPELL_ATTR3::SPELL_ATTR3_REQUIRES_MAIN_HAND_WEAPON) ? 0x8000 : (spell->m_attributesExC & SPELL_ATTR3::SPELL_ATTR3_REQUIRES_OFF_HAND_WEAPON) ? 0x10000 : 0xFFFFFFFF;
 
     if (!player->EquippedItemMeetSpellRequirements(spell, slotMask)) {
         equipped = 0;
     }
 
-    if ((spell->m_attributesExC & 0x1000400) == 0x1000400 && !player->EquippedItemMeetSpellRequirements(spell, 0x10000)) {
+    constexpr uint32_t handRequirements = SPELL_ATTR3::SPELL_ATTR3_REQUIRES_MAIN_HAND_WEAPON | SPELL_ATTR3::SPELL_ATTR3_REQUIRES_OFF_HAND_WEAPON;
+
+    if ((spell->m_attributesExC & handRequirements) == handRequirements && !player->EquippedItemMeetSpellRequirements(spell, INVSLOT_MASK_OFFHAND)) {
         equipped = 0;
     }
 
@@ -2937,13 +2951,13 @@ static void AddSpellFormLine(CGTooltip* tooltip, const SpellRec* spell, CGUnit_C
     }
 
     int32_t first = 1;
-    int32_t needsForm = spell->m_attributesExB & 0x80000;
+    int32_t needsForm = spell->m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_ALLOW_WHILE_NOT_SHAPESHIFTED_CASTER_FORM;
 
     if (!needsForm) {
         uint32_t count = g_spellShapeshiftFormDB.m_numRecords;
 
-        if (count > 64) {
-            count = 64;
+        if (count > NUM_SPELL_SHAPESHIFT_FORMS) {
+            count = NUM_SPELL_SHAPESHIFT_FORMS;
         }
 
         for (uint32_t i = 0; i < count; i++) {
@@ -2967,7 +2981,7 @@ static void AddSpellFormLine(CGTooltip* tooltip, const SpellRec* spell, CGUnit_C
         }
     }
 
-    int32_t usable = !caster || SpellRec::UsableInShapeshift(spell, caster->GetShapeshiftForm() - 1) || (needsForm && !caster->IsShapeShifted()) || caster->AffectedByAura(275, spell);
+    int32_t usable = !caster || SpellRec::UsableInShapeshift(spell, caster->GetShapeshiftForm() - 1) || (needsForm && !caster->IsShapeShifted()) || caster->AffectedByAura(SPELL_AURA_MOD_IGNORE_SHAPESHIFT, spell);
 
     if (first || (usable && brief)) {
         return;
@@ -3010,7 +3024,7 @@ static void AddSpellReagentLine(CGTooltip* tooltip, const SpellRec* spell, CGPla
     int32_t first = 1;
     int32_t allFound = 1;
 
-    for (uint32_t i = 0; i < 8; i++) {
+    for (uint32_t i = 0; i < NUM_SPELL_REAGENTS; i++) {
         int32_t itemId = spell->m_reagent[i];
 
         if (itemId <= 0) {
@@ -3061,7 +3075,7 @@ static int32_t AddSpellEffectChanceLine(CGTooltip* tooltip, const SpellRec* spel
     char text[128];
     int32_t effect = spell->m_effect[0];
 
-    if (effect != 78 && !(isTradeSkill && (effect == 20 || effect == 23 || effect == 22))) {
+    if (effect != SPELL_EFFECT_ATTACK && !(isTradeSkill && (effect == SPELL_EFFECT_DODGE || effect == SPELL_EFFECT_BLOCK || effect == SPELL_EFFECT_PARRY))) {
         return 0;
     }
 
@@ -3069,22 +3083,22 @@ static int32_t AddSpellEffectChanceLine(CGTooltip* tooltip, const SpellRec* spel
     const char* token;
 
     switch (effect) {
-        case 20:
+        case SPELL_EFFECT_DODGE:
             chance = player->m_player->m_playerDodgePercentage;
             token = "CHANCE_TO_DODGE";
             break;
 
-        case 22:
+        case SPELL_EFFECT_PARRY:
             chance = player->m_player->m_playerParryPercentage;
             token = "CHANCE_TO_PARRY";
             break;
 
-        case 23:
+        case SPELL_EFFECT_BLOCK:
             chance = player->m_player->m_playerBlockPercentage;
             token = "CHANCE_TO_BLOCK";
             break;
 
-        case 78:
+        case SPELL_EFFECT_ATTACK:
             chance = player->m_player->m_playerCritPercentage;
             token = "CHANCE_TO_CRIT";
             break;
@@ -3160,7 +3174,7 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
         this->ClearTooltip();
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         this->Hide();
@@ -3185,9 +3199,9 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
     CGUnit_C* caster;
 
     if (isInspect) {
-        caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+        caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPE_UNIT, __FILE__, __LINE__));
     } else if (isPet) {
-        caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+        caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
     } else {
         caster = player;
     }
@@ -3195,16 +3209,16 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
     int32_t tradeSkill = 0;
     int32_t createsItem = 0;
 
-    if (spell.m_attributes & 0x20) {
-        for (uint32_t i = 0; i < 3; i++) {
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_IS_TRADESKILL) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
             int32_t effect = spell.m_effect[i];
 
-            if (effect == 53) {
+            if (effect == SPELL_EFFECT_ENCHANT_ITEM) {
                 tradeSkill = 1;
                 break;
             }
 
-            if (effect == 24 || effect == 157 || effect == 59) {
+            if (effect == SPELL_EFFECT_CREATE_ITEM || effect == SPELL_EFFECT_CREATE_ITEM_2 || effect == SPELL_EFFECT_CREATE_RANDOM_ITEM) {
                 tradeSkill = 1;
                 createsItem = 1;
             }
@@ -3215,7 +3229,7 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
         SStrPrintf(text, sizeof(text), "\n%s", FrameScript_GetText("TOOLTIP_TALENT_NEXT_RANK", -1, GENDER_NOT_APPLICABLE));
         this->AddLine(text, nullptr, textColor, textColor, 0);
     } else if (tradeSkill) {
-        SkillLineAbilityRec* ability = SpellTableLookupAbility(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], spellId);
+        SkillLineAbilityRec* ability = SpellTableLookupAbility(player->m_unit->m_raceID, player->m_unit->m_classID, spellId);
 
         if (ability) {
             SkillLineRec* skillLine = g_skillLineDB.GetRecord(ability->m_skillLine);
@@ -3255,7 +3269,7 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
 
     int32_t recovery = spell.m_recoveryTime;
     int32_t categoryRecovery = spell.m_categoryRecoveryTime;
-    Spell_C_ModifySpellValue(&spell, recovery, 11);
+    Spell_C_ModifySpellValue(&spell, recovery, SPELLMOD_COOLDOWN);
     Spell_C_ModifyCategoryRecovery(categoryRecovery, &spell, 0);
     int32_t recast = recovery > categoryRecovery ? recovery : categoryRecovery;
     int32_t isTradeSkill = 0;
@@ -3295,7 +3309,7 @@ int32_t CGTooltip::SetSpell(int32_t spellId, int32_t brief, uint32_t cooldown, i
             result = 1;
         }
 
-        if (spell.m_attributesEx & 2) {
+        if (spell.m_attributesEx & SPELL_ATTR1::SPELL_ATTR1_USE_ALL_MANA) {
             AddSpellUseAllPowerLine(this, &spell, display);
         }
 
@@ -3414,23 +3428,23 @@ int32_t GetScalingStatBudget(const ScalingStatValuesRec* values, uint32_t flags)
         return 0;
     }
 
-    switch (flags & 0x4001F) {
-        case 0x1:
+    switch (flags & ItemStats_C::SCALING_STAT_FLAGS::BUDGET_MASK) {
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_SHOULDER:
             return values->m_shoulderBudget;
 
-        case 0x2:
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_TRINKET:
             return values->m_trinketBudget;
 
-        case 0x4:
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_WEAPON_ONE_HAND:
             return values->m_weaponBudget1h;
 
-        case 0x8:
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_PRIMARY:
             return values->m_primaryBudget;
 
-        case 0x10:
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_RANGED:
             return values->m_rangedBudget;
 
-        case 0x40000:
+        case ItemStats_C::SCALING_STAT_FLAGS::BUDGET_TERTIARY:
             return values->m_tertiaryBudget;
     }
 
@@ -3444,32 +3458,32 @@ int32_t GetScalingStatArmor(const ScalingStatValuesRec* values, uint32_t flags) 
         return 0;
     }
 
-    switch (flags & 0xF801E0) {
-        case 0x20:
+    switch (flags & ItemStats_C::SCALING_STAT_FLAGS::ARMOR_MASK) {
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_CLOTH_SHOULDER:
             return values->m_clothShoulderArmor;
 
-        case 0x40:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_LEATHER_SHOULDER:
             return values->m_leatherShoulderArmor;
 
-        case 0x80:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_MAIL_SHOULDER:
             return values->m_mailShoulderArmor;
 
-        case 0x100:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_PLATE_SHOULDER:
             return values->m_plateShoulderArmor;
 
-        case 0x80000:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_CLOTH_CLOAK:
             return values->m_clothCloakArmor;
 
-        case 0x100000:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_CLOTH_CHEST:
             return values->m_clothChestArmor;
 
-        case 0x200000:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_LEATHER_CHEST:
             return values->m_leatherChestArmor;
 
-        case 0x400000:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_MAIL_CHEST:
             return values->m_mailChestArmor;
 
-        case 0x800000:
+        case ItemStats_C::SCALING_STAT_FLAGS::ARMOR_PLATE_CHEST:
             return values->m_plateChestArmor;
     }
 
@@ -3495,30 +3509,30 @@ void GetScalingStatDamage(const ScalingStatValuesRec* values, uint32_t flags, fl
 
     float variance = 0.3f;
 
-    switch (flags & 0x7E00) {
-        case 0x200:
+    switch (flags & ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_MASK) {
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_ONE_HAND:
             dps = static_cast<float>(values->m_weaponDps1h);
             break;
 
-        case 0x400:
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_TWO_HAND:
             dps = static_cast<float>(values->m_weaponDps2h);
             variance = 0.2f;
             break;
 
-        case 0x800:
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_CASTER_ONE_HAND:
             dps = static_cast<float>(values->m_spellcasterDps1h);
             break;
 
-        case 0x1000:
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_CASTER_TWO_HAND:
             dps = static_cast<float>(values->m_spellcasterDps2h);
             variance = 0.2f;
             break;
 
-        case 0x2000:
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_RANGED:
             dps = static_cast<float>(values->m_rangedDps);
             break;
 
-        case 0x4000:
+        case ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_WAND:
             dps = static_cast<float>(values->m_wandDps);
             break;
     }
@@ -3530,8 +3544,14 @@ void GetScalingStatDamage(const ScalingStatValuesRec* values, uint32_t flags, fl
 // VERIFY: 64b947f2 manual
 // OFFSET: 0x0061A8F0
 int32_t GetFeralAttackPower(const ItemStats_C* stats, float damage) {
-    if (stats->m_class == 2 && (s_inventoryTypeSlots[stats->m_inventoryType] & 0x8000)) {
-        double dps = damage / (stats->m_delay * 0.001f);
+#if defined(WOWDECOMP_ARCH_64)
+    if (stats->m_inventoryType >= INVTYPE_COUNT) {
+        return 0;
+    }
+#endif
+
+    if (stats->m_class == ITEM_CLASS::ITEM_CLASS_WEAPON && (s_inventoryTypeSlots[stats->m_inventoryType] & 0x8000)) {
+        double dps = damage / (stats->m_delay * TIME_SECONDS_PER_MILLISECOND_FLOAT);
 
         if (dps > 54.81f) {
             return static_cast<int32_t>(floor((dps - 54.81f) * 14.0f + 0.5f));
@@ -3588,7 +3608,7 @@ void CGTooltip::GetItemDurationString(char* buffer, uint32_t size, uint64_t time
                 SStrPack(text, FrameScript_GetText("TIME_UNIT_DELIMITER", -1, GENDER_NOT_APPLICABLE), sizeof(text));
             }
 
-            SStrPrintf(part, sizeof(part), FrameScript_GetText("SECONDS_ABBR", -1, GENDER_NOT_APPLICABLE), static_cast<uint32_t>(time / 1000));
+            SStrPrintf(part, sizeof(part), FrameScript_GetText("SECONDS_ABBR", -1, GENDER_NOT_APPLICABLE), static_cast<uint32_t>(time / TIME_MILLISECONDS_PER_SECOND));
             SStrPack(text, part, sizeof(text));
         }
     }
@@ -3684,32 +3704,32 @@ int32_t GetEnchantmentConditionText(CGPlayer_C* player, const SpellItemEnchantme
             }
 
             switch (condition->m_operator[i]) {
-                case 0:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_EQUAL_COMPARE", -1, GENDER_NOT_APPLICABLE), leftName, rightName);
                     met = left == right;
                     break;
 
-                case 1:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_NOT_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_NOT_EQUAL_COMPARE", -1, GENDER_NOT_APPLICABLE), leftName, rightName);
                     met = left != right;
                     break;
 
-                case 2:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_LESS_THAN:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_COMPARE", -1, GENDER_NOT_APPLICABLE), rightName, leftName);
                     met = right > left;
                     break;
 
-                case 3:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_GREATER_THAN:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_COMPARE", -1, GENDER_NOT_APPLICABLE), leftName, rightName);
                     met = left > right;
                     break;
 
-                case 4:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_LESS_OR_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_EQUAL_COMPARE", -1, GENDER_NOT_APPLICABLE), rightName, leftName);
                     met = right >= left;
                     break;
 
-                case 5:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_GREATER_OR_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_EQUAL_COMPARE", -1, GENDER_NOT_APPLICABLE), leftName, rightName);
                     met = left >= right;
                     break;
@@ -3718,34 +3738,34 @@ int32_t GetEnchantmentConditionText(CGPlayer_C* player, const SpellItemEnchantme
             int32_t value = condition->m_rtOperand[i];
 
             switch (condition->m_operator[i]) {
-                case 0:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_EQUAL_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left == value;
                     break;
 
-                case 1:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_NOT_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_NOT_EQUAL_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left != value;
                     break;
 
-                case 2:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_LESS_THAN:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_LESS_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left < value;
                     break;
 
-                case 3:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_GREATER_THAN:
                     value++;
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left >= value;
                     break;
 
-                case 4:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_LESS_OR_EQUAL:
                     value++;
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_LESS_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left < value;
                     break;
 
-                case 5:
+                case SpellItemEnchantmentConditionRec::COMPARISON_OPERATOR::OPERATOR_GREATER_OR_EQUAL:
                     SStrPrintf(text, sizeof(text), FrameScript_GetText("ENCHANT_CONDITION_MORE_VALUE", -1, GENDER_NOT_APPLICABLE), value, leftName);
                     met = left >= value;
                     break;
@@ -3825,14 +3845,14 @@ int32_t CGTooltip::GetDisplayedScalingItemLevel(const ItemStats_C* stats, const 
     if (minimumLevel) {
         level = 1;
     } else if ((!link || !(level = link->m_level)) && target != CGMerchantInfo::m_merchant) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             level = unit->m_unit->m_unitFieldLevel;
         }
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && !level) {
         level = player->m_unit->m_unitFieldLevel;
@@ -3861,7 +3881,7 @@ void CGTooltip::AddSpellReagents(const SpellRec* spell, const char* token, void 
     char reagent[1024];
     int32_t first = 1;
 
-    for (uint32_t i = 0; i < 8; i++) {
+    for (uint32_t i = 0; i < NUM_SPELL_REAGENTS; i++) {
         int32_t itemId = spell->m_reagent[i];
 
         if (itemId <= 0) {
@@ -3890,7 +3910,7 @@ void CGTooltip::AddSpellReagents(const SpellRec* spell, const char* token, void 
             SStrPrintf(reagent, sizeof(reagent), "%s (%d)", name, spell->m_reagentCount[i]);
         }
 
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player && player->m_bag.GetItemTypeCount(spell->m_reagent[i], 0) >= spell->m_reagentCount[i]) {
             SStrPack(text, reagent, sizeof(text));
@@ -3925,7 +3945,7 @@ int32_t CGTooltip::SetItemNoStats() {
 // VERIFY: 8eac5de9 manual
 // OFFSET: 0x00625F00
 int32_t SetTooltipUnitAura(CGTooltip* tooltip, ScriptAuraInfo* info) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(info->m_guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(info->m_guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         if ((unit->m_auraEffectMask[36] & 0x80) && ClntObjMgrGetActivePlayer() && !unit->IsFriendly(ClntObjMgrGetActivePlayerObj())) {
@@ -3936,7 +3956,7 @@ int32_t SetTooltipUnitAura(CGTooltip* tooltip, ScriptAuraInfo* info) {
             CGPetInfo::GetPet(0);
         }
 
-        if (!(unit->m_modelFlags & 0x10000)) {
+        if (!(unit->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_DISABLED)) {
             uint32_t slot = unit->GetSortedAuraSlot(info->m_index, info->m_name, info->m_rank, info->m_filter);
 
             if (static_cast<int32_t>(slot) < 0) {
@@ -3987,8 +4007,8 @@ int32_t SetTooltipUnitAura(CGTooltip* tooltip, ScriptAuraInfo* info) {
         return 0;
     }
 
-    bool helpful = info->m_filter & 0x1;
-    bool raid = (info->m_filter & 0x8) != 0;
+    bool helpful = info->m_filter & BUFF_FILTER_HELPFUL;
+    bool raid = (info->m_filter & BUFF_FILTER_RAID) != 0;
     int32_t found = 0;
 
     for (uint32_t i = 0; i < 64 && auras[i]; i++) {
@@ -4012,7 +4032,7 @@ int32_t SetTooltipUnitAura(CGTooltip* tooltip, ScriptAuraInfo* info) {
             continue;
         }
 
-        if ((auraFlags[i] & 0x10) ? (info->m_filter & 0x20) : (info->m_filter & 0x10)) {
+        if ((auraFlags[i] & 0x10) ? (info->m_filter & BUFF_FILTER_NOT_CANCELABLE) : (info->m_filter & BUFF_FILTER_CANCELABLE)) {
             continue;
         }
 
@@ -4102,7 +4122,7 @@ bool ResolveItemSetItem(ItemSetTooltipData* data, int32_t pass, int32_t itemId, 
         uint32_t type = stats->m_inventoryType;
         uint32_t setType = data->m_items[i]->m_inventoryType;
 
-        if (type == setType || (type == 5 && setType == 20) || (type == 20 && setType == 5)) {
+        if (type == setType || (type == INVTYPE_CHEST && setType == INVTYPE_ROBE) || (type == INVTYPE_ROBE && setType == INVTYPE_CHEST)) {
             data->m_equipped[i] = itemId;
             return true;
         }
@@ -4130,18 +4150,22 @@ static void AddItemNameLines(CGTooltip* tooltip, const ItemStats_C* stats, int32
         return;
     }
 
+#if defined(WOWDECOMP_ARCH_64)
+    const CImVector* nameColor = destroyGem ? &grayColor : CGTooltip::GetItemQualityColor(stats->m_quality);
+#else
     const CImVector* nameColor = destroyGem ? &grayColor : reinterpret_cast<const CImVector*>(&s_itemQualityColors[stats->m_quality]);
+#endif
     tooltip->AddLine(name, nullptr, *nameColor, *nameColor, 0);
     CVar* colorblindMode = CVar::Lookup("colorblindMode");
 
     if (colorblindMode && colorblindMode->m_intValue) {
-        if (stats->m_flags[0] & 8) {
+        if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_HEROIC_TOOLTIP) {
             tooltip->AddLine(FrameScript_GetText("ITEM_HEROIC_EPIC", -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
         } else {
             SStrPrintf(format, sizeof(format), "ITEM_QUALITY%d_DESC", destroyGem ? 0 : stats->m_quality);
             tooltip->AddLine(FrameScript_GetText(format, -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
         }
-    } else if (stats->m_flags[0] & 8) {
+    } else if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_HEROIC_TOOLTIP) {
         tooltip->AddLine(FrameScript_GetText("ITEM_HEROIC", -1, GENDER_NOT_APPLICABLE), nullptr, greenColor, greenColor, 0);
     }
 }
@@ -4151,11 +4175,11 @@ static bool AddItemPetitionLines(CGTooltip* tooltip, CGItem_C* item, const WOWGU
     const CImVector& textColor = *reinterpret_cast<const CImVector*>(&s_tooltipTextColor);
     char text[4096];
 
-    if (!(item->GetItemStaticFlags(0) & 0x2000)) {
+    if (!(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
         return true;
     }
 
-    int32_t petitionId = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+    int32_t petitionId = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
     CGPetition* petition = g_petitionCache.GetRecord(petitionId, *itemGuid, TooltipItemCallback, tooltip, true);
 
     if (!petition) {
@@ -4211,7 +4235,7 @@ static void AddItemLockLines(CGTooltip* tooltip, const ItemStats_C* stats, CGIte
     if (lockIndex) {
         encrypted = lockIndex == 20;
     } else {
-        for (uint32_t i = 0; i < 8; i++) {
+        for (uint32_t i = 0; i < NUM_LOCK_KEYS; i++) {
             if (lock->m_index[i] == 20) {
                 encrypted = true;
                 break;
@@ -4227,10 +4251,10 @@ static void AddItemLockLines(CGTooltip* tooltip, const ItemStats_C* stats, CGIte
 
     tooltip->AddLine(text, nullptr, lockColor, lockColor, 0);
 
-    for (uint32_t i = 0; i < 8; i++) {
+    for (uint32_t i = 0; i < NUM_LOCK_KEYS; i++) {
         int32_t type = lock->m_type[i];
 
-        if (type == 2) {
+        if (type == LOCK_KEY_SKILL) {
             int32_t skillSpell = 0;
             int32_t skillCurrent = 0;
             int32_t skillRequired = 0;
@@ -4250,7 +4274,7 @@ static void AddItemLockLines(CGTooltip* tooltip, const ItemStats_C* stats, CGIte
             return;
         }
 
-        if (type == 3) {
+        if (type == LOCK_KEY_SPELL) {
             SpellRec spell;
 
             if (g_spellDB.GetRecord(lock->m_index[i], &spell)) {
@@ -4260,7 +4284,7 @@ static void AddItemLockLines(CGTooltip* tooltip, const ItemStats_C* stats, CGIte
             return;
         }
 
-        if (type == 1) {
+        if (type == LOCK_KEY_ITEM) {
             WOWGUID key = item ? item->m_obj->m_guid : WOWGUID{ 0 };
             ItemStats_C* keyStats = g_itemDBCache.GetRecord(lock->m_index[i], key, TooltipItemCallback, tooltip, true);
 
@@ -4296,7 +4320,7 @@ static const LockRec* AddItemBindLines(CGTooltip* tooltip, const ItemStats_C* st
         }
     }
 
-    if (stats->m_flags[0] & 2) {
+    if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_CONJURED) {
         FormatString("ITEM_CONJURED", -1, GENDER_NOT_APPLICABLE, format, sizeof(format));
         tooltip->AddLine(format, nullptr, textColor, textColor, 0);
     }
@@ -4304,10 +4328,10 @@ static const LockRec* AddItemBindLines(CGTooltip* tooltip, const ItemStats_C* st
     text[0] = '\0';
 
     if (item && item->IsBound()) {
-        if (stats->m_bonding == 4) {
+        if (stats->m_bonding == ITEM_BINDING::ITEM_BINDING_QUEST) {
             FormatString("ITEM_BIND_QUEST", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
-        } else if (stats->m_class != 10) {
-            if (stats->m_flags[0] & 0x8000000) {
+        } else if (stats->m_class != ITEM_CLASS::ITEM_CLASS_MONEY) {
+            if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_BOUND_TO_ACCOUNT) {
                 FormatString("ITEM_ACCOUNTBOUND", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
             } else {
                 FormatString("ITEM_SOULBOUND", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
@@ -4315,24 +4339,24 @@ static const LockRec* AddItemBindLines(CGTooltip* tooltip, const ItemStats_C* st
         }
     }
 
-    if (stats->m_bonding && !text[0] && (stats->m_class != 10 || *requester == CGLootInfo::m_lootObj)) {
-        if (stats->m_flags[0] & 0x8000000) {
+    if (stats->m_bonding != ITEM_BINDING::ITEM_BINDING_NONE && !text[0] && (stats->m_class != ITEM_CLASS::ITEM_CLASS_MONEY || *requester == CGLootInfo::m_lootObj)) {
+        if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_BOUND_TO_ACCOUNT) {
             FormatString("ITEM_BIND_TO_ACCOUNT", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
         } else {
             switch (stats->m_bonding) {
-                case 1:
+                case ITEM_BINDING::ITEM_BINDING_ON_PICKUP:
                     FormatString("ITEM_BIND_ON_PICKUP", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
                     break;
 
-                case 2:
+                case ITEM_BINDING::ITEM_BINDING_ON_EQUIP:
                     FormatString("ITEM_BIND_ON_EQUIP", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
                     break;
 
-                case 3:
+                case ITEM_BINDING::ITEM_BINDING_ON_USE:
                     FormatString("ITEM_BIND_ON_USE", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
                     break;
 
-                case 4:
+                case ITEM_BINDING::ITEM_BINDING_QUEST:
                     FormatString("ITEM_BIND_QUEST", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
                     break;
             }
@@ -4343,8 +4367,8 @@ static const LockRec* AddItemBindLines(CGTooltip* tooltip, const ItemStats_C* st
         tooltip->AddLine(text, nullptr, textColor, textColor, 0);
     }
 
-    if (stats->m_class != 10) {
-        if (stats->m_flags[0] & 0x80000) {
+    if (stats->m_class != ITEM_CLASS::ITEM_CLASS_MONEY) {
+        if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_UNIQUE_EQUIPPABLE) {
             FormatString("ITEM_UNIQUE_EQUIPPABLE", -1, GENDER_NOT_APPLICABLE, text, sizeof(text));
             tooltip->AddLine(text, nullptr, textColor, textColor, 0);
         } else if (static_cast<int32_t>(stats->m_maxCount) > 0) {
@@ -4393,7 +4417,7 @@ static const LockRec* AddItemBindLines(CGTooltip* tooltip, const ItemStats_C* st
         }
     }
 
-    if (item && (item->m_item->m_itemFieldFlags & 4)) {
+    if (item && (item->m_item->m_itemFieldFlags & ITEM_DFLAG_UNLOCKED)) {
         return nullptr;
     }
 
@@ -4420,7 +4444,7 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
         }
     }
 
-    if (stats->m_inventoryType == 18) {
+    if (stats->m_inventoryType == INVTYPE_BAG) {
         if (subClass && subClass->m_displayName && *subClass->m_displayName) {
             SStrCopy(format, FrameScript_GetText("CONTAINER_SLOTS", -1, GENDER_NOT_APPLICABLE), sizeof(format));
             SStrPrintf(slot, sizeof(slot), format, stats->m_containerSlots, subClass->m_displayName);
@@ -4430,13 +4454,13 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
         return;
     }
 
-    if (stats->m_class == 16) {
-        for (uint32_t i = 0; i < 5; i++) {
+    if (stats->m_class == ITEM_CLASS::ITEM_CLASS_GLYPH) {
+        for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
             SpellRec spell;
 
             if (g_spellDB.GetRecord(stats->m_spellId[i], &spell)) {
-                for (uint32_t j = 0; j < 3; j++) {
-                    if (spell.m_effect[j] != 74) {
+                for (uint32_t j = 0; j < NUM_SPELL_EFFECTS; j++) {
+                    if (spell.m_effect[j] != SPELL_EFFECT_APPLY_GLYPH) {
                         continue;
                     }
 
@@ -4453,19 +4477,23 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
         return;
     }
 
-    if (subClass && stats->m_inventoryType != 16 && !(subClass->m_displayFlags & 1) && subClass->m_displayName && *subClass->m_displayName) {
+    if (subClass && stats->m_inventoryType != INVTYPE_CLOAK && !(subClass->m_displayFlags & ITEM_SUBCLASS_DISPLAY_FLAG_HIDE_IN_TOOLTIP) && subClass->m_displayName && *subClass->m_displayName) {
         SStrCopy(subClassName, subClass->m_displayName, sizeof(subClassName));
     }
 
-    if (stats->m_class != 6) {
+    if (stats->m_class != ITEM_CLASS::ITEM_CLASS_PROJECTILE) {
+#if defined(WOWDECOMP_ARCH_64)
+        const char* text = FrameScript_GetText(s_inventoryTypeTokens[stats->m_inventoryType < INVTYPE_COUNT ? stats->m_inventoryType : INVTYPE_NON_EQUIP], -1, GENDER_NOT_APPLICABLE);
+#else
         const char* text = FrameScript_GetText(s_inventoryTypeTokens[stats->m_inventoryType], -1, GENDER_NOT_APPLICABLE);
+#endif
         SStrCopy(slot, text, sizeof(slot));
 
         if (!*text) {
             slot[0] = '\0';
         }
     } else {
-        ItemClassRec* itemClass = g_itemClassDB.GetRecord(6);
+        ItemClassRec* itemClass = g_itemClassDB.GetRecord(ITEM_CLASS::ITEM_CLASS_PROJECTILE);
 
         if (itemClass && itemClass->m_className && *itemClass->m_className) {
             SStrCopy(slot, itemClass->m_className, sizeof(slot));
@@ -4479,7 +4507,7 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
     uint32_t proficiency = CGPlayer_C::GetProficiency(stats->m_class);
 
     if (proficiency && !((1 << stats->m_subClass) & proficiency)) {
-        if (stats->m_class == 2) {
+        if (stats->m_class == ITEM_CLASS::ITEM_CLASS_WEAPON) {
             int32_t prerequisite = subClass->m_prerequisiteProficiency;
 
             if (prerequisite != -1) {
@@ -4500,8 +4528,8 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
         } else {
             int32_t alternate = -1;
 
-            if (values && distribution && stats->m_class == 4 && (stats->m_subClass == 4 || stats->m_subClass == 3)) {
-                ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(player->m_unit->m_unitFieldBytes0[1]);
+            if (values && distribution && stats->m_class == ITEM_CLASS::ITEM_CLASS_ARMOR && (stats->m_subClass == 4 || stats->m_subClass == 3)) {
+                ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(player->m_unit->m_classID);
 
                 if (playerClass) {
                     if (stats->m_subClass == 4 && (playerClass->m_flags & 0x20)) {
@@ -4518,7 +4546,7 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
                 for (int32_t i = 0; i < g_itemSubClassDB.m_numRecords; i++) {
                     ItemSubClassRec* rec = g_itemSubClassDB.GetRecordByIndex(i);
 
-                    if (rec && rec->m_classID == 4 && rec->m_subClassID == alternate) {
+                    if (rec && rec->m_classID == ITEM_CLASS::ITEM_CLASS_ARMOR && rec->m_subClassID == alternate) {
                         if (rec->m_displayName && *rec->m_displayName) {
                             SStrCopy(subClassName, rec->m_displayName, sizeof(subClassName));
                         }
@@ -4530,7 +4558,7 @@ static void AddItemTypeLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPla
         }
     }
 
-    if (stats->m_inventoryType == 22 && !CGPlayer_C::CanDualWield()) {
+    if (stats->m_inventoryType == INVTYPE_WEAPONOFFHAND && !CGPlayer_C::CanDualWield()) {
         slotRed = 1;
     }
 
@@ -4554,22 +4582,22 @@ static float AddItemDamageLines(CGTooltip* tooltip, const ItemStats_C* stats, co
     float average = 0.0f;
     int32_t first = 1;
 
-    if ((stats->m_scalingStatValue & 0x7E00) && values) {
+    if ((stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::DAMAGE_MASK) && values) {
         float minDamage;
         float maxDamage;
         GetScalingStatDamage(values, stats->m_scalingStatValue, &minDamage, &maxDamage);
 
         if (stats->m_delay) {
             float delay = static_cast<float>(static_cast<int32_t>(stats->m_delay));
-            minDamage = minDamage * delay * 0.001f;
-            maxDamage = 0.001f * (delay * maxDamage);
+            minDamage = minDamage * delay * TIME_SECONDS_PER_MILLISECOND_FLOAT;
+            maxDamage = TIME_SECONDS_PER_MILLISECOND_FLOAT * (delay * maxDamage);
         }
 
         average = (minDamage + maxDamage) * 0.5f;
         SStrCopy(format, FrameScript_GetText("DAMAGE_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
         SStrPrintf(text, sizeof(text), format, static_cast<int32_t>(minDamage), static_cast<int32_t>(maxDamage));
         SStrCopy(format, FrameScript_GetText("SPEED", -1, GENDER_NOT_APPLICABLE), sizeof(format));
-        SStrPrintf(speed, sizeof(speed), "%s %.2f", format, static_cast<double>(static_cast<float>(static_cast<int32_t>(stats->m_delay)) * 0.001f));
+        SStrPrintf(speed, sizeof(speed), "%s %.2f", format, static_cast<double>(static_cast<float>(static_cast<int32_t>(stats->m_delay)) * TIME_SECONDS_PER_MILLISECOND_FLOAT));
         tooltip->AddLine(text, speed, textColor, textColor, 0);
         first = 0;
     } else {
@@ -4587,7 +4615,7 @@ static float AddItemDamageLines(CGTooltip* tooltip, const ItemStats_C* stats, co
                 SStrPrintf(format, sizeof(format), "SPELL_SCHOOL%d_CAP", stats->m_damageType[i]);
                 SStrCopy(school, FrameScript_GetText(format, -1, GENDER_NOT_APPLICABLE), sizeof(school));
 
-                if (stats->m_class == 6) {
+                if (stats->m_class == ITEM_CLASS::ITEM_CLASS_PROJECTILE) {
                     float ammo = (minDamage + maxDamage) * 0.5f;
                     SStrCopy(format, FrameScript_GetText(first ? "AMMO_SCHOOL_DAMAGE_TEMPLATE" : "PLUS_AMMO_SCHOOL_DAMAGE_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
                     SStrPrintf(text, sizeof(text), format, static_cast<double>(ammo), school);
@@ -4599,7 +4627,7 @@ static float AddItemDamageLines(CGTooltip* tooltip, const ItemStats_C* stats, co
                     SStrPrintf(text, sizeof(text), format, minDamage, maxDamage, school);
                 }
             } else {
-                if (stats->m_class == 6) {
+                if (stats->m_class == ITEM_CLASS::ITEM_CLASS_PROJECTILE) {
                     float ammo = 0.5f * (minDamage + maxDamage);
                     SStrCopy(format, FrameScript_GetText(first ? "AMMO_DAMAGE_TEMPLATE" : "PLUS_AMMO_DAMAGE_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
                     SStrPrintf(text, sizeof(text), format, static_cast<double>(ammo));
@@ -4612,11 +4640,11 @@ static float AddItemDamageLines(CGTooltip* tooltip, const ItemStats_C* stats, co
                 }
             }
 
-            if (!first || stats->m_class != 2) {
+            if (!first || stats->m_class != ITEM_CLASS::ITEM_CLASS_WEAPON) {
                 speed[0] = '\0';
             } else {
                 SStrCopy(format, FrameScript_GetText("SPEED", -1, GENDER_NOT_APPLICABLE), sizeof(format));
-                SStrPrintf(speed, sizeof(speed), "%s %.2f", format, static_cast<double>(static_cast<float>(static_cast<int32_t>(stats->m_delay)) * 0.001f));
+                SStrPrintf(speed, sizeof(speed), "%s %.2f", format, static_cast<double>(static_cast<float>(static_cast<int32_t>(stats->m_delay)) * TIME_SECONDS_PER_MILLISECOND_FLOAT));
             }
 
             tooltip->AddLine(text, speed, textColor, textColor, 0);
@@ -4625,9 +4653,9 @@ static float AddItemDamageLines(CGTooltip* tooltip, const ItemStats_C* stats, co
         }
     }
 
-    if (!first && stats->m_class == 2) {
+    if (!first && stats->m_class == ITEM_CLASS::ITEM_CLASS_WEAPON) {
         SStrCopy(format, FrameScript_GetText("DPS_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
-        SStrPrintf(text, sizeof(text), format, static_cast<double>(average / (static_cast<float>(static_cast<int32_t>(stats->m_delay)) * 0.001f)));
+        SStrPrintf(text, sizeof(text), format, static_cast<double>(average / (static_cast<float>(static_cast<int32_t>(stats->m_delay)) * TIME_SECONDS_PER_MILLISECOND_FLOAT)));
         tooltip->AddLine(text, nullptr, textColor, textColor, 0);
     }
 
@@ -4642,7 +4670,7 @@ static void AddItemArmorAndStatLines(CGTooltip* tooltip, const ItemStats_C* stat
     char text[4096];
     char school[32];
 
-    if (stats->m_scalingStatValue & 0xF801E0) {
+    if (stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::ARMOR_MASK) {
         int32_t armor = GetScalingStatArmor(values, stats->m_scalingStatValue);
         SStrCopy(format, FrameScript_GetText("ARMOR_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
         SStrPrintf(text, sizeof(text), format, armor);
@@ -4766,7 +4794,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         int32_t enchantId;
 
         if (item) {
-            enchantId = (item->GetItemStaticFlags(0) & 0x2000) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_id;
+            enchantId = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_id;
         } else {
             enchantId = tooltip->m_itemLinkInfo.m_enchants[slot];
         }
@@ -4776,7 +4804,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
 
         if (socket <= 2 && socketPreview) {
             WOWGUID gemGuid = socket < 3 ? CGItemSocketInfo::m_gemItems[socket] : WOWGUID{ 0 };
-            CGItem_C* gemItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(gemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* gemItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(gemGuid, TYPE_ITEM, __FILE__, __LINE__));
             SpellItemEnchantmentRec* current = g_spellItemEnchantmentDB.GetRecord(abs(enchantId));
 
             if (gemItem) {
@@ -4821,7 +4849,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
                     tooltip->AddLine(text, nullptr, grayColor, grayColor, 0);
                     SStrPrintf(text, sizeof(text), "Interface\\ItemSocketingFrame\\UI-EmptySocket-%s.blp", s_socketColorNames[i]);
                     CAaRect coords = { 0.0f, 0.0f, 1.0f, 1.0f };
-                    uint32_t textureColor = 0xFFFFFFFF;
+                    uint32_t textureColor = COLOR_WHITE_ARGB;
                     tooltip->AddTexture(text, coords, *reinterpret_cast<const CImVector*>(&textureColor));
                     break;
                 }
@@ -4832,7 +4860,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
             int32_t prismaticId = 0;
 
             if (item) {
-                prismaticId = (item->GetItemStaticFlags(0) & 0x2000) ? 0 : item->m_item->m_itemFieldEnchantment[6].m_id;
+                prismaticId = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[6].m_id;
             } else if (tooltip->m_itemUseLinkInfo) {
                 prismaticId = tooltip->m_itemLinkInfo.m_enchants[6];
             }
@@ -4846,7 +4874,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
                 const CImVector& color = skillOk && levelOk ? grayColor : redColor;
                 tooltip->AddLine(FrameScript_GetText("EMPTY_SOCKET_NO_COLOR", -1, GENDER_NOT_APPLICABLE), nullptr, color, color, 0);
                 CAaRect coords = { 0.0f, 0.0f, 1.0f, 1.0f };
-                uint32_t textureColor = 0xFFFFFFFF;
+                uint32_t textureColor = COLOR_WHITE_ARGB;
                 tooltip->AddTexture("Interface\\ItemSocketingFrame\\UI-EmptySocket.blp", coords, *reinterpret_cast<const CImVector*>(&textureColor));
 
                 if (!skillOk) {
@@ -4872,7 +4900,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
 
             tooltip->AddLine(FrameScript_GetText("EMPTY_SOCKET_NO_COLOR", -1, GENDER_NOT_APPLICABLE), nullptr, grayColor, grayColor, 0);
             CAaRect coords = { 0.0f, 0.0f, 1.0f, 1.0f };
-            uint32_t textureColor = 0xFFFFFFFF;
+            uint32_t textureColor = COLOR_WHITE_ARGB;
             tooltip->AddTexture("Interface\\ItemSocketingFrame\\UI-EmptySocket.blp", coords, *reinterpret_cast<const CImVector*>(&textureColor));
             continue;
         }
@@ -4887,11 +4915,11 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
             continue;
         }
 
-        if (enchant->m_effect[0] == 7) {
+        if (enchant->m_effect[0] == ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_USE_SPELL) {
             *useSpell = enchant->m_effectArg[0];
 
             if (item) {
-                *useCharges = (item->GetItemStaticFlags(0) & 0x2000) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_charges;
+                *useCharges = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_charges;
             } else {
                 *useCharges = tooltip->m_itemLinkInfo.m_enchantCharges[slot];
             }
@@ -4900,7 +4928,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
             continue;
         }
 
-        if (enchant->m_effect[0] == 3 && owner == ClntObjMgrGetActivePlayer()) {
+        if (enchant->m_effect[0] == ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_EQUIP_SPELL && owner == ClntObjMgrGetActivePlayer()) {
             SpellRec spell;
 
             if (g_spellDB.GetRecord(enchant->m_effectArg[0], &spell) && ownerPlayer && !CGUnit_C::IsSpellAllowedInArena(&spell)) {
@@ -4925,14 +4953,14 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
             SStrCopy(text, format, sizeof(text));
         }
 
-        if (!item || !(item->GetItemStaticFlags(0) & 0x2000)) {
+        if (!item || !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
             int32_t hasCharges = item ? item->m_item->m_itemFieldEnchantment[slot].m_charges : tooltip->m_itemLinkInfo.m_enchantCharges[slot];
 
             if (hasCharges) {
                 int32_t count;
 
                 if (item) {
-                    count = (item->GetItemStaticFlags(0) & 0x2000) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_charges;
+                    count = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[slot].m_charges;
                 } else {
                     count = tooltip->m_itemLinkInfo.m_enchantCharges[slot];
                 }
@@ -4968,7 +4996,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         bool prismaticEmpty;
 
         if (item) {
-            prismaticEmpty = (item->GetItemStaticFlags(0) & 0x2000) || !item->m_item->m_itemFieldEnchantment[6].m_id;
+            prismaticEmpty = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) || !item->m_item->m_itemFieldEnchantment[6].m_id;
         } else {
             prismaticEmpty = !tooltip->m_itemLinkInfo.m_enchants[6];
         }
@@ -4985,7 +5013,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
             }
         } else if (!stats->m_socketColor[socket] || !prismaticEmpty) {
             if (item) {
-                if (!(item->GetItemStaticFlags(0) & 0x2000)) {
+                if (!(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
                     socketEnchantId = item->m_item->m_itemFieldEnchantment[slot].m_id;
                 }
             } else if (tooltip->m_itemUseLinkInfo) {
@@ -5006,7 +5034,7 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         }
 
         if (conditionLine) {
-            CGPlayer_C* gemOwner = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(owner, TYPEMASK_PLAYER, __FILE__, __LINE__));
+            CGPlayer_C* gemOwner = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(owner, TYPE_PLAYER, __FILE__, __LINE__));
             int32_t conditionsMet;
 
             if (gemOwner) {
@@ -5039,10 +5067,10 @@ static int32_t AddItemSocketLines(CGTooltip* tooltip, const ItemStats_C* stats, 
                 }
 
                 char texture[260];
-                const char* path = ClientDBStringLookup(3);
+                const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
                 SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(gem->m_displayId));
                 CAaRect coords = { 0.0f, 0.0f, 1.0f, 1.0f };
-                uint32_t textureColor = 0xFFFFFFFF;
+                uint32_t textureColor = COLOR_WHITE_ARGB;
                 tooltip->AddTexture(texture, coords, *reinterpret_cast<const CImVector*>(&textureColor));
             }
         }
@@ -5137,7 +5165,7 @@ static void AddItemStaticSocketLines(CGTooltip* tooltip, const ItemStats_C* stat
             tooltip->AddLine(text, nullptr, grayColor, grayColor, 0);
             SStrPrintf(text, sizeof(text), "Interface\\ItemSocketingFrame\\UI-EmptySocket-%s.blp", s_socketColorNames[i]);
             CAaRect coords = { 0.0f, 0.0f, 1.0f, 1.0f };
-            uint32_t textureColor = 0xFFFFFFFF;
+            uint32_t textureColor = COLOR_WHITE_ARGB;
             tooltip->AddTexture(text, coords, *reinterpret_cast<const CImVector*>(&textureColor));
             break;
         }
@@ -5215,21 +5243,21 @@ static int32_t AddItemDurabilityLines(CGTooltip* tooltip, const ItemStats_C* sta
             link.m_maxDurability = stats->m_maxDurability;
         }
 
-        if ((item && !(item->m_item->m_itemFieldFlags & 8) && item->m_item->m_itemFieldMaxdurability) || (useLinkInfo && link.m_maxDurability)) {
+        if ((item && !(item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) && item->m_item->m_itemFieldMaxdurability) || (useLinkInfo && link.m_maxDurability)) {
             SStrCopy(format, FrameScript_GetText("DURABILITY_TEMPLATE", -1, GENDER_NOT_APPLICABLE), sizeof(format));
             uint32_t durability;
             uint32_t maxDurability;
 
-            if (item && !(item->m_item->m_itemFieldFlags & 8) && item->m_item->m_itemFieldMaxdurability) {
-                durability = (item->m_item->m_itemFieldFlags & 8) ? 0 : item->m_item->m_itemFieldDurability;
+            if (item && !(item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) && item->m_item->m_itemFieldMaxdurability) {
+                durability = (item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) ? 0 : item->m_item->m_itemFieldDurability;
             } else if (tooltip->m_itemUseLinkInfo && link.m_maxDurability) {
                 durability = link.m_durability;
             } else {
                 durability = stats->m_maxDurability;
             }
 
-            if (item && !(item->m_item->m_itemFieldFlags & 8) && item->m_item->m_itemFieldMaxdurability) {
-                maxDurability = (item->m_item->m_itemFieldFlags & 8) ? 0 : item->m_item->m_itemFieldMaxdurability;
+            if (item && !(item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) && item->m_item->m_itemFieldMaxdurability) {
+                maxDurability = (item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) ? 0 : item->m_item->m_itemFieldMaxdurability;
             } else if (!tooltip->m_itemUseLinkInfo || (maxDurability = link.m_maxDurability) == 0) {
                 maxDurability = stats->m_maxDurability;
             }
@@ -5316,7 +5344,7 @@ static void AddItemRaceClassLines(CGTooltip* tooltip, const ItemStats_C* stats, 
                     SStrPack(list, race->m_name, sizeof(list));
                     first = 0;
 
-                    if (player->m_unit->m_unitFieldBytes0[0] == race->m_id) {
+                    if (player->m_unit->m_raceID == race->m_id) {
                         allowed = 1;
                     }
                 }
@@ -5346,7 +5374,7 @@ static void AddItemRaceClassLines(CGTooltip* tooltip, const ItemStats_C* stats, 
                     SStrPack(list, playerClass->m_name, sizeof(list));
                     first = 0;
 
-                    if (player->m_unit->m_unitFieldBytes0[1] == playerClass->m_id) {
+                    if (player->m_unit->m_classID == playerClass->m_id) {
                         allowed = 1;
                     }
                 }
@@ -5369,7 +5397,7 @@ static void AddItemRaceClassLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         if (!(race->m_flags & 1) && race->m_name && ((1 << (race->m_id - 1)) & stats->m_allowableRace)) {
             SStrPrintf(text, sizeof(text), "%s ", race->m_name);
 
-            if (player->m_unit->m_unitFieldBytes0[0] != race->m_id) {
+            if (player->m_unit->m_raceID != race->m_id) {
                 allowed = 0;
             }
 
@@ -5383,7 +5411,7 @@ static void AddItemRaceClassLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         if (playerClass && playerClass->m_name && ((1 << (playerClass->m_id - 1)) & stats->m_allowableClass)) {
             SStrPack(text, playerClass->m_name, sizeof(text));
 
-            if (player->m_unit->m_unitFieldBytes0[1] != playerClass->m_id) {
+            if (player->m_unit->m_classID != playerClass->m_id) {
                 allowed = 0;
             }
 
@@ -5426,7 +5454,7 @@ static void AddItemLevelLines(CGTooltip* tooltip, const ItemStats_C* stats, CGPl
     if (showItemLevel && showItemLevel->m_intValue) {
         uint32_t itemClass = stats->m_class;
 
-        if (itemClass == 2 || itemClass == 4 || itemClass == 5 || itemClass == 6) {
+        if (itemClass == ITEM_CLASS::ITEM_CLASS_WEAPON || itemClass == ITEM_CLASS::ITEM_CLASS_ARMOR || itemClass == ITEM_CLASS::ITEM_CLASS_REAGENT || itemClass == ITEM_CLASS::ITEM_CLASS_PROJECTILE) {
             SStrCopy(format, FrameScript_GetText("ITEM_LEVEL", -1, GENDER_NOT_APPLICABLE), sizeof(format));
             SStrPrintf(text, sizeof(text), format, stats->m_itemLevel);
             tooltip->AddLine(text, nullptr, textColor, textColor, 0);
@@ -5446,12 +5474,12 @@ static void AddItemRequirementLines(CGTooltip* tooltip, const ItemStats_C* stats
         int32_t index = player->GetSkillIndex(stats->m_requiredSkill);
         bool skillOk = index >= 0 && player->GetSkillValue(index) >= stats->m_requiredSkillRank;
 
-        if (stats->m_flags[0] & 0x40000) {
+        if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_PROSPECTABLE) {
             if (index >= 0 && static_cast<int32_t>(player->GetSkillValue(index)) > 0) {
                 const CImVector& color = skillOk ? textColor : redColor;
                 tooltip->AddLine(FrameScript_GetText("ITEM_PROSPECTABLE", -1, GENDER_NOT_APPLICABLE), nullptr, color, color, 0);
             }
-        } else if (stats->m_flags[0] & 0x20000000) {
+        } else if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_MILLABLE) {
             if (index >= 0 && static_cast<int32_t>(player->GetSkillValue(index)) > 0) {
                 const CImVector& color = skillOk ? textColor : redColor;
                 tooltip->AddLine(FrameScript_GetText("ITEM_MILLABLE", -1, GENDER_NOT_APPLICABLE), nullptr, color, color, 0);
@@ -5472,12 +5500,12 @@ static void AddItemRequirementLines(CGTooltip* tooltip, const ItemStats_C* stats
 
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(stats->m_spellId[0], &spell) && spell.m_effect[0] == 36) {
+    if (g_spellDB.GetRecord(stats->m_spellId[0], &spell) && spell.m_effect[0] == SPELL_EFFECT_LEARN_SPELL) {
         int32_t taughtSpell = spell.m_effectTriggerSpell[0];
 
         if (!taughtSpell) {
-            for (uint32_t i = 0; i < 5; i++) {
-                if (stats->m_spellTrigger[i] == 6) {
+            for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
+                if (stats->m_spellTrigger[i] == ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL) {
                     taughtSpell = stats->m_spellId[i];
                     break;
                 }
@@ -5486,9 +5514,9 @@ static void AddItemRequirementLines(CGTooltip* tooltip, const ItemStats_C* stats
 
         CGUnit_C* learner;
 
-        if (spell.m_implicitTargetA[0] == 5 || spell.m_implicitTargetB[0] == 5) {
+        if (spell.m_implicitTargetA[0] == SPELL_IMPLICIT_TARGET::TARGET_UNIT_PET || spell.m_implicitTargetB[0] == SPELL_IMPLICIT_TARGET::TARGET_UNIT_PET) {
             CGUnitData* unit = player->m_unit;
-            learner = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(unit->m_unitFieldCharm ? unit->m_unitFieldCharm : unit->m_unitFieldSummon, TYPEMASK_UNIT, __FILE__, __LINE__));
+            learner = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(unit->m_unitFieldCharm ? unit->m_unitFieldCharm : unit->m_unitFieldSummon, TYPE_UNIT, __FILE__, __LINE__));
         } else {
             learner = player;
         }
@@ -5506,7 +5534,7 @@ static void AddItemRequirementLines(CGTooltip* tooltip, const ItemStats_C* stats
     }
 
     if (stats->m_requiredHonorRank) {
-        bool ranked = player->m_player->m_playerFieldBytes[3] >= stats->m_requiredHonorRank;
+        bool ranked = player->m_player->m_maxPvpRank >= stats->m_requiredHonorRank;
         const char* rank = player->GetPVPRankString(stats->m_requiredHonorRank);
         SStrPrintf(text, sizeof(text), FrameScript_GetText("ITEM_REQ_SKILL", -1, GENDER_NOT_APPLICABLE), rank);
         const CImVector& color = ranked ? textColor : redColor;
@@ -5621,11 +5649,11 @@ static int32_t CollectItemSetData(CGTooltip* tooltip, const ItemSetRec* set, CGP
             uint32_t type = item->m_inventoryType;
             uint32_t previousType = previous->m_inventoryType;
 
-            if (type == previousType && type != 11 && type != 12 && type != 13) {
+            if (type == previousType && type != INVTYPE_FINGER && type != INVTYPE_TRINKET && type != INVTYPE_WEAPON) {
                 break;
             }
 
-            if (type == 5 ? previousType == 20 : type == 20 && previousType == 5) {
+            if (type == INVTYPE_CHEST ? previousType == INVTYPE_ROBE : type == INVTYPE_ROBE && previousType == INVTYPE_CHEST) {
                 break;
             }
         }
@@ -5669,7 +5697,7 @@ static void AddItemSpellStatLines(CGTooltip* tooltip, const ItemStats_C* stats, 
     char bonus[4096];
     char text[4096];
 
-    if (player->m_unit->m_unitFieldBytes0[1] == 11) {
+    if (player->m_unit->m_classID == CLASS_DRUID) {
         int32_t attackPower = GetFeralAttackPower(stats, averageDamage);
 
         if (attackPower > 0) {
@@ -5757,7 +5785,7 @@ static void AddItemSpellStatLines(CGTooltip* tooltip, const ItemStats_C* stats, 
         }
     }
 
-    if ((stats->m_scalingStatValue & 0x8000) && values && values->m_spellPower) {
+    if ((stats->m_scalingStatValue & ItemStats_C::SCALING_STAT_FLAGS::SPELL_POWER) && values && values->m_spellPower) {
         SStrCopy(format, FrameScript_GetText(s_itemModTokens[45], -1, GENDER_NOT_APPLICABLE), sizeof(format));
 
         if (format[0]) {
@@ -5779,7 +5807,7 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
     char buffer[4096];
     int32_t isRecipe = 0;
 
-    for (int32_t i = 0; i < 5; i++) {
+    for (int32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
         if (stream) {
             sprintf(buffer, "\t\t\t<spelldesc_%d>", i);
             fputs(buffer, stream);
@@ -5807,7 +5835,7 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
 
         SpellParserParseText(&spell, format, sizeof(format), 0, 0, 0, 0, 1, 0);
 
-        if (!format[0] && stats->m_spellTrigger[i] != 6) {
+        if (!format[0] && stats->m_spellTrigger[i] != ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL) {
             if (stream) {
                 sprintf(buffer, "</spelldesc_%d>\n", i);
                 fputs(buffer, stream);
@@ -5817,7 +5845,7 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
         }
 
         switch (stats->m_spellTrigger[i]) {
-            case 0: {
+            case ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_ON_USE: {
                 int32_t spellCooldown = stats->m_spellCooldown[i];
 
                 if (spellCooldown < 0) {
@@ -5826,10 +5854,10 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
                     } else {
                         int32_t recoveryTime = spell.m_recoveryTime;
                         int32_t categoryRecoveryTime = spell.m_categoryRecoveryTime;
-                        Spell_C_ModifySpellValue(&spell, recoveryTime, 11);
+                        Spell_C_ModifySpellValue(&spell, recoveryTime, SPELLMOD_COOLDOWN);
 
-                        if (spell.m_attributesExF >= 0) {
-                            Spell_C_ModifySpellValue(&spell, categoryRecoveryTime, 11);
+                        if (!(spell.m_attributesExF & SPELL_ATTR6::SPELL_ATTR6_NO_CATEGORY_COOLDOWN_MODS)) {
+                            Spell_C_ModifySpellValue(&spell, categoryRecoveryTime, SPELLMOD_COOLDOWN);
                         }
 
                         spellCooldown = recoveryTime <= categoryRecoveryTime ? categoryRecoveryTime : recoveryTime;
@@ -5846,15 +5874,15 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
                 break;
             }
 
-            case 1:
+            case ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_ON_EQUIP:
                 SStrPrintf(text, sizeof(text), "%s %s", FrameScript_GetText("ITEM_SPELL_TRIGGER_ONEQUIP", -1, GENDER_NOT_APPLICABLE), format);
                 break;
 
-            case 2:
+            case ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_ON_PROC:
                 SStrPrintf(text, sizeof(text), "%s %s", FrameScript_GetText("ITEM_SPELL_TRIGGER_ONPROC", -1, GENDER_NOT_APPLICABLE), format);
                 break;
 
-            case 6:
+            case ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL:
                 SStrPrintf(text, sizeof(text), "%s %s", FrameScript_GetText("ITEM_SPELL_TRIGGER_ONUSE", -1, GENDER_NOT_APPLICABLE), stats->m_description);
                 isRecipe = 1;
                 break;
@@ -5868,14 +5896,14 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
         int32_t hasCreated = 0;
         int32_t createsItem = 0;
 
-        if (stats->m_spellTrigger[i] == 6) {
+        if (stats->m_spellTrigger[i] == ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL) {
             hasCreated = 1;
             created = spell;
-        } else if (spell.m_effect[0] == 36) {
+        } else if (spell.m_effect[0] == SPELL_EFFECT_LEARN_SPELL) {
             hasCreated = g_spellDB.GetRecord(spell.m_effectTriggerSpell[0], &created);
         }
 
-        if (hasCreated && (created.m_effect[0] == 24 || created.m_effect[0] == 157 || created.m_effect[0] == 59) && created.m_effectItemType[0]) {
+        if (hasCreated && (created.m_effect[0] == SPELL_EFFECT_CREATE_ITEM || created.m_effect[0] == SPELL_EFFECT_CREATE_ITEM_2 || created.m_effect[0] == SPELL_EFFECT_CREATE_RANDOM_ITEM) && created.m_effectItemType[0]) {
             createsItem = 1;
         }
 
@@ -5922,7 +5950,7 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
             int32_t missing = 0;
             text[0] = '\0';
 
-            for (uint32_t j = 0; j < 8; j++) {
+            for (uint32_t j = 0; j < NUM_SPELL_REAGENTS; j++) {
                 int32_t reagent = created.m_reagent[j];
 
                 if (reagent <= 0) {
@@ -5930,7 +5958,7 @@ static int32_t AddItemSpellTriggerLines(CGTooltip* tooltip, const ItemStats_C* s
                 }
 
                 WOWGUID query;
-                query.m_guid = static_cast<uint64_t>(static_cast<uint32_t>(created.m_id)) | 0x1FE0000000000000ULL;
+                query.m_guid = static_cast<uint64_t>(static_cast<uint32_t>(created.m_id)) | WOWGUID_SPELL_QUERY_TAG;
                 ItemStats_C* reagentStats = g_itemDBCache.GetRecord(reagent, query, TooltipItemCallback, tooltip, true);
 
                 if (!reagentStats) {
@@ -6119,10 +6147,10 @@ static void AddItemUseEnchantLine(CGTooltip* tooltip, CGPlayer_C* player, int32_
 
     int32_t recoveryTime = spell.m_recoveryTime;
     int32_t categoryRecoveryTime = spell.m_categoryRecoveryTime;
-    Spell_C_ModifySpellValue(&spell, recoveryTime, 11);
+    Spell_C_ModifySpellValue(&spell, recoveryTime, SPELLMOD_COOLDOWN);
 
-    if (spell.m_attributesExF >= 0) {
-        Spell_C_ModifySpellValue(&spell, categoryRecoveryTime, 11);
+    if (!(spell.m_attributesExF & SPELL_ATTR6::SPELL_ATTR6_NO_CATEGORY_COOLDOWN_MODS)) {
+        Spell_C_ModifySpellValue(&spell, categoryRecoveryTime, SPELLMOD_COOLDOWN);
     }
 
     int32_t spellCooldown = recoveryTime <= categoryRecoveryTime ? categoryRecoveryTime : recoveryTime;
@@ -6221,7 +6249,7 @@ static void AddItemCreatorLines(CGTooltip* tooltip, const ItemStats_C* stats, CG
 
     uint32_t flags = stats->m_flags[0];
 
-    if (!tooltip->m_itemUseLinkInfo && (((flags & 4) && (!stats->m_lockId || (item->m_item->m_itemFieldFlags & 4))) || ((flags & 0x200) && (item->m_item->m_itemFieldFlags & 8)))) {
+    if (!tooltip->m_itemUseLinkInfo && (((flags & ITEM_STATIC_FLAGS::ITEM_FLAG_HAS_LOOT) && (!stats->m_lockId || (item->m_item->m_itemFieldFlags & ITEM_DFLAG_UNLOCKED))) || ((flags & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_WRAPPER) && (item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED)))) {
         tooltip->AddLine(FrameScript_GetText("ITEM_OPENABLE", -1, GENDER_NOT_APPLICABLE), nullptr, greenColor, greenColor, 0);
     } else if (item->GetPageTextID(nullptr) || (item->m_item->m_itemFieldFlags & 0x200)) {
         tooltip->AddLine(FrameScript_GetText("ITEM_READABLE", -1, GENDER_NOT_APPLICABLE), nullptr, greenColor, greenColor, 0);
@@ -6237,11 +6265,11 @@ static void AddItemDisenchantLine(CGTooltip* tooltip, const ItemStats_C* stats, 
     const CImVector& redColor = *reinterpret_cast<const CImVector*>(&s_tooltipRedColor);
     const CImVector& disenchantColor = *reinterpret_cast<const CImVector*>(&s_tooltipDisenchantColor);
     char text[4096];
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], Spell_C_GetTargetingSpell());
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(player->m_unit->m_raceID, player->m_unit->m_classID, Spell_C_GetTargetingSpell());
     SkillLineRec* skill = g_skillLineDB.GetRecord(ability ? ability->m_skillLine : -1);
     SpellRec spell;
 
-    if (!skill || !ability || !g_spellDB.GetRecord(Spell_C_GetTargetingSpell(), &spell) || spell.m_effect[0] != 99) {
+    if (!skill || !ability || !g_spellDB.GetRecord(Spell_C_GetTargetingSpell(), &spell) || spell.m_effect[0] != SPELL_EFFECT_DISENCHANT) {
         return;
     }
 
@@ -6275,7 +6303,7 @@ static int32_t AddItemTradeLines(CGTooltip* tooltip, const ItemStats_C* stats, C
     CGItem_C::ItemPurchaseData* purchase = item->m_itemPurchaseData;
 
     if (purchase) {
-        int32_t timeLeft = purchase->m_refundTimeLeft - player->GetPlayedTime() + 7200;
+        int32_t timeLeft = purchase->m_purchasePlayedTime - player->GetPlayedTime() + CGItem_C::ItemPurchaseData::REFUND_PERIOD_SECONDS;
 
         if (timeLeft > 0 && !item->HasEnchantments()) {
             if (static_cast<uint32_t>(timeLeft - 3660) > 3539) {
@@ -6291,13 +6319,13 @@ static int32_t AddItemTradeLines(CGTooltip* tooltip, const ItemStats_C* stats, C
             tooltip->AddLine(text, nullptr, refundColor, refundColor, 1);
             refundable = 1;
         }
-    } else if ((stats->m_flags[0] & 0x1000) && !(item->m_itemFlags & 4)) {
+    } else if ((stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_ITEM_PURCHASE_RECORD) && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_PURCHASE_DATA_PENDING)) {
         item->RequestItemPurchaseData();
         refundable = 1;
     }
 
     if (item->IsBound() && !item->IsPermanentlyBoundForTrade()) {
-        int32_t timeLeft = item->m_item->m_itemFieldCreatePlayedTime - player->GetPlayedTime() + 7200;
+        int32_t timeLeft = item->m_item->m_itemFieldCreatePlayedTime - player->GetPlayedTime() + CGItem_C::BIND_TRADE_PERIOD_SECONDS;
 
         if (timeLeft > 0) {
             if (static_cast<uint32_t>(timeLeft - 3660) > 3539) {
@@ -6399,7 +6427,7 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
         this->ClearTooltip();
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         this->Hide();
@@ -6409,7 +6437,7 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
     CGPlayer_C* ownerPlayer = nullptr;
 
     if (owner) {
-        ownerPlayer = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(owner, TYPEMASK_PLAYER, __FILE__, __LINE__));
+        ownerPlayer = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(owner, TYPE_PLAYER, __FILE__, __LINE__));
     }
 
     if (!append) {
@@ -6431,9 +6459,9 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
         return this->SetItemNoStats();
     }
 
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(*itemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(*itemGuid, TYPE_ITEM, __FILE__, __LINE__));
     int32_t needsUpdate = 0;
-    int32_t wrapped = (item && (item->m_item->m_itemFieldFlags & 8)) || (this->m_itemUseLinkInfo && this->m_itemLinkInfo.m_wrapped);
+    int32_t wrapped = (item && (item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED)) || (this->m_itemUseLinkInfo && this->m_itemLinkInfo.m_wrapped);
     int32_t randomPropertiesId = 0;
     int32_t useSpell = 0;
     int32_t useCharges = 0;
@@ -6482,7 +6510,7 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
         return 0;
     }
 
-    if (stats->m_flags[0] & 0x2000) {
+    if (stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) {
         const CImVector& greenColor = *reinterpret_cast<const CImVector*>(&s_tooltipGreenColor);
         this->AddLine(FrameScript_GetText("ITEM_SIGNABLE", -1, GENDER_NOT_APPLICABLE), nullptr, greenColor, greenColor, 0);
     }
@@ -6529,7 +6557,7 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
 
                 if (prismatic) {
                     for (uint32_t i = 0; i < 3; i++) {
-                        if (prismatic->m_effect[i] == 8) {
+                        if (prismatic->m_effect[i] == ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_PRISMATIC_SOCKET) {
                             numSockets += prismatic->m_effectPointsMin[i];
                             break;
                         }
@@ -6645,7 +6673,7 @@ int32_t CGTooltip::SetItem(int32_t itemId, const WOWGUID* requester, const WOWGU
 
         int32_t refundable = item ? AddItemTradeLines(this, stats, item, player) : 0;
 
-        if (CursorGetResetMode() != 17 && !refundable && !this->m_itemSkipSellPrice && !skipSellPrice) {
+        if (CursorGetResetMode() != REPAIR_CURSOR && !refundable && !this->m_itemSkipSellPrice && !skipSellPrice) {
             AddItemSellPrice(this, stats, item, player);
         }
     }
@@ -6932,7 +6960,7 @@ int32_t CGTooltip::SetItemDelta(const CGItemStatsSummary* summary, int32_t appen
 // VERIFY: 39a89fbc manual
 // OFFSET: 0x00630C70
 int32_t CGItemStatsSummary::CreateFromTooltip(CGTooltip* tooltip) {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tooltip->m_itemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tooltip->m_itemGuid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item) {
         this->Create(item, tooltip->m_itemDisplayedLevel);
@@ -7039,7 +7067,7 @@ CGItemStatsSummary CGItemStatsSummary::operator-(const CGItemStatsSummary& other
     CGItemStatsSummary result;
     memset(result.m_stats, 0, sizeof(result.m_stats));
     result.m_dps = 0.0f;
-    result.m_flags = 0;
+    result.m_flags = SUMMARY_FLAGS::SUMMARY_NONE;
 
     for (uint32_t i = 0; i < 73; i++) {
         result.m_stats[i] = this->m_stats[i] - other.m_stats[i];
@@ -7093,7 +7121,7 @@ int32_t CGItemStatsSummary::GetItemComparison(CGTooltip* first, CGTooltip* secon
 
     for (int32_t i = 0; i < 2; i++) {
         CGTooltip* tooltip = i ? second : first;
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tooltip->m_itemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tooltip->m_itemGuid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (item) {
             itemIds[i] = item->m_obj->m_entryID;
@@ -7154,7 +7182,11 @@ int32_t SetCompareItem(CGTooltip* tooltip, uint32_t itemId, int32_t offset, int3
         return 0;
     }
 
+#if defined(WOWDECOMP_ARCH_64)
+    uint32_t slots = stats->m_inventoryType < INVTYPE_COUNT ? s_inventoryTypeSlots[stats->m_inventoryType] : 0;
+#else
     uint32_t slots = s_inventoryTypeSlots[stats->m_inventoryType];
+#endif
 
     if (offset == 2) {
         if (stats->m_scalingStatValue && CGMerchantInfo::m_merchant && !shift) {
@@ -7172,9 +7204,9 @@ int32_t SetCompareItem(CGTooltip* tooltip, uint32_t itemId, int32_t offset, int3
     if ((slots & 0x8000) || (slots & 0x10000)) {
         CGItem_C* mainHand = nullptr;
 
-        if (((slots & 0x8000) && (slots & 0x10000)) || stats->m_inventoryType == 17) {
-            mainHand = player->m_bag.GetItemPointer(15);
-            CGItem_C* offHand = player->m_bag.GetItemPointer(16);
+        if (((slots & 0x8000) && (slots & 0x10000)) || stats->m_inventoryType == INVTYPE_2HWEAPON) {
+            mainHand = player->m_bag.GetItemPointer(INVSLOT_MAINHAND);
+            CGItem_C* offHand = player->m_bag.GetItemPointer(INVSLOT_OFFHAND);
 
             if (mainHand != offHand && mainHand && offHand) {
                 item = offset ? mainHand : offHand;
@@ -7189,14 +7221,14 @@ int32_t SetCompareItem(CGTooltip* tooltip, uint32_t itemId, int32_t offset, int3
             }
 
             if (slots & 0x8000) {
-                item = player->m_bag.GetItemPointer(15);
+                item = player->m_bag.GetItemPointer(INVSLOT_MAINHAND);
             } else if (!(slots & 0x10000)) {
                 return 0;
             } else {
-                item = player->m_bag.GetItemPointer(16);
+                item = player->m_bag.GetItemPointer(INVSLOT_OFFHAND);
 
                 if (!item) {
-                    mainHand = player->m_bag.GetItemPointer(15);
+                    mainHand = player->m_bag.GetItemPointer(INVSLOT_MAINHAND);
                     item = mainHand && mainHand->GetInventoryType() == 17 ? mainHand : nullptr;
                 }
             }
@@ -7382,12 +7414,12 @@ void CGTooltip::AddEmpathyText(CGUnit_C* unit, char* buffer, uint32_t size) {
 
     CreatureStats_C* stats = unit->m_creatureCacheEntry;
 
-    if (!stats || !(stats->m_typeFlags & 0x1) || !stats->m_family) {
+    if (!stats || !(stats->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_TAMEABLE) || !stats->m_family) {
         this->AddLine(FrameScript_GetText("NOT_TAMEABLE", -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
         return;
     }
 
-    this->AddLine(FrameScript_GetText(stats->m_typeFlags & 0x10000 ? "TAMEABLE_EXOTIC" : "TAMEABLE", -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
+    this->AddLine(FrameScript_GetText(stats->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_TAMEABLE_EXOTIC ? "TAMEABLE_EXOTIC" : "TAMEABLE", -1, GENDER_NOT_APPLICABLE), nullptr, textColor, textColor, 0);
 
     family = g_creatureFamilyDB.GetRecord(unit->GetCreatureFamily());
 
@@ -7409,7 +7441,7 @@ void CGTooltip::AddEmpathyText(CGUnit_C* unit, char* buffer, uint32_t size) {
 
             SpellRec spell;
 
-            if (g_spellDB.GetRecord(ability->m_spell, &spell) && !(spell.m_attributes & 0xC0) && !ability->m_supercededBySpell && ability->m_acquireMethod == 2) {
+            if (g_spellDB.GetRecord(ability->m_spell, &spell) && !(spell.m_attributes & (SPELL_ATTR0::SPELL_ATTR0_PASSIVE | SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG)) && !ability->m_supercededBySpell && ability->m_acquireMethod == 2) {
                 if (!first) {
                     SStrPack(spells, ", ", sizeof(spells));
                 }
@@ -7438,8 +7470,8 @@ void CGTooltip::AddSkinnableText(CGUnit_C* unit, char* buffer, uint32_t size) {
         SpellRec spell;
         g_spellDB.GetRecord(skinningSpell, &spell);
 
-        for (uint32_t i = 0; i < 3; i++) {
-            if (spell.m_effect[i] != 95) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+            if (spell.m_effect[i] != SPELL_EFFECT_SKINNING) {
                 continue;
             }
 
@@ -7809,7 +7841,7 @@ void CGTooltip::SetObject(const WOWGUID& guid) {
 
     this->ClearTooltip();
 
-    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__));
+    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(guid, TYPE_GAMEOBJECT, __FILE__, __LINE__));
 
     if (!object) {
         this->Hide();
@@ -7853,7 +7885,7 @@ void CGTooltip::SetObject(const WOWGUID& guid) {
 
     if (lock && object->IsValidOpenAction(lock->m_action[0])) {
         switch (lock->m_type[0]) {
-            case 1: {
+            case LOCK_KEY_ITEM: {
                 WOWGUID requester = object->m_obj->m_guid;
                 ItemStats_C* stats = g_itemDBCache.GetRecord(lock->m_index[0], requester, TooltipObjectCallback, this, true);
 
@@ -7864,7 +7896,7 @@ void CGTooltip::SetObject(const WOWGUID& guid) {
 
                 break;
             }
-            case 2: {
+            case LOCK_KEY_SKILL: {
                 int32_t spellId = 0;
                 int32_t skillValue = 0;
                 int32_t requiredSkill = 0;
@@ -7890,7 +7922,7 @@ void CGTooltip::SetObject(const WOWGUID& guid) {
                 this->AddLine(text, nullptr, color, color, 0);
                 break;
             }
-            case 3: {
+            case LOCK_KEY_SPELL: {
                 SpellRec spell;
 
                 if (g_spellDB.GetRecord(lock->m_index[0], &spell)) {
@@ -7979,9 +8011,9 @@ void CGTooltip::SetObject(const WOWGUID& guid) {
         }
     }
 
-    if (this->m_statusBar && object->m_gameObject->m_typeID == 33) {
+    if (this->m_statusBar && object->m_gameObject->m_typeID == TYPE_DESTRUCTIBLE_BUILDING) {
         this->m_healthGuid = this->m_objectGuid;
-        ClntObjMgrSetObjMirrorHandler(this->m_healthGuid, ID_GAMEOBJECT, offsetof(CGGameObjectData, m_animProgress), sizeof(uint8_t), ObjHealthUpdateHandler, this->m_statusBar, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_healthGuid, ID_GAMEOBJECT, offsetof(CGGameObjectData, m_animProgress), sizeof(uint8_t), ObjHealthUpdateHandler, this->m_statusBar, HANDLER_PRIORITY_NORMAL, 0);
         this->m_statusBar->SetMinMaxValues(0.0f, 1.0f);
         this->m_statusBar->SetValue(static_cast<float>(object->m_gameObject->m_animProgress) * 0.0039215689f);
         this->m_statusBar->Show();

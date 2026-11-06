@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "Engine/Source/Model2/Types.h"
 #include "Engine/Source/Tempest/C2Vector.h"
 #include "Engine/Source/Tempest/C3Vector.h"
 #include "Engine/Source/Tempest/C4Quaternion.h"
@@ -52,7 +53,7 @@ class M2CompQuat {
 
 class M2TrackBase {
     public:
-    /* 0000 */ uint16_t m_trackType;
+    /* 0000 */ M2TRACKTYPE m_trackType;
     /* 0002 */ uint16_t m_loopIndex;
     /* 0004 */ M2Array<M2Array<uint32_t> > m_sequenceTimes;
 };
@@ -133,7 +134,7 @@ class M2Color {
 
 class M2Texture {
     public:
-    /* 0000 */ uint32_t m_type;
+    /* 0000 */ M2TEXTURETYPE m_type;
     /* 0004 */ uint32_t m_flags;
     /* 0008 */ M2Array<char> m_filename;
 };
@@ -153,14 +154,14 @@ class M2TextureTransform {
 class M2Material {
     public:
     /* 0000 */ uint16_t m_flags;
-    /* 0002 */ uint16_t m_blendMode;
+    /* 0002 */ M2BLEND m_blendMode;
 };
 
 class M2Attachment {
     public:
     /* 0000 */ uint32_t m_id;
     /* 0004 */ uint16_t m_bone;
-    /* 0006 */ uint16_t unk_0006;
+    /* 0006 */ uint16_t unused_0006;
     /* 0008 */ C3Vector m_position;
     /* 0014 */ M2Track<uint8_t> m_animateAttached;
 };
@@ -170,7 +171,7 @@ class M2Event {
     /* 0000 */ uint32_t m_eventId;
     /* 0004 */ uint32_t m_data;
     /* 0008 */ uint16_t m_bone;
-    /* 000A */ uint16_t unk_000A;
+    /* 000A */ uint16_t unused_000A;
     /* 000C */ C3Vector m_position;
     /* 0018 */ M2TrackBase m_enabled;
 };
@@ -206,7 +207,7 @@ class M2Ribbon {
     public:
     /* 0000 */ uint32_t m_ribbonId;
     /* 0004 */ uint16_t m_boneIndex;
-    /* 0006 */ uint16_t unk_0006;
+    /* 0006 */ uint16_t unused_0006;
     /* 0008 */ C3Vector m_position;
     /* 0014 */ M2Array<uint16_t> m_textureIndices;
     /* 001C */ M2Array<uint16_t> m_materialIndices;
@@ -222,7 +223,7 @@ class M2Ribbon {
     /* 0084 */ M2Track<uint16_t> m_textureSlotTrack;
     /* 0098 */ M2Track<uint8_t> m_visibilityTrack;
     /* 00AC */ int16_t m_priorityPlane;
-    /* 00AE */ uint16_t unk_00AE;
+    /* 00AE */ uint16_t unused_00AE;
 };
 
 class M2Particle {
@@ -234,10 +235,10 @@ class M2Particle {
     /* 0016 */ uint16_t m_textureIndex;
     /* 0018 */ M2Array<char> m_geometryMdl;
     /* 0020 */ M2Array<char> m_recursionMdl;
-    /* 0028 */ uint8_t m_blendMode;
+    /* 0028 */ M2PARTICLEBLENDMODE m_blendMode;
     /* 0029 */ uint8_t m_emitterType;
     /* 002A */ uint16_t m_colorIndex;
-    /* 002C */ uint16_t unk_002C;
+    /* 002C */ uint16_t unused_002C;
     /* 002E */ int16_t m_priorityPlane;
     /* 0030 */ uint16_t m_rows;
     /* 0032 */ uint16_t m_cols;

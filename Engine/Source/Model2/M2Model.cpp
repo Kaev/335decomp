@@ -55,7 +55,7 @@ TSGrowableArray<M2ModelCallback> CM2Model::s_sequenceCallbacks;
 
 // INLINED
 CM2ModelCall::CM2ModelCall() {
-    this->m_type = 0xFFFFFFFF;
+    this->m_type = EModelModQ::MODEL_COMMAND_NOT_QUEUED;
 }
 
 // VERIFY: 35d86a94 auto
@@ -82,7 +82,7 @@ void CM2Model::DetachFromScene() {
     this->m_scenePrev = nullptr;
     this->m_sceneNext = nullptr;
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         for (CM2ModelCall* call = this->m_modelCallList; call; call = call->m_next) {
             call->m_time -= this->m_scene->m_time;
         }
@@ -102,7 +102,7 @@ void CM2Model::DetachFromScene() {
 // VERIFY: d45d8886 auto
 // OFFSET: 0x00823E40
 int32_t CM2Model::CanUpdateNonReadyTextures() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return 0;
     }
 
@@ -134,7 +134,7 @@ void CM2Model::WaitForLoad(const char* reason) {
         AsyncFileReadWait(this->m_shared->m_asyncObject);
     }
 
-    if (this->m_flags & 0x20) {
+    if (this->m_creationFlags & INSTANCE_FLAGS::INSTANCE_INITIALIZE_ON_DEMAND) {
         this->InitializeLoaded();
     }
 }
@@ -142,12 +142,12 @@ void CM2Model::WaitForLoad(const char* reason) {
 // VERIFY: 240e75c9 auto
 // OFFSET: 0x00823F10
 void CM2Model::SetAnimating(int32_t animating) {
-    if (this->m_flags & 0x20) {
+    if (this->m_creationFlags & INSTANCE_FLAGS::INSTANCE_INITIALIZE_ON_DEMAND) {
         if (!animating) {
             goto unlink;
         }
 
-        if (!(this->m_fFlags & 1)) {
+        if (!(this->m_runtimeFlags & 1)) {
             this->WaitForLoad(nullptr);
         }
     }
@@ -188,7 +188,7 @@ static int32_t BatchesMatch(const M2Batch* a, const M2Batch* b, const M2SkinSect
 
 // VERIFY: bf4ba22e auto
 // OFFSET: 0x00823FE0
-void CM2Model::SetSequenceCallback(void* callback, uint64_t param) {
+void CM2Model::SetSequenceCallback(M2SequenceCallback callback, uint64_t param) {
     if (this->m_sequenceCallback == callback && this->m_sequenceCallbackParam == param) {
         return;
     }
@@ -196,22 +196,22 @@ void CM2Model::SetSequenceCallback(void* callback, uint64_t param) {
     this->m_sequenceCallbackParam = param;
     this->m_sequenceCallback = callback;
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
     M2Data* data = this->m_shared->m_data;
 
     if (callback) {
-        this->m_fFlags |= 0x400000;
+        this->m_runtimeFlags |= 0x400000;
     } else if (data->m_sequences.m_count <= 1 && (!this->m_eventCallback || !data->m_events.m_count)) {
-        this->m_fFlags &= ~0x400000u;
+        this->m_runtimeFlags &= ~0x400000u;
     }
 }
 
 // VERIFY: 673d0acf auto
 // OFFSET: 0x00824060
-void CM2Model::SetEventCallback(void* callback, uint64_t param) {
+void CM2Model::SetEventCallback(M2EventCallback callback, uint64_t param) {
     if (this->m_eventCallback == callback && this->m_eventCallbackParam == param) {
         return;
     }
@@ -219,7 +219,7 @@ void CM2Model::SetEventCallback(void* callback, uint64_t param) {
     this->m_eventCallbackParam = param;
     this->m_eventCallback = callback;
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
@@ -227,17 +227,17 @@ void CM2Model::SetEventCallback(void* callback, uint64_t param) {
 
     if (!callback || !data->m_events.m_count) {
         if (!this->m_sequenceCallback && data->m_sequences.m_count <= 1) {
-            this->m_fFlags &= ~0x400000u;
+            this->m_runtimeFlags &= ~0x400000u;
         }
     } else {
-        this->m_fFlags |= 0x400000;
+        this->m_runtimeFlags |= 0x400000;
     }
 }
 
 // VERIFY: af6c7545 manual
 // OFFSET: 0x008240F0
 void CM2Model::SetLightEnabled(uint32_t index, uint32_t enabled) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         this->m_lights[index].m_enabled = enabled;
         return;
     }
@@ -245,7 +245,7 @@ void CM2Model::SetLightEnabled(uint32_t index, uint32_t enabled) {
     CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
     if (call) {
-        call->m_type = 10;
+        call->m_type = EModelModQ::MODEL_SET_LIGHT_ENABLED;
         call->m_next = nullptr;
         call->m_time = this->m_scene->m_time;
         call->m_args[0] = index;
@@ -257,8 +257,8 @@ void CM2Model::SetLightEnabled(uint32_t index, uint32_t enabled) {
 
 // VERIFY: 15a8f3dc auto
 // OFFSET: 0x00824170
-void* CM2Model::GetCameraByIndex(uint32_t index) {
-    if (!(this->m_fFlags & 1)) {
+CCamera* CM2Model::GetCameraByIndex(uint32_t index) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -268,7 +268,7 @@ void* CM2Model::GetCameraByIndex(uint32_t index) {
 // VERIFY: 38985dd6 auto
 // OFFSET: 0x008241D0
 int32_t CM2Model::HasLiveRibbons() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return 0;
     }
 
@@ -286,7 +286,7 @@ int32_t CM2Model::HasLiveRibbons() {
 // VERIFY: fdbbd9d7 manual
 // OFFSET: 0x00824230
 void CM2Model::SetRibbonsEnabled(uint32_t enabled) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         int32_t count = this->m_shared->m_data->m_ribbons.m_count;
 
         for (int32_t i = 0; i < count; i++) {
@@ -299,7 +299,7 @@ void CM2Model::SetRibbonsEnabled(uint32_t enabled) {
     CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
     if (call) {
-        call->m_type = 13;
+        call->m_type = EModelModQ::MODEL_SET_RIBBONS_ENABLED;
         call->m_next = nullptr;
         call->m_time = this->m_scene->m_time;
         call->m_args[0] = enabled;
@@ -311,7 +311,7 @@ void CM2Model::SetRibbonsEnabled(uint32_t enabled) {
 // VERIFY: 8386034a manual
 // OFFSET: 0x008242C0
 int32_t CM2Model::HasLiveParticles() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return 0;
     }
 
@@ -329,7 +329,7 @@ int32_t CM2Model::HasLiveParticles() {
 // VERIFY: b133747e auto
 // OFFSET: 0x00824320
 uint32_t CM2Model::GetInstanceCountMax() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -339,7 +339,7 @@ uint32_t CM2Model::GetInstanceCountMax() {
 // VERIFY: 1593de47 auto
 // OFFSET: 0x00824380
 uint32_t CM2Model::GetCurrentLightCount() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -365,13 +365,13 @@ void CM2Model::ChangeEmittersFrameOfReference(const C44Matrix* matrix) {
 // VERIFY: 2e7cc77d auto
 // OFFSET: 0x00824460
 void CM2Model::ChangeFrameOfReference(const C44Matrix* matrix) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
     if (matrix) {
-        void* previous = this->m_frameOfReference;
-        this->m_frameOfReference = const_cast<C44Matrix*>(matrix);
+        const C44Matrix* previous = this->m_frameOfReference;
+        this->m_frameOfReference = matrix;
 
         if (!previous) {
             C44Matrix inverse = matrix->AffineInverse();
@@ -379,7 +379,7 @@ void CM2Model::ChangeFrameOfReference(const C44Matrix* matrix) {
         }
     } else {
         if (this->m_frameOfReference) {
-            this->ChangeEmittersFrameOfReference(static_cast<C44Matrix*>(this->m_frameOfReference));
+            this->ChangeEmittersFrameOfReference(this->m_frameOfReference);
         }
 
         this->m_frameOfReference = nullptr;
@@ -426,7 +426,7 @@ void CM2Model::UnlinkFromCallbackList() {
 int32_t CM2Model::IsBatchDoodadCompatible(M2Batch* batch) {
     uint32_t cacheFlags = M2GetCacheFlags();
 
-    if ((cacheFlags & 0x20) && (this->m_fFlags & 0x10) && (this->m_shared->m_data->m_bones.m_count > 1 || !(cacheFlags & 0x40)) && (batch->m_flags & 0x10)) {
+    if ((cacheFlags & CM2Cache::CACHE_FLAGS::CACHE_BATCH_DOODADS) && (this->m_runtimeFlags & 0x10) && (this->m_shared->m_data->m_bones.m_count > 1 || !(cacheFlags & CM2Cache::CACHE_FLAGS::CACHE_SINGLE_BONE_SHARED_VERTICES)) && (batch->m_flags & 0x10)) {
         CM2Lighting* lighting = this->m_currentLighting;
 
         if (!lighting || !lighting->m_lightCount) {
@@ -443,7 +443,7 @@ void CM2Model::ComputeLoadProgress(int64_t& loaded, int64_t& total) {
     SFile::FileGetIsLocalAmount(this->m_shared->m_fileName, loaded, total);
     total++;
 
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         loaded++;
 
         for (uint32_t i = 0; i < this->m_shared->m_data->m_textures.m_count; i++) {
@@ -465,11 +465,11 @@ CM2Lighting::CM2Lighting() {
     this->m_sphere4.r = 0.0f;
     this->m_sphere4.c.y = 0.0f;
     this->m_sphere4.c.z = 0.0f;
-    this->m_vector18 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector24 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector30 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector3C = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector48 = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_redDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_greenDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_blueDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_luminanceDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_diffuseColorSum = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunAmbient = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunDiffuse = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunSpecular = C3Vector(0.0f, 0.0f, 0.0f);
@@ -528,7 +528,7 @@ static void __fastcall ComputeWorldTransformBasis(C44Matrix* matrix, const C3Vec
 // VERIFY: b81a5759 manual
 // OFFSET: 0x00824D30
 void CM2Model::FreeExternalResources() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
@@ -589,8 +589,8 @@ int32_t CM2Model::Release() {
 // VERIFY: f4fc2dd4 manual
 // OFFSET: 0x00824F00
 uint32_t CM2Model::IsLoaded(int32_t wait, int32_t recursive) {
-    if (this->m_flags & 0x20) {
-        if (this->m_fFlags & 1) {
+    if (this->m_creationFlags & INSTANCE_FLAGS::INSTANCE_INITIALIZE_ON_DEMAND) {
+        if (this->m_runtimeFlags & 1) {
             return 1;
         }
 
@@ -600,18 +600,18 @@ uint32_t CM2Model::IsLoaded(int32_t wait, int32_t recursive) {
 
         uint32_t sharedFlags = this->m_shared->m_flags;
 
-        return (this->m_fFlags & 1) | (((sharedFlags & (2 * sharedFlags)) >> 1) & 1);
+        return (this->m_runtimeFlags & 1) | (((sharedFlags & (2 * sharedFlags)) >> 1) & 1);
     }
 
-    if (!(this->m_fFlags & 1) && wait) {
+    if (!(this->m_runtimeFlags & 1) && wait) {
         this->WaitForLoad(nullptr);
     }
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return 0;
     }
 
-    if (!recursive || (this->m_fFlags & 0x100)) {
+    if (!recursive || (this->m_runtimeFlags & 0x100)) {
         return 1;
     }
 
@@ -621,7 +621,7 @@ uint32_t CM2Model::IsLoaded(int32_t wait, int32_t recursive) {
         }
     }
 
-    this->m_fFlags |= 0x100;
+    this->m_runtimeFlags |= 0x100;
 
     return 1;
 }
@@ -629,12 +629,12 @@ uint32_t CM2Model::IsLoaded(int32_t wait, int32_t recursive) {
 // VERIFY: 1574132e auto
 // OFFSET: 0x00824FC0
 int32_t CM2Model::IsDrawable(int32_t wait, int32_t recursive) {
-    if (!(this->m_fFlags & 1) && wait) {
+    if (!(this->m_runtimeFlags & 1) && wait) {
         this->WaitForLoad(nullptr);
     }
 
-    if (!(this->m_fFlags & 2)) {
-        if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 2)) {
+        if (!(this->m_runtimeFlags & 1)) {
             return 0;
         }
 
@@ -644,17 +644,17 @@ int32_t CM2Model::IsDrawable(int32_t wait, int32_t recursive) {
             }
         }
 
-        this->m_fFlags |= 2;
+        this->m_runtimeFlags |= 2;
     }
 
-    if (recursive && !(this->m_fFlags & 0x200)) {
+    if (recursive && !(this->m_runtimeFlags & 0x200)) {
         for (CM2Model* model = this->m_attachList; model; model = model->m_attachNext) {
             if (!model->IsDrawable(wait, 1)) {
                 return 0;
             }
         }
 
-        this->m_fFlags |= 0x200;
+        this->m_runtimeFlags |= 0x200;
     }
 
     return 1;
@@ -669,7 +669,7 @@ void CM2Model::LinkToAsyncHeadRecursive(int32_t textures) {
         AsyncFileReadLinkObject(object, 1);
     }
 
-    if ((this->m_fFlags & 1) && textures) {
+    if ((this->m_runtimeFlags & 1) && textures) {
         for (uint32_t i = 0; i < this->m_shared->m_data->m_textures.m_count; i++) {
             if (this->m_textures[i]) {
                 TextureIncreasePriority(this->m_textures[i]);
@@ -696,7 +696,7 @@ void CM2Model::UpdateLoaded() {
     CM2Model* model = this;
 
     do {
-        if (!model->IsLoaded(0, !(model->m_flags & 0x20))) {
+        if (!model->IsLoaded(0, !(model->m_creationFlags & INSTANCE_FLAGS::INSTANCE_INITIALIZE_ON_DEMAND))) {
             break;
         }
 
@@ -741,18 +741,18 @@ void CM2Model::SetWorldTransform(const C3Vector& position, float rotation, float
     matrix.Scale(scale);
     matrix.d0 = position.x;
     matrix.d1 = position.y;
-    this->m_fFlags |= 0x8000;
+    this->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
     matrix.d2 = position.z;
 }
 
 // VERIFY: ceb10740 manual
 // OFFSET: 0x00825260
 void CM2Model::ReplaceTexture(uint32_t type, CTexture* texture) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 0;
+            call->m_type = EModelModQ::MODEL_REPLACE_TEXTURE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = type;
@@ -779,7 +779,7 @@ void CM2Model::ReplaceTexture(uint32_t type, CTexture* texture) {
             this->m_textures[i] = reinterpret_cast<CTexture*>(HandleDuplicate(reinterpret_cast<HOBJECT>(texture)));
 
             if (!TextureGetGxTex(this->m_textures[i], 0, nullptr)) {
-                this->m_fFlags &= ~2u;
+                this->m_runtimeFlags &= ~2u;
             }
         } else {
             this->m_textures[i] = nullptr;
@@ -796,13 +796,13 @@ void CM2Model::ReplaceTexture(uint32_t type, CTexture* texture) {
         }
     }
 
-    this->m_fFlags &= ~0x10u;
+    this->m_runtimeFlags &= ~0x10u;
 }
 
 // VERIFY: 859397f9 manual
 // OFFSET: 0x00825410
 void CM2Model::ReplaceParticleColor(uint32_t id, CImVector color0, CImVector color1, CImVector color2) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         M2Data* data = this->m_shared->m_data;
 
         for (uint32_t i = 0; i < data->m_particles.m_count; i++) {
@@ -817,7 +817,7 @@ void CM2Model::ReplaceParticleColor(uint32_t id, CImVector color0, CImVector col
     CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
     if (call) {
-        call->m_type = 11;
+        call->m_type = EModelModQ::MODEL_REPLACE_PARTICLE_COLOR;
         call->m_next = nullptr;
         call->m_time = this->m_scene->m_time;
         call->m_args[0] = id;
@@ -832,7 +832,7 @@ void CM2Model::ReplaceParticleColor(uint32_t id, CImVector color0, CImVector col
 // VERIFY: bf0dc568 manual
 // OFFSET: 0x008254F0
 CAaBox CM2Model::GetMaxBoundingBoxPlusAttachments() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -865,7 +865,7 @@ CAaBox CM2Model::GetMaxBoundingBoxPlusAttachments() {
 // VERIFY: fbee199d manual
 // OFFSET: 0x00825660
 CAaSphere CM2Model::GetMaxBoundingSpherePlusAttachments() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -894,7 +894,7 @@ CAaSphere CM2Model::GetMaxBoundingSpherePlusAttachments() {
 // VERIFY: 4e809ba8 manual
 // OFFSET: 0x00825750
 CAaBox CM2Model::GetCurrentBoundingBox() {
-    if (!(this->m_fFlags & 1) || !(this->m_fFlags & 0x8000)) {
+    if (!(this->m_runtimeFlags & 1) || !(this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
         CAaBox result;
         result.b.x = FLT_MAX;
         result.b.y = FLT_MAX;
@@ -938,7 +938,7 @@ CAaBox CM2Model::GetCurrentBoundingBox() {
     for (uint32_t i = 0; i < this->m_shared->m_data->m_particles.m_count; i++) {
         CParticleEmitter2* emitter = this->m_particleEmitters[i];
 
-        if (emitter->m_flags & 0x200) {
+        if (emitter->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
             box |= emitter->WorldBounds();
         }
     }
@@ -953,7 +953,7 @@ CAaBox CM2Model::GetCurrentBoundingBox() {
 // VERIFY: 21639f35 manual
 // OFFSET: 0x00825A60
 CAaBox CM2Model::GetSplitBodyBoundingBox(uint32_t boneId) {
-    if (!(this->m_fFlags & 1) || !(this->m_fFlags & 0x8000)) {
+    if (!(this->m_runtimeFlags & 1) || !(this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
         CAaBox result;
         result.b.x = FLT_MAX;
         result.b.y = FLT_MAX;
@@ -1007,7 +1007,7 @@ CAaBox CM2Model::GetSplitBodyBoundingBox(uint32_t boneId) {
     for (uint32_t i = 0; i < this->m_shared->m_data->m_particles.m_count; i++) {
         CParticleEmitter2* emitter = this->m_particleEmitters[i];
 
-        if (emitter->m_flags & 0x200) {
+        if (emitter->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
             box |= emitter->WorldBounds();
         }
     }
@@ -1082,7 +1082,7 @@ int32_t CM2Model::HasSequence(const M2Data* data, uint32_t id) {
 // VERIFY: 73b3e0d6 auto
 // OFFSET: 0x00825EE0
 int32_t CM2Model::HasSequence(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1093,10 +1093,10 @@ int32_t CM2Model::HasSequence(uint32_t id) {
 // OFFSET: 0x00825F40
 uint32_t CM2Model::ResolveSequenceFallback(uint32_t id) {
     if (id >= ANIM_COUNT) {
-        return 0xFFFFFFFF;
+        return INVALID_ANIMATION;
     }
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1130,17 +1130,17 @@ uint32_t CM2Model::ResolveSequenceFallback(uint32_t id) {
         }
     }
 
-    return 0xFFFFFFFF;
+    return INVALID_ANIMATION;
 }
 
 // VERIFY: af94bf41 manual
 // OFFSET: 0x00826050
 int32_t CM2Model::IsSequenceLoaded(uint32_t id) {
-    if (id >= 506) {
+    if (id >= ANIM_COUNT) {
         return 0;
     }
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1196,7 +1196,7 @@ uint16_t CM2Model::FindSequenceIndex(const M2Data* data, uint32_t id, int32_t va
 // VERIFY: 5546bff4 manual
 // OFFSET: 0x008261B0
 uint32_t CM2Model::FindSequenceVariationCount(const M2Data* data, uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1245,7 +1245,7 @@ uint32_t CM2Model::FindSequenceVariationCount(const M2Data* data, uint32_t id) {
 // VERIFY: 339ad9b4 auto
 // OFFSET: 0x008262F0
 uint32_t CM2Model::GetSequenceVariationCount(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1320,7 +1320,7 @@ M2SequenceFallback* CM2Model::SequenceFallbackById(M2SequenceFallback* result, u
 // VERIFY: ba1ac68b auto
 // OFFSET: 0x008264B0
 int32_t CM2Model::HasBone(uint32_t boneId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1332,7 +1332,7 @@ int32_t CM2Model::HasBone(uint32_t boneId) {
 // VERIFY: addba282 manual
 // OFFSET: 0x00826530
 C3Vector CM2Model::GetBonePivot(uint32_t boneId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1357,11 +1357,11 @@ C3Vector CM2Model::GetBonePivot(uint32_t boneId) {
 // VERIFY: 5861eddd manual
 // OFFSET: 0x008265E0
 void CM2Model::SetBoneFlags(uint32_t boneId, uint32_t flags, uint32_t mask) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 4;
+            call->m_type = EModelModQ::MODEL_SET_BONE_FLAGS;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = boneId;
@@ -1393,7 +1393,7 @@ void CM2Model::SetBoneFlags(uint32_t boneId, uint32_t flags, uint32_t mask) {
 // VERIFY: 5b14b345 manual
 // OFFSET: 0x008266B0
 int32_t CM2Model::GetBoneSequenceInfo(uint32_t boneId, M2BoneSequenceInfo& info) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1435,7 +1435,7 @@ int32_t CM2Model::GetBoneSequenceInfo(uint32_t boneId, M2BoneSequenceInfo& info)
 // VERIFY: 271ac2da manual
 // OFFSET: 0x008267E0
 uint32_t CM2Model::GetBoneSequenceId(uint32_t boneId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1464,7 +1464,7 @@ uint32_t CM2Model::GetBoneSequenceAnimId(uint32_t boneId, uint32_t* variation) {
         *variation = 0;
     }
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1480,13 +1480,13 @@ uint32_t CM2Model::GetBoneSequenceAnimId(uint32_t boneId, uint32_t* variation) {
     }
 
     if (index >= data->m_bones.m_count) {
-        return 0xFFFFFFFF;
+        return INVALID_ANIMATION;
     }
 
     uint16_t sequenceIndex = this->m_bones[index].m_sequence.m_sequenceIndex;
 
     if (sequenceIndex >= data->m_sequences.m_count) {
-        return 0xFFFFFFFF;
+        return INVALID_ANIMATION;
     }
 
     if (variation) {
@@ -1499,7 +1499,7 @@ uint32_t CM2Model::GetBoneSequenceAnimId(uint32_t boneId, uint32_t* variation) {
 // VERIFY: a5462ec6 manual
 // OFFSET: 0x00826930
 float CM2Model::GetBoneSequenceSpeed(uint32_t boneId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1524,7 +1524,7 @@ float CM2Model::GetBoneSequenceSpeed(uint32_t boneId) {
 // VERIFY: 6b99d12c manual
 // OFFSET: 0x008269C0
 int32_t CM2Model::OnSequenceInterrupted(uint32_t boneId, uint16_t boneIndex) {
-    M2SequenceCallback callback = reinterpret_cast<M2SequenceCallback>(this->m_sequenceCallback);
+    M2SequenceCallback callback = this->m_sequenceCallback;
     M2ModelBone* bone = &this->m_bones[boneIndex];
 
     if (!callback || bone->m_sequence.m_sequenceIndex == 0xFFFF || bone->m_sequence.m_finished) {
@@ -1549,7 +1549,7 @@ int32_t CM2Model::OnSequenceInterrupted(uint32_t boneId, uint16_t boneIndex) {
 // VERIFY: a5ebd842 manual
 // OFFSET: 0x00826A60
 int32_t CM2Model::BoneHasParent(uint32_t boneId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1700,11 +1700,11 @@ void CM2Model::PickRandomSequenceVariation(uint32_t* variation, uint16_t* sequen
 // VERIFY: b25072e9 manual
 // OFFSET: 0x00826ED0
 void CM2Model::SetBoneSequenceTime(uint32_t boneId, uint32_t time) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 7;
+            call->m_type = EModelModQ::MODEL_SET_BONE_SEQUENCE_TIME;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = boneId;
@@ -1748,11 +1748,11 @@ void CM2Model::SetBoneSequenceTime(uint32_t boneId, uint32_t time) {
 // VERIFY: 1344bdcc manual
 // OFFSET: 0x00827000
 void CM2Model::SetBoneSequenceSpeed(uint32_t boneId, float speed) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 8;
+            call->m_type = EModelModQ::MODEL_SET_BONE_SEQUENCE_SPEED;
             call->m_next = nullptr;
             *reinterpret_cast<float*>(&call->m_args[1]) = speed;
             call->m_time = this->m_scene->m_time;
@@ -1800,11 +1800,11 @@ void CM2Model::SetBoneSequenceSpeed(uint32_t boneId, float speed) {
 // VERIFY: 13ebc48b manual
 // OFFSET: 0x00827190
 void CM2Model::LoadSequence(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 14;
+            call->m_type = EModelModQ::MODEL_LOAD_SEQUENCE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = id;
@@ -1864,11 +1864,11 @@ void CM2Model::LoadSequence(uint32_t id) {
 // VERIFY: 0b075a87 manual
 // OFFSET: 0x008272F0
 void CM2Model::SetBoneProceduralTransform(uint32_t boneId, const C44Matrix& matrix) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 9;
+            call->m_type = EModelModQ::MODEL_SET_BONE_PROCEDURAL_TRANSFORM;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = boneId;
@@ -1907,7 +1907,7 @@ void CM2Model::SetBoneProceduralTransform(uint32_t boneId, const C44Matrix& matr
 // VERIFY: 9445f766 auto
 // OFFSET: 0x008273D0
 int32_t CM2Model::HasAttachment(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1923,7 +1923,7 @@ int32_t CM2Model::HasAttachment(uint32_t id) {
 // VERIFY: f01becc2 manual
 // OFFSET: 0x00827460
 C3Vector CM2Model::GetAttachmentPivot(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -1944,13 +1944,13 @@ void CM2Model::DetachFromParent() {
         this->m_attachNext->m_attachPrev = this->m_attachPrev;
     }
 
-    this->m_fFlags &= ~0x40000u;
+    this->m_runtimeFlags &= ~0x40000u;
 
     bool release = this->m_refCount-- == 1;
     this->m_attachPrev = nullptr;
     this->m_attachNext = nullptr;
     this->m_attachParent = nullptr;
-    this->m_attachmentId = 0xFFFFFFFF;
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
     this->m_frameOfReference = nullptr;
 
     if (release) {
@@ -1975,13 +1975,13 @@ void CM2Model::DetachAllChildrenById(uint32_t id) {
                 model->m_attachNext->m_attachPrev = model->m_attachPrev;
             }
 
-            model->m_fFlags &= ~0x40000u;
+            model->m_runtimeFlags &= ~0x40000u;
 
             bool release = model->m_refCount-- == 1;
             model->m_attachPrev = nullptr;
             model->m_attachNext = nullptr;
             model->m_attachParent = nullptr;
-            model->m_attachmentId = 0xFFFFFFFF;
+            model->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
             model->m_frameOfReference = nullptr;
 
             if (release) {
@@ -1996,7 +1996,7 @@ void CM2Model::DetachAllChildrenById(uint32_t id) {
 // VERIFY: ad2a989b manual
 // OFFSET: 0x008275F0
 int32_t CM2Model::HasEvent(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2030,7 +2030,7 @@ int32_t CM2Model::FindEvent(uint32_t id, C3Vector** position, uint16_t* bone) {
 // VERIFY: 3c23ff24 manual
 // OFFSET: 0x008276F0
 C3Vector CM2Model::GetEventPivot(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2047,7 +2047,7 @@ C3Vector CM2Model::GetEventPivot(uint32_t id) {
 // VERIFY: 64018054 manual
 // OFFSET: 0x00827780
 uint32_t CM2Model::GetEventSequenceTime(uint32_t sequenceId, uint32_t eventId) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2099,7 +2099,7 @@ uint32_t CM2Model::GetEventSequenceTime(uint32_t sequenceId, uint32_t eventId) {
 // VERIFY: db72d94c manual
 // OFFSET: 0x008278E0
 int32_t CM2Model::HasCamera(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2110,7 +2110,7 @@ int32_t CM2Model::HasCamera(uint32_t id) {
 // VERIFY: 37987c84 manual
 // OFFSET: 0x00827960
 CCamera* CM2Model::GetCameraById(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2132,23 +2132,23 @@ CCamera* CM2Model::GetCameraById(uint32_t id) {
 // VERIFY: be32ea2b manual
 // OFFSET: 0x008279F0
 void CM2Model::SetEmittersEnabled(int32_t enabled) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         uint32_t count = this->m_shared->m_data->m_particles.m_count;
 
         for (uint32_t i = 0; i < count; i++) {
             CParticleEmitter2* emitter = this->m_particleEmitters[i];
 
             if (enabled) {
-                emitter->m_flags |= 2;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::USER_ENABLED;
             } else {
-                emitter->m_flags &= ~2u;
+                emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::USER_ENABLED;
             }
         }
     } else {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 12;
+            call->m_type = EModelModQ::MODEL_SET_EMITTERS_ENABLED;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = enabled;
@@ -2161,7 +2161,7 @@ void CM2Model::SetEmittersEnabled(int32_t enabled) {
 // VERIFY: 962d124c manual
 // OFFSET: 0x00827A90
 uint32_t CM2Model::GetNumGeometryBatches() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2210,7 +2210,7 @@ uint32_t CM2Model::GetNumGeometryBatches() {
 // VERIFY: 71314806 manual
 // OFFSET: 0x00827E30
 uint32_t CM2Model::GetNumCombinableDoodadBatches() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2263,7 +2263,7 @@ uint32_t CM2Model::GetNumCombinableDoodadBatches() {
 // VERIFY: d7b7ec48 manual
 // OFFSET: 0x00827F70
 uint32_t CM2Model::GetNumPrimitives() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -2421,7 +2421,7 @@ void M2AnimateTrack<M2CompQuat, C4Quaternion>(CM2Model* model, M2ModelBone* bone
         float ratio;
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             M2CompQuat& key = keys[modelTrack.m_currentKey];
             modelTrack.m_currentValue.x = key.m_values[0] * 0.000030518044f - 1.0f;
             modelTrack.m_currentValue.y = key.m_values[1] * 0.000030518044f - 1.0f;
@@ -2446,7 +2446,7 @@ void M2AnimateTrack<M2CompQuat, C4Quaternion>(CM2Model* model, M2ModelBone* bone
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -2484,14 +2484,14 @@ void M2AnimateTrack<M2CompQuat, C4Quaternion>(CM2Model* model, M2ModelBone* bone
 // VERIFY: 4a40646d manual
 // OFFSET: 0x00828A00
 void CM2Model::AnimateST() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
     M2Data* data = this->m_shared->m_data;
     CM2Model* parent = this->m_attachParent;
 
-    if (!parent || (this->m_fFlags ^= (this->m_fFlags ^ parent->m_fFlags) & 0x8000, parent->m_flags & 1)) {
+    if (!parent || (this->m_runtimeFlags ^= (this->m_runtimeFlags ^ parent->m_runtimeFlags) & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID, parent->m_creationFlags & INSTANCE_FLAGS::INSTANCE_DISABLE_DEPTH_SORT_AND_CHILD_INHERITANCE)) {
         this->m_currentLighting = &this->m_lighting;
     } else {
         this->m_currentLighting = parent->m_currentLighting;
@@ -2583,8 +2583,8 @@ void CM2Model::AnimateST() {
 
         emitter->SetDataEnabled(ribbon->m_visibilityTrack.m_currentValue != 0);
 
-        if (this->m_fFlags & 0x8000) {
-            emitter->SetPos(transform, C3Vector(0.0f, 0.0f, 0.0f), static_cast<const C44Matrix*>(this->m_frameOfReference));
+        if (this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID) {
+            emitter->SetPos(transform, C3Vector(0.0f, 0.0f, 0.0f), this->m_frameOfReference);
             emitter->Update(deltaTime, ribbon->m_visibilityTrack.m_currentValue == 0);
         }
     }
@@ -2593,7 +2593,7 @@ void CM2Model::AnimateST() {
         this->AnimateParticleST(deltaTime, i);
     }
 
-    if (this->m_fFlags & 8) {
+    if (this->m_runtimeFlags & 8) {
         CM2Model** head = &this->m_scene->m_drawList;
         this->m_drawPrev = head;
         this->m_drawNext = *head;
@@ -2604,7 +2604,7 @@ void CM2Model::AnimateST() {
         }
     }
 
-    if ((this->m_fFlags & 0x400) && (this->m_fFlags & 0x10000)) {
+    if ((this->m_runtimeFlags & 0x400) && (this->m_runtimeFlags & 0x10000)) {
         CM2Model** head = &this->m_scene->m_particleList;
         this->m_particlePrev = head;
         this->m_particleNext = *head;
@@ -2619,7 +2619,7 @@ void CM2Model::AnimateST() {
         bool hidden;
 
         if (child->m_attachmentIndex == 0xFFFF) {
-            hidden = !(child->m_fFlags & 0x40000);
+            hidden = !(child->m_runtimeFlags & 0x40000);
         } else {
             hidden = this->m_attachments[child->m_attachmentIndex].m_currentValue == 0;
         }
@@ -2639,7 +2639,7 @@ void CM2Model::AnimateST() {
 int32_t CM2Model::SetIndices() {
     CGxBuf* buf = this->m_optGeo->m_indexBuf;
 
-    if (!buf->unk_001C || !buf->unk_001D) {
+    if (!buf->m_hasData || !buf->m_valid) {
         uint16_t* indices = reinterpret_cast<uint16_t*>(g_theGxDevicePtr->BufLock(buf));
 
         if (!indices) {
@@ -2648,10 +2648,10 @@ int32_t CM2Model::SetIndices() {
 
         CM2Shared* shared = this->m_shared;
         M2SkinProfile* skin = shared->m_skinData;
-        uint32_t copyIndices = shared->m_cache->m_flags & 8;
+        uint32_t copyIndices = shared->m_cache->m_flags & CM2Cache::CACHE_FLAGS::CACHE_GPU_SHADERS;
         int32_t singleBone;
 
-        if (shared->m_data->m_bones.m_count != 1 || (singleBone = 1, !(this->m_shared->m_cache->m_flags & 0x40))) {
+        if (shared->m_data->m_bones.m_count != 1 || (singleBone = 1, !(this->m_shared->m_cache->m_flags & CM2Cache::CACHE_FLAGS::CACHE_SINGLE_BONE_SHARED_VERTICES))) {
             singleBone = 0;
         }
 
@@ -2683,7 +2683,7 @@ int32_t CM2Model::SetIndices() {
 
         buf = this->m_optGeo->m_indexBuf;
         g_theGxDevicePtr->BufUnlock(buf, 0);
-        buf->unk_001C = 1;
+        buf->m_hasData = 1;
     }
 
     g_theGxDevicePtr->PrimIndexPtr(this->m_optGeo->m_indexBuf);
@@ -2693,7 +2693,7 @@ int32_t CM2Model::SetIndices() {
 // VERIFY: d0a96bb9 manual
 // OFFSET: 0x00829160
 int32_t CM2Model::SetVertices(int32_t optimized, M2SkinSection* section, int32_t texCoord) {
-    CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, 32, section->m_vertexCount);
+    CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(CGxVertexPNT0), section->m_vertexCount);
     uint8_t* vertices = reinterpret_cast<uint8_t*>(g_theGxDevicePtr->BufLock(buf));
 
     if (!vertices) {
@@ -2710,7 +2710,7 @@ int32_t CM2Model::SetVertices(int32_t optimized, M2SkinSection* section, int32_t
             if (this->m_skinSections[sectionIndex]) {
                 M2SkinSection* batchSection = &skin->m_skinSections[sectionIndex];
                 CM2Model::s_transformVertices[batchSection->m_boneInfluences](this, batchSection, vertices, texCoord);
-                vertices += 32 * batchSection->m_vertexCount;
+                vertices += static_cast<int32_t>(sizeof(CGxVertexPNT0)) * batchSection->m_vertexCount;
             }
         }
     } else {
@@ -2718,7 +2718,7 @@ int32_t CM2Model::SetVertices(int32_t optimized, M2SkinSection* section, int32_t
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
     GxPrimVertexPtr(buf, GxVBF_PNT);
     return 1;
 }
@@ -2868,7 +2868,7 @@ int32_t CM2Model::GetRegionBounds(M2SkinSection* section, CAaBox& box, C44Matrix
 // VERIFY: 15cdfc90 manual
 // OFFSET: 0x00829AA0
 void CM2Model::RenderModelBatchesForProjectedTexture() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -3095,9 +3095,9 @@ void CM2Model::TransformVertices_cpp(CM2Model* model, M2SkinSection* section, ui
     const C44Matrix* bones = model->m_boneMatrices;
     M2Vertex* vertex = &model->m_shared->m_data->m_vertices[section->m_vertexStart];
     M2Vertex* end = vertex + section->m_vertexCount;
-    float* out = reinterpret_cast<float*>(vertices);
+    CGxVertexPNT0* out = reinterpret_cast<CGxVertexPNT0*>(vertices);
 
-    for (; vertex < end; vertex++, out += 8) {
+    for (; vertex < end; vertex++, out++) {
         if (*reinterpret_cast<uint32_t*>(&vertex->m_weights) != weights || *reinterpret_cast<uint32_t*>(&vertex->m_indices) != indices) {
             weights = *reinterpret_cast<uint32_t*>(&vertex->m_weights);
             indices = *reinterpret_cast<uint32_t*>(&vertex->m_indices);
@@ -3136,14 +3136,14 @@ void CM2Model::TransformVertices_cpp(CM2Model* model, M2SkinSection* section, ui
         }
 
         C3Vector position = vertex->m_position * matrix;
-        out[0] = position.x;
-        out[1] = position.y;
-        out[2] = position.z;
-        out[3] = vertex->m_normal.y * matrix.b0 + matrix.c0 * vertex->m_normal.z + matrix.a0 * vertex->m_normal.x;
-        out[4] = vertex->m_normal.y * matrix.b1 + matrix.c1 * vertex->m_normal.z + matrix.a1 * vertex->m_normal.x;
-        out[5] = vertex->m_normal.y * matrix.b2 + matrix.c2 * vertex->m_normal.z + matrix.a2 * vertex->m_normal.x;
-        out[6] = vertex->m_texcoord[texCoord].x;
-        out[7] = vertex->m_texcoord[texCoord].y;
+        out->p.x = position.x;
+        out->p.y = position.y;
+        out->p.z = position.z;
+        out->n.x = vertex->m_normal.y * matrix.b0 + matrix.c0 * vertex->m_normal.z + matrix.a0 * vertex->m_normal.x;
+        out->n.y = vertex->m_normal.y * matrix.b1 + matrix.c1 * vertex->m_normal.z + matrix.a1 * vertex->m_normal.x;
+        out->n.z = vertex->m_normal.y * matrix.b2 + matrix.c2 * vertex->m_normal.z + matrix.a2 * vertex->m_normal.x;
+        out->tc[0].x = vertex->m_texcoord[texCoord].x;
+        out->tc[0].y = vertex->m_texcoord[texCoord].y;
     }
 }
 
@@ -3153,18 +3153,18 @@ void CM2Model::TransformVerticesOneBone_cpp(CM2Model* model, M2SkinSection* sect
     const C44Matrix* bones = model->m_boneMatrices;
     M2Vertex* vertex = &model->m_shared->m_data->m_vertices[section->m_vertexStart];
     M2Vertex* end = vertex + section->m_vertexCount;
-    float* out = reinterpret_cast<float*>(vertices);
+    CGxVertexPNT0* out = reinterpret_cast<CGxVertexPNT0*>(vertices);
 
-    for (; vertex < end; vertex++, out += 8) {
+    for (; vertex < end; vertex++, out++) {
         const C44Matrix& bone = bones[vertex->m_indices.b[0]];
-        out[0] = bone.c0 * vertex->m_position.z + vertex->m_position.y * bone.b0 + vertex->m_position.x * bone.a0 + bone.d0;
-        out[1] = vertex->m_position.x * bone.a1 + vertex->m_position.y * bone.b1 + bone.c1 * vertex->m_position.z + bone.d1;
-        out[2] = vertex->m_position.x * bone.a2 + vertex->m_position.y * bone.b2 + bone.c2 * vertex->m_position.z + bone.d2;
-        out[3] = vertex->m_normal.x * bone.a0 + bone.c0 * vertex->m_normal.z + bone.b0 * vertex->m_normal.y;
-        out[4] = bone.c1 * vertex->m_normal.z + bone.b1 * vertex->m_normal.y + bone.a1 * vertex->m_normal.x;
-        out[5] = bone.c2 * vertex->m_normal.z + bone.b2 * vertex->m_normal.y + bone.a2 * vertex->m_normal.x;
-        out[6] = vertex->m_texcoord[texCoord].x;
-        out[7] = vertex->m_texcoord[texCoord].y;
+        out->p.x = bone.c0 * vertex->m_position.z + vertex->m_position.y * bone.b0 + vertex->m_position.x * bone.a0 + bone.d0;
+        out->p.y = vertex->m_position.x * bone.a1 + vertex->m_position.y * bone.b1 + bone.c1 * vertex->m_position.z + bone.d1;
+        out->p.z = vertex->m_position.x * bone.a2 + vertex->m_position.y * bone.b2 + bone.c2 * vertex->m_position.z + bone.d2;
+        out->n.x = vertex->m_normal.x * bone.a0 + bone.c0 * vertex->m_normal.z + bone.b0 * vertex->m_normal.y;
+        out->n.y = bone.c1 * vertex->m_normal.z + bone.b1 * vertex->m_normal.y + bone.a1 * vertex->m_normal.x;
+        out->n.z = bone.c2 * vertex->m_normal.z + bone.b2 * vertex->m_normal.y + bone.a2 * vertex->m_normal.x;
+        out->tc[0].x = vertex->m_texcoord[texCoord].x;
+        out->tc[0].y = vertex->m_texcoord[texCoord].y;
     }
 }
 
@@ -3181,7 +3181,7 @@ void CM2Model::TransformVertices_sse(CM2Model* model, M2SkinSection* section, ui
     const C44Matrix* bones = model->m_boneMatrices;
     M2Vertex* vertex = &model->m_shared->m_data->m_vertices[section->m_vertexStart];
     M2Vertex* end = vertex + section->m_vertexCount;
-    float* out = reinterpret_cast<float*>(vertices);
+    CGxVertexPNT0* out = reinterpret_cast<CGxVertexPNT0*>(vertices);
     __m128 row0;
     __m128 row1;
     __m128 row2;
@@ -3211,12 +3211,12 @@ void CM2Model::TransformVertices_sse(CM2Model* model, M2SkinSection* section, ui
 
         __m128 normal = _mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_set1_ps(vertex->m_normal.x), row0), _mm_mul_ps(_mm_set1_ps(vertex->m_normal.y), row1)), _mm_mul_ps(_mm_set1_ps(vertex->m_normal.z), row2));
         __m128 position = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_set1_ps(vertex->m_position.x), row0), _mm_mul_ps(_mm_set1_ps(vertex->m_position.y), row1)), _mm_mul_ps(_mm_set1_ps(vertex->m_position.z), row2)), row3);
-        _mm_store_ps(&out[0], position);
-        _mm_storeu_ps(&out[3], normal);
-        out[6] = vertex->m_texcoord[texCoord].x;
-        out[7] = vertex->m_texcoord[texCoord].y;
+        _mm_store_ps(&out->p.x, position);
+        _mm_storeu_ps(&out->n.x, normal);
+        out->tc[0].x = vertex->m_texcoord[texCoord].x;
+        out->tc[0].y = vertex->m_texcoord[texCoord].y;
         vertex++;
-        out += 8;
+        out++;
     }
 }
 
@@ -3231,19 +3231,19 @@ void CM2Model::TransformVerticesOneBone_sse(CM2Model* model, M2SkinSection* sect
     const C44Matrix* bones = model->m_boneMatrices;
     M2Vertex* vertex = &model->m_shared->m_data->m_vertices[section->m_vertexStart];
     M2Vertex* end = vertex + section->m_vertexCount;
-    float* out = reinterpret_cast<float*>(vertices);
+    CGxVertexPNT0* out = reinterpret_cast<CGxVertexPNT0*>(vertices);
 
-    for (; vertex < end; vertex++, out += 8) {
+    for (; vertex < end; vertex++, out++) {
         const float* bone = reinterpret_cast<const float*>(&bones[vertex->m_indices.b[0]]);
         __m128 row0 = _mm_load_ps(&bone[0]);
         __m128 row1 = _mm_load_ps(&bone[4]);
         __m128 row2 = _mm_load_ps(&bone[8]);
         __m128 position = _mm_add_ps(_mm_add_ps(_mm_mul_ps(row2, _mm_set1_ps(vertex->m_position.z)), _mm_add_ps(_mm_mul_ps(row1, _mm_set1_ps(vertex->m_position.y)), _mm_mul_ps(row0, _mm_set1_ps(vertex->m_position.x)))), _mm_load_ps(&bone[12]));
         __m128 normal = _mm_add_ps(_mm_add_ps(_mm_mul_ps(row0, _mm_set1_ps(vertex->m_normal.x)), _mm_mul_ps(row1, _mm_set1_ps(vertex->m_normal.y))), _mm_mul_ps(_mm_set1_ps(vertex->m_normal.z), row2));
-        _mm_store_ps(&out[0], position);
-        _mm_storeu_ps(&out[3], normal);
-        out[6] = vertex->m_texcoord[texCoord].x;
-        out[7] = vertex->m_texcoord[texCoord].y;
+        _mm_store_ps(&out->p.x, position);
+        _mm_storeu_ps(&out->n.x, normal);
+        out->tc[0].x = vertex->m_texcoord[texCoord].x;
+        out->tc[0].y = vertex->m_texcoord[texCoord].y;
     }
 }
 
@@ -3259,7 +3259,7 @@ void M2AnimateTrack<C4Quaternion, C4Quaternion>(CM2Model* model, M2ModelBone* bo
         float ratio;
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey];
             return;
         }
@@ -3268,7 +3268,7 @@ void M2AnimateTrack<C4Quaternion, C4Quaternion>(CM2Model* model, M2ModelBone* bo
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3303,7 +3303,7 @@ void M2AnimateTrack<fixed16, float>(CM2Model* model, M2ModelBone* bone, const M2
         float ratio;
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey].m_value * 0.000030518509f;
             return;
         }
@@ -3313,7 +3313,7 @@ void M2AnimateTrack<fixed16, float>(CM2Model* model, M2ModelBone* bone, const M2
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3349,7 +3349,7 @@ void M2AnimateTrack<C3Vector, C3Vector>(CM2Model* model, M2ModelBone* bone, cons
         float ratio;
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey];
             return;
         }
@@ -3362,7 +3362,7 @@ void M2AnimateTrack<C3Vector, C3Vector>(CM2Model* model, M2ModelBone* bone, cons
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3404,7 +3404,7 @@ void M2AnimateTrack<uint8_t, uint8_t>(CM2Model* model, M2ModelBone* bone, const 
     if (keys.m_count) {
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey];
             return;
         }
@@ -3413,7 +3413,7 @@ void M2AnimateTrack<uint8_t, uint8_t>(CM2Model* model, M2ModelBone* bone, const 
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3439,7 +3439,7 @@ void M2AnimateTrack<float, float>(CM2Model* model, M2ModelBone* bone, const M2Tr
     if (keys.m_count) {
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey];
             return;
         }
@@ -3449,7 +3449,7 @@ void M2AnimateTrack<float, float>(CM2Model* model, M2ModelBone* bone, const M2Tr
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3483,7 +3483,7 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
     if (keys.m_count) {
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey].m_value;
             return;
         }
@@ -3492,14 +3492,14 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
         M2SplineKey<C3Vector>& k1 = keys[key1];
 
         switch (track.m_trackType) {
-            case 1: {
+            case M2TRACK_LINEAR: {
                 modelTrack.m_currentValue.x = (k1.m_value.x - k0.m_value.x) * ratio + k0.m_value.x;
                 modelTrack.m_currentValue.y = (k1.m_value.y - k0.m_value.y) * ratio + k0.m_value.y;
                 modelTrack.m_currentValue.z = ratio * (k1.m_value.z - k0.m_value.z) + k0.m_value.z;
                 break;
             }
 
-            case 2: {
+            case M2TRACK_BEZIER: {
                 float r2 = ratio * ratio;
                 float r3 = ratio * ratio * ratio;
                 float b0 = ratio * ratio * 3.0f - r3 - ratio * 3.0f + 1.0f;
@@ -3511,7 +3511,7 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
                 break;
             }
 
-            case 3: {
+            case M2TRACK_HERMITE: {
                 float r2 = ratio * ratio;
                 float r2x3 = ratio * ratio * 3.0f;
                 float r3 = ratio * ratio * ratio;
@@ -3528,7 +3528,7 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3543,7 +3543,7 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
             M2SplineKey<C3Vector>& k0 = blendKeys[modelTrack.m_secondaryKey];
             M2SplineKey<C3Vector>& k1 = blendKeys[key1];
 
-            if (track.m_trackType == 2) {
+            if (track.m_trackType == M2TRACK_BEZIER) {
                 float r2 = ratio * ratio;
                 float r3 = ratio * ratio * ratio;
                 float b0 = ratio * ratio * 3.0f - r3 - ratio * 3.0f + 1.0f;
@@ -3552,7 +3552,7 @@ void M2AnimateSplineTrack<M2SplineKey<C3Vector>, C3Vector>(CM2Model* model, M2Mo
                 blend.x = k1.m_value.x * r3 + k0.m_value.x * b0 + b1 * k0.m_outTan.x + b2 * k1.m_inTan.x;
                 blend.y = k1.m_inTan.y * b2 + k0.m_outTan.y * b1 + k0.m_value.y * b0 + k1.m_value.y * r3;
                 blend.z = r3 * k1.m_value.z + (b0 * k0.m_value.z + b1 * k0.m_outTan.z + b2 * k1.m_inTan.z);
-            } else if (track.m_trackType == 3) {
+            } else if (track.m_trackType == M2TRACK_HERMITE) {
                 float r2 = ratio * ratio;
                 float r2x3 = ratio * ratio * 3.0f;
                 float r3 = ratio * ratio * ratio;
@@ -3591,7 +3591,7 @@ void M2AnimateSplineTrack<M2SplineKey<float>, float>(CM2Model* model, M2ModelBon
     if (keys.m_count) {
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey].m_value;
             return;
         }
@@ -3600,18 +3600,18 @@ void M2AnimateSplineTrack<M2SplineKey<float>, float>(CM2Model* model, M2ModelBon
         M2SplineKey<float>& k1 = keys[key1];
 
         switch (track.m_trackType) {
-            case 1: {
+            case M2TRACK_LINEAR: {
                 modelTrack.m_currentValue = k0.m_value + (k1.m_value - k0.m_value) * ratio;
                 break;
             }
 
-            case 2: {
+            case M2TRACK_BEZIER: {
                 float r3 = ratio * ratio * ratio;
                 modelTrack.m_currentValue = r3 * k1.m_value + (r3 * 3.0f - ratio * ratio * 6.0f + ratio * 3.0f) * k0.m_outTan + (3.0f * (ratio * ratio) - r3 * 3.0f) * k1.m_inTan + (3.0f * (ratio * ratio) - r3 - ratio * 3.0f + 1.0f) * k0.m_value;
                 break;
             }
 
-            case 3: {
+            case M2TRACK_HERMITE: {
                 float r3 = ratio * ratio * ratio;
                 modelTrack.m_currentValue = (ratio + r3 - 2.0f * (ratio * ratio)) * k0.m_outTan + (r3 - ratio * ratio) * k1.m_inTan + (r3 * 2.0f - ratio * ratio * 3.0f + 1.0f) * k0.m_value + (ratio * ratio * 3.0f - r3 * 2.0f) * k1.m_value;
                 break;
@@ -3620,7 +3620,7 @@ void M2AnimateSplineTrack<M2SplineKey<float>, float>(CM2Model* model, M2ModelBon
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3635,10 +3635,10 @@ void M2AnimateSplineTrack<M2SplineKey<float>, float>(CM2Model* model, M2ModelBon
             M2SplineKey<float>& k0 = blendKeys[modelTrack.m_secondaryKey];
             M2SplineKey<float>& k1 = blendKeys[key1];
 
-            if (track.m_trackType == 2) {
+            if (track.m_trackType == M2TRACK_BEZIER) {
                 float r3 = ratio * ratio * ratio;
                 blend = r3 * k1.m_value + (r3 * 3.0f - ratio * ratio * 6.0f + ratio * 3.0f) * k0.m_outTan + (3.0f * (ratio * ratio) - r3 * 3.0f) * k1.m_inTan + (3.0f * (ratio * ratio) - r3 - ratio * 3.0f + 1.0f) * k0.m_value;
-            } else if (track.m_trackType == 3) {
+            } else if (track.m_trackType == M2TRACK_HERMITE) {
                 float r3 = ratio * ratio * ratio;
                 blend = (ratio + r3 - 2.0f * (ratio * ratio)) * k0.m_outTan + (r3 - ratio * ratio) * k1.m_inTan + (r3 * 2.0f - ratio * ratio * 3.0f + 1.0f) * k0.m_value + (ratio * ratio * 3.0f - r3 * 2.0f) * k1.m_value;
             } else {
@@ -3664,7 +3664,7 @@ void M2AnimateTrack<uint16_t, uint16_t>(CM2Model* model, M2ModelBone* bone, cons
     if (keys.m_count) {
         model->FindKey(&bone->m_sequence, track, modelTrack.m_currentKey, key1, ratio);
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             modelTrack.m_currentValue = keys[modelTrack.m_currentKey];
             return;
         }
@@ -3673,7 +3673,7 @@ void M2AnimateTrack<uint16_t, uint16_t>(CM2Model* model, M2ModelBone* bone, cons
     } else {
         modelTrack.m_currentValue = defaultValue;
 
-        if (!track.m_trackType) {
+        if (track.m_trackType == M2TRACK_NONE) {
             return;
         }
     }
@@ -3711,7 +3711,7 @@ M2ModelBone::M2ModelBone() {
     this->m_proceduralTransform = nullptr;
     this->m_flags = 0;
     this->m_blendWeightMax = 1.0f;
-    this->m_sequenceId = 0xFFFFFFFF;
+    this->m_sequenceId = INVALID_ANIMATION;
     this->m_variationIndex = 0;
     this->m_blendEndTime = 0;
     this->m_animListPrev = nullptr;
@@ -3729,8 +3729,8 @@ M2BatchRange::M2BatchRange() {
 CM2Model::CM2Model() {
     this->m_scaleSq = 0.0f;
     this->m_refCount = 1;
-    this->m_fFlags = (this->m_fFlags & 0xFF800000) | 0x340;
-    this->m_flags = 0;
+    this->m_runtimeFlags = (this->m_runtimeFlags & 0xFF800000) | 0x340;
+    this->m_creationFlags = 0;
     this->m_scenePrev = nullptr;
     this->m_sceneNext = nullptr;
     this->m_callbackPrev = nullptr;
@@ -3769,7 +3769,7 @@ CM2Model::CM2Model() {
     this->m_animListHead = 0xFFFF;
     this->m_attachmentIndex = 0xFFFF;
     this->m_frameStamp = 0xFFFFFFFF;
-    this->m_attachmentId = 0xFFFFFFFF;
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
     this->m_worldTransform.a0 = 1.0f;
     this->m_worldTransform.b1 = 1.0f;
     this->m_worldTransform.c2 = 1.0f;
@@ -3939,7 +3939,7 @@ void CM2Model::FreeInternalResources() {
 CAaSphere CM2Model::GetCurrentBoundingSphere() {
     CAaSphere result;
 
-    if (!(this->m_fFlags & 1) || !(this->m_fFlags & 0x8000)) {
+    if (!(this->m_runtimeFlags & 1) || !(this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
         result.c = C3Vector(0.0f, 0.0f, 0.0f);
         result.r = 0.0f;
         return result;
@@ -3985,7 +3985,7 @@ CAaSphere CM2Model::GetCurrentBoundingSphere() {
     for (uint32_t i = 0; i < particleCount; i = i + 1) {
         CParticleEmitter2* emitter = this->m_particleEmitters[i];
 
-        if (emitter->m_flags & 0x200) {
+        if (emitter->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
             box |= emitter->WorldBounds();
         }
 
@@ -4027,7 +4027,7 @@ CAaSphere CM2Model::GetCurrentBoundingSphere() {
 // VERIFY: 34ca59a5 manual
 // OFFSET: 0x0082C7C0
 void CM2Model::SetGeometryVisible(uint32_t first, uint32_t last, int32_t visible) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         M2SkinProfile* skin = this->m_shared->m_skinData;
         int32_t changed = 0;
 
@@ -4051,7 +4051,7 @@ void CM2Model::SetGeometryVisible(uint32_t first, uint32_t last, int32_t visible
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 1;
+            call->m_type = EModelModQ::MODEL_SET_GEOMETRY_VISIBLE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = first;
@@ -4066,7 +4066,7 @@ void CM2Model::SetGeometryVisible(uint32_t first, uint32_t last, int32_t visible
 // VERIFY: 36243f77 manual
 // OFFSET: 0x0082C8A0
 void CM2Model::SetGeosetVisibilityRange(uint32_t first, uint32_t last, int32_t visible) {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         M2SkinProfile* skin = this->m_shared->m_skinData;
         int32_t changed = 0;
 
@@ -4088,7 +4088,7 @@ void CM2Model::SetGeosetVisibilityRange(uint32_t first, uint32_t last, int32_t v
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 2;
+            call->m_type = EModelModQ::MODEL_SET_GEOSET_VISIBILITY_RANGE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = first;
@@ -4103,11 +4103,11 @@ void CM2Model::SetGeosetVisibilityRange(uint32_t first, uint32_t last, int32_t v
 // VERIFY: 88605bc8 manual
 // OFFSET: 0x0082C970
 void CM2Model::OptimizeVisibleGeometry() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 3;
+            call->m_type = EModelModQ::MODEL_OPTIMIZE_VISIBLE_GEOSETS;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             *this->m_modelCallTail = call;
@@ -4118,7 +4118,7 @@ void CM2Model::OptimizeVisibleGeometry() {
     }
 
     this->UnoptimizeVisibleGeometry();
-    this->m_fFlags &= ~0x10u;
+    this->m_runtimeFlags &= ~0x10u;
 
     CM2Shared* shared = this->m_shared;
     uint32_t cacheFlags = shared->m_cache->m_flags;
@@ -4128,7 +4128,7 @@ void CM2Model::OptimizeVisibleGeometry() {
     uint32_t batchCount = 0;
     uint32_t sectionCount = 0;
     uint32_t visibleCount = 0;
-    int32_t keepVertices = (cacheFlags & 8) || (shared->m_data->m_bones.m_count == 1 && (cacheFlags & 0x40));
+    int32_t keepVertices = (cacheFlags & CM2Cache::CACHE_FLAGS::CACHE_GPU_SHADERS) || (shared->m_data->m_bones.m_count == 1 && (cacheFlags & CM2Cache::CACHE_FLAGS::CACHE_SINGLE_BONE_SHARED_VERTICES));
 
     for (uint32_t i = 0; i < skin->m_batches.m_count; i++) {
         M2Batch* batch = &skin->m_batches[i];
@@ -4279,7 +4279,7 @@ void CM2Model::OptimizeVisibleGeometry() {
 // VERIFY: aa052318 manual
 // OFFSET: 0x0082CED0
 void CM2Model::GetSequenceInfo(uint32_t id, uint32_t variation, M2SequenceInfo& info) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -4308,7 +4308,7 @@ void CM2Model::GetSequenceInfo(uint32_t id, uint32_t variation, M2SequenceInfo& 
     float moveSpeed = sequence->m_moveSpeed;
     info.m_moveSpeed = moveSpeed;
 
-    if (this->m_fFlags & 0x8000) {
+    if (this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID) {
         if (this->m_attachParent) {
             const C44Matrix& m = this->m_matrixF4;
             const C44Matrix& v = this->m_scene->m_viewInv;
@@ -4332,7 +4332,7 @@ void CM2Model::GetSequenceInfo(uint32_t id, uint32_t variation, M2SequenceInfo& 
 // VERIFY: 349f9473 manual
 // OFFSET: 0x0082D1A0
 uint32_t CM2Model::GetNumBatches() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -4380,9 +4380,9 @@ void CM2Model::AnimateParticlesMT() {
             M2AnimateTrack<uint8_t, uint8_t>(this, &this->m_bones[particleData->m_boneIndex], particleData->m_visibilityTrack, particle->m_visibilityTrack, visible);
         }
 
-        particle->m_emitting = particle->m_visibilityTrack.m_currentValue && (emitter->m_flags & 2);
+        particle->m_emitting = particle->m_visibilityTrack.m_currentValue && (emitter->m_flags & CParticleEmitter2::RUNTIME_FLAGS::USER_ENABLED);
         particle->m_active = particle->m_emitting || emitter->HasLiveParticles();
-        this->m_fFlags |= static_cast<uint32_t>(particle->m_active) << 10;
+        this->m_runtimeFlags |= static_cast<uint32_t>(particle->m_active) << 10;
 
         if (!particle->m_visibilityTrack.m_currentValue && this->m_uint90) {
             continue;
@@ -4523,7 +4523,7 @@ int32_t CM2Model::SetVerticesMultiSample(int32_t optimized, M2SkinSection* secti
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
     GxPrimVertexPtr(buf, GxVBF_PNT2);
     return 1;
 }
@@ -4602,11 +4602,11 @@ void CM2Model::SetWorldTransform(const C3Vector& position, float rotation, float
         }
     }
 
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         M2BoneSequenceInfo state;
         this->GetBoneSequenceInfo(0xFFFFFFFF, state);
 
-        if (state.m_sequenceId != 0xFFFFFFFF) {
+        if (state.m_sequenceId != INVALID_ANIMATION) {
             M2SequenceInfo info;
             info.m_bounds.b = C3Vector(0.0f, 0.0f, 0.0f);
             info.m_bounds.t = C3Vector(0.0f, 0.0f, 0.0f);
@@ -4654,7 +4654,7 @@ void CM2Model::SetWorldTransform(const C3Vector& position, float rotation, float
     }
 
     transform.Scale(scale);
-    this->m_fFlags |= 0x8000;
+    this->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
 }
 
 // VERIFY: 577fb428 manual
@@ -4676,7 +4676,7 @@ int32_t CM2Model::HasDeferredSequence(uint16_t boneIndex, bool primary) {
 // VERIFY: 3115a6f8 manual
 // OFFSET: 0x0082E140
 void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, const C3Vector& emissive, float alpha, float alpha2) {
-    uint32_t flags = this->m_fFlags;
+    uint32_t flags = this->m_runtimeFlags;
 
     if (!(flags & 1) || this->m_frameStamp == this->m_scene->m_frameStamp) {
         return;
@@ -4686,10 +4686,10 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
     CM2Model* parent = this->m_attachParent;
 
     if (parent) {
-        uint32_t drawn = (parent->m_fFlags & 8) && (flags & 0x80);
-        this->m_fFlags = (this->m_fFlags & ~8u) | (drawn << 3);
-        uint32_t particles = (parent->m_fFlags & 0x10000) && (this->m_fFlags & 0x20000);
-        this->m_fFlags = (this->m_fFlags & ~0x10000u) | (particles << 16);
+        uint32_t drawn = (parent->m_runtimeFlags & 8) && (flags & 0x80);
+        this->m_runtimeFlags = (this->m_runtimeFlags & ~8u) | (drawn << 3);
+        uint32_t particles = (parent->m_runtimeFlags & 0x10000) && (this->m_runtimeFlags & 0x20000);
+        this->m_runtimeFlags = (this->m_runtimeFlags & ~0x10000u) | (particles << 16);
         this->m_frameOfReference = parent->m_frameOfReference;
     }
 
@@ -4710,7 +4710,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
         this->m_emissiveColor.y = this->m_emissiveTintG;
         this->m_emissiveColor.z = this->m_emissiveTintB;
 
-        uint32_t current = this->m_fFlags;
+        uint32_t current = this->m_runtimeFlags;
 
         if (current & 0x100000) {
             this->m_effectiveAlpha = this->m_fadeAlpha;
@@ -4742,7 +4742,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
 
     CM2Model* attachParent = this->m_attachParent;
 
-    if (!attachParent || (attachParent->m_flags & 1)) {
+    if (!attachParent || (attachParent->m_creationFlags & INSTANCE_FLAGS::INSTANCE_DISABLE_DEPTH_SORT_AND_CHILD_INHERITANCE)) {
         this->m_scaleSq = this->m_matrixF4.d2 * this->m_matrixF4.d2 + this->m_matrixF4.d1 * this->m_matrixF4.d1 + this->m_matrixF4.d0 * this->m_matrixF4.d0;
     } else {
         this->m_scaleSq = attachParent->m_scaleSq;
@@ -4815,7 +4815,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
         this->AnimateTextureTransformsMT();
     }
 
-    this->m_fFlags &= ~0x400u;
+    this->m_runtimeFlags &= ~0x400u;
 
     if (this->m_attachments || this->m_attachList) {
         this->AnimateAttachmentsMT();
@@ -4845,7 +4845,7 @@ void CM2Model::AnimateAttachmentsMT() {
         C44Matrix matrix;
 
         if (child->m_attachmentIndex == 0xFFFF) {
-            if (!(child->m_fFlags & 0x40000)) {
+            if (!(child->m_runtimeFlags & 0x40000)) {
                 continue;
             }
 
@@ -4860,7 +4860,7 @@ void CM2Model::AnimateAttachmentsMT() {
             matrix.Translate(attachment->m_position);
         }
 
-        if (child->m_fFlags & 0x1000) {
+        if (child->m_runtimeFlags & 0x1000) {
             child->AnimateMTSimple(&matrix, this->m_diffuseColor, this->m_emissiveColor, this->m_effectiveAlpha, this->m_alpha);
         } else {
             child->AnimateMT(&matrix, this->m_diffuseColor, this->m_emissiveColor, this->m_effectiveAlpha, this->m_alpha);
@@ -4870,7 +4870,7 @@ void CM2Model::AnimateAttachmentsMT() {
 
 // VERIFY: a16ddee7 auto
 // OFFSET: 0x0082E720
-int32_t __stdcall CM2Model::SequenceCallback(void* callback, CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint32_t sequenceIndex, uint32_t startTime, uint64_t param) {
+int32_t __stdcall CM2Model::SequenceCallback(M2SequenceCallback callback, CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint32_t sequenceIndex, uint32_t startTime, uint64_t param) {
     if (CM2Model::s_sequenceCallbacks.Count() >= 0x10000) {
         return 0;
     }
@@ -4881,7 +4881,7 @@ int32_t __stdcall CM2Model::SequenceCallback(void* callback, CM2Model* model, ui
         return 0;
     }
 
-    entry->m_callback = callback;
+    entry->m_callback = reinterpret_cast<void*>(callback);
     entry->m_model = model;
     entry->m_boneId = boneId;
     entry->m_id = sequenceId;
@@ -4889,7 +4889,7 @@ int32_t __stdcall CM2Model::SequenceCallback(void* callback, CM2Model* model, ui
     entry->m_time = time;
     entry->m_args[0] = sequenceIndex;
     entry->m_args[1] = startTime;
-    entry->m_type = 0;
+    entry->m_type = M2ModelCallback::SEQUENCE;
     entry->m_param = param;
     return 1;
 }
@@ -4917,7 +4917,7 @@ uint32_t CM2Model::ProcessSequenceCallback(uint32_t boneIndex, uint32_t frame, u
 // VERIFY: 745168f8 manual
 // OFFSET: 0x0082EC30
 void CM2Model::GetCollisionFacets(const CAaBox& box, const C44Matrix& transform, TSGrowableArray<CFacet>& facets) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -5031,7 +5031,7 @@ void CM2Model::GetCollisionFacets(const CAaBox& box, const C44Matrix& transform,
 // VERIFY: d48ec2da manual
 // OFFSET: 0x0082F0F0
 void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C3Vector& emissive, float alpha, float alpha2) {
-    uint32_t flags = this->m_fFlags;
+    uint32_t flags = this->m_runtimeFlags;
 
     if (!(flags & 1) || this->m_frameStamp == this->m_scene->m_frameStamp) {
         return;
@@ -5041,10 +5041,10 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
     CM2Model* parent = this->m_attachParent;
 
     if (parent) {
-        uint32_t drawn = (parent->m_fFlags & 8) && (flags & 0x80);
-        this->m_fFlags = (this->m_fFlags & ~8u) | (drawn << 3);
-        uint32_t particles = (parent->m_fFlags & 0x10000) && (this->m_fFlags & 0x20000);
-        this->m_fFlags = (this->m_fFlags & ~0x10000u) | (particles << 16);
+        uint32_t drawn = (parent->m_runtimeFlags & 8) && (flags & 0x80);
+        this->m_runtimeFlags = (this->m_runtimeFlags & ~8u) | (drawn << 3);
+        uint32_t particles = (parent->m_runtimeFlags & 0x10000) && (this->m_runtimeFlags & 0x20000);
+        this->m_runtimeFlags = (this->m_runtimeFlags & ~0x10000u) | (particles << 16);
         this->m_frameOfReference = parent->m_frameOfReference;
     }
 
@@ -5065,7 +5065,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
         this->m_emissiveColor.y = this->m_emissiveTintG;
         this->m_emissiveColor.z = this->m_emissiveTintB;
 
-        uint32_t current = this->m_fFlags;
+        uint32_t current = this->m_runtimeFlags;
 
         if (current & 0x100000) {
             this->m_effectiveAlpha = this->m_fadeAlpha;
@@ -5097,7 +5097,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
 
     CM2Model* attachParent = this->m_attachParent;
 
-    if (!attachParent || (attachParent->m_flags & 1)) {
+    if (!attachParent || (attachParent->m_creationFlags & INSTANCE_FLAGS::INSTANCE_DISABLE_DEPTH_SORT_AND_CHILD_INHERITANCE)) {
         this->m_scaleSq = this->m_matrixF4.d2 * this->m_matrixF4.d2 + this->m_matrixF4.d1 * this->m_matrixF4.d1 + this->m_matrixF4.d0 * this->m_matrixF4.d0;
     } else {
         this->m_scaleSq = attachParent->m_scaleSq;
@@ -5677,7 +5677,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
         }
     }
 
-    this->m_fFlags &= ~0x400u;
+    this->m_runtimeFlags &= ~0x400u;
 
     if (data->m_particles.m_count) {
         this->AnimateParticlesMT();
@@ -5693,7 +5693,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
 // VERIFY: a2d095a0 manual
 // OFFSET: 0x008309C0
 void CM2Model::AnimateParticleST(float deltaTime, uint32_t index) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
@@ -5704,13 +5704,13 @@ void CM2Model::AnimateParticleST(float deltaTime, uint32_t index) {
 
     if (!(particleData->m_flags & 0x8000)) {
         if (particle->m_emitting) {
-            emitter->m_flags |= 1;
+            emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::DATA_EMITTING;
         } else {
-            emitter->m_flags &= ~1u;
+            emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::DATA_EMITTING;
         }
     } else if (particle->m_visibilityTrack.m_currentValue && particle->m_emissionRateTrack.m_currentValue > 0.0f) {
         if (!particle->m_burstFired) {
-            emitter->m_flags |= 0x40;
+            emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::BURST_PENDING;
         }
 
         particle->m_burstFired = 1;
@@ -5801,7 +5801,7 @@ void CM2Model::AnimateParticleST(float deltaTime, uint32_t index) {
     static C44Matrix s_emitterRotation(0.0f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
     transform = s_emitterRotation * transform;
-    emitter->Update(deltaTime, transform, *reinterpret_cast<const C3Vector*>(&this->m_scene->m_viewInv.d0), static_cast<const C44Matrix*>(this->m_frameOfReference));
+    emitter->Update(deltaTime, transform, *reinterpret_cast<const C3Vector*>(&this->m_scene->m_viewInv.d0), this->m_frameOfReference);
 
     uint32_t modelCount = emitter->GetNumParticleModels();
 
@@ -5832,7 +5832,7 @@ void CM2Model::Animate() {
 
     if (this->m_attachParent) {
         this->m_attachParent->Animate();
-    } else if (this->m_fFlags & 0x1000) {
+    } else if (this->m_runtimeFlags & 0x1000) {
         C3Vector emissive(0.0f, 0.0f, 0.0f);
         C3Vector diffuse(1.0f, 1.0f, 1.0f);
         this->AnimateMTSimple(&scene->m_view, diffuse, emissive, 1.0f, 1.0f);
@@ -5850,11 +5850,11 @@ void CM2Model::Animate() {
 
     CM2Model* parent = this->m_attachParent;
 
-    if (parent && (this->m_fFlags & 1)) {
+    if (parent && (this->m_runtimeFlags & 1)) {
         C44Matrix matrix;
         const C44Matrix* transform = &parent->m_matrixF4;
 
-        if ((parent->m_fFlags & 1) && parent->m_frameStamp == scene->m_frameStamp && this->m_attachmentIndex != 0xFFFF) {
+        if ((parent->m_runtimeFlags & 1) && parent->m_frameStamp == scene->m_frameStamp && this->m_attachmentIndex != 0xFFFF) {
             M2Attachment* attachment = &parent->m_shared->m_data->m_attachments[this->m_attachmentIndex];
             matrix = parent->m_boneMatrices[attachment->m_bone];
             C3Vector position = attachment->m_position;
@@ -5864,7 +5864,7 @@ void CM2Model::Animate() {
 
         parent = this->m_attachParent;
 
-        if (this->m_fFlags & 0x1000) {
+        if (this->m_runtimeFlags & 0x1000) {
             this->AnimateMTSimple(transform, parent->m_diffuseColor, parent->m_emissiveColor, parent->m_effectiveAlpha, parent->m_alpha);
         } else {
             this->AnimateMT(transform, parent->m_diffuseColor, parent->m_emissiveColor, parent->m_effectiveAlpha, parent->m_alpha);
@@ -5887,7 +5887,7 @@ void CM2Model::Animate() {
 // VERIFY: e229dbcf auto
 // OFFSET: 0x00830F90
 void CM2Model::ForceAnimate() {
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         this->m_frameStamp = this->m_scene->m_frameStamp - 1;
         this->Animate();
     }
@@ -5961,10 +5961,10 @@ uint32_t CM2Model::ProcessEventCallbacks(uint32_t boneIndex, uint32_t sequenceIn
 
                         if (entry) {
                             entry->m_boneId = data->m_bones[event->m_bone].m_boneId;
-                            entry->m_callback = this->m_eventCallback;
+                            entry->m_callback = reinterpret_cast<void*>(this->m_eventCallback);
                             entry->m_value = event->m_data;
                             entry->m_id = event->m_eventId;
-                            entry->m_type = 1;
+                            entry->m_type = M2ModelCallback::EVENT;
                             entry->m_model = this;
                             *reinterpret_cast<C3Vector*>(entry->m_args) = position;
                             entry->m_time = callbackTime - time;
@@ -5984,7 +5984,7 @@ uint32_t CM2Model::ProcessEventCallbacks(uint32_t boneIndex, uint32_t sequenceIn
 // VERIFY: 4c99f6ab manual
 // OFFSET: 0x00831330
 C3Vector CM2Model::GetAttachmentPosition(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -6004,7 +6004,7 @@ C3Vector CM2Model::GetAttachmentPosition(uint32_t id) {
 // VERIFY: 726b46b5 manual
 // OFFSET: 0x00831410
 C44Matrix CM2Model::GetAttachmentWorldTransform(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -6035,7 +6035,7 @@ C44Matrix CM2Model::GetAttachmentWorldTransform(uint32_t id) {
 // VERIFY: fbe80c3c auto
 // OFFSET: 0x00831550
 float CM2Model::GetAttachmentWorldScale(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -6080,7 +6080,7 @@ void CM2Model::AttachToParent(CM2Model* parent, uint32_t id, const C3Vector* pos
 
     uint32_t index;
 
-    if (parent->m_fFlags & 1) {
+    if (parent->m_runtimeFlags & 1) {
         M2Data* data = parent->m_shared->m_data;
         index = id < data->m_attachmentIndicesById.m_count ? data->m_attachmentIndicesById[id] : 0xFFFF;
 
@@ -6094,7 +6094,7 @@ void CM2Model::AttachToParent(CM2Model* parent, uint32_t id, const C3Vector* pos
     this->m_attachmentIndex = index;
     this->m_attachmentId = id;
     this->m_attachParent = parent;
-    this->m_fFlags = ((this->m_fFlags & ~0x40000u) | ((attachToRoot != 0) << 18)) | 0x20080;
+    this->m_runtimeFlags = ((this->m_runtimeFlags & ~0x40000u) | ((attachToRoot != 0) << 18)) | 0x20080;
 
     this->m_attachPrev = &parent->m_attachList;
     this->m_attachNext = parent->m_attachList;
@@ -6105,31 +6105,31 @@ void CM2Model::AttachToParent(CM2Model* parent, uint32_t id, const C3Vector* pos
 
     parent->m_attachList = this;
 
-    if (!(this->m_fFlags & 1) || !(this->m_fFlags & 0x100)) {
+    if (!(this->m_runtimeFlags & 1) || !(this->m_runtimeFlags & 0x100)) {
         for (CM2Model* model = parent; model; model = model->m_attachParent) {
-            model->m_fFlags &= ~0x100u;
+            model->m_runtimeFlags &= ~0x100u;
         }
     }
 
-    if (!(this->m_fFlags & 2)) {
+    if (!(this->m_runtimeFlags & 2)) {
         for (CM2Model* model = parent; model; model = model->m_attachParent) {
-            model->m_fFlags &= ~0x200u;
+            model->m_runtimeFlags &= ~0x200u;
         }
     }
 
-    if (position && (this->m_attachParent->m_fFlags & 1) && this->m_attachmentIndex != 0xFFFF) {
+    if (position && (this->m_attachParent->m_runtimeFlags & 1) && this->m_attachmentIndex != 0xFFFF) {
         C44Matrix transform = parent->GetAttachmentWorldTransform(id);
         float scale = sqrtf(transform.a1 * transform.a1 + transform.a2 * transform.a2 + transform.a0 * transform.a0);
         transform = transform.AffineInverse(scale);
 
-        if (!(this->m_fFlags & 0x8000)) {
+        if (!(this->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
             this->m_worldTransform.Identity();
         }
 
         C3Vector local = *position * transform;
         this->m_worldTransform.d0 = local.x;
         this->m_worldTransform.d1 = local.y;
-        this->m_fFlags |= 0x8000;
+        this->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         this->m_worldTransform.d2 = local.z;
     }
 
@@ -6139,7 +6139,7 @@ void CM2Model::AttachToParent(CM2Model* parent, uint32_t id, const C3Vector* pos
 // VERIFY: c5304a4f auto
 // OFFSET: 0x008317E0
 C3Vector CM2Model::GetEventPosition(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -6157,7 +6157,7 @@ C3Vector CM2Model::GetEventPosition(uint32_t id) {
 // VERIFY: 462f2ec0 manual
 // OFFSET: 0x008318A0
 C44Matrix CM2Model::GetEventWorldTransform(uint32_t id) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -6221,7 +6221,7 @@ void CM2Model::AnimateSM() {
 void CM2Model::SetupLighting() {
     CM2Model* parent = this->m_attachParent;
 
-    if (!parent || (parent->m_flags & 1)) {
+    if (!parent || (parent->m_creationFlags & INSTANCE_FLAGS::INSTANCE_DISABLE_DEPTH_SORT_AND_CHILD_INHERITANCE)) {
         this->Animate();
 
         C3Vector center = *reinterpret_cast<const C3Vector*>(&this->m_matrixF4.d0) * this->m_scene->m_viewInv;
@@ -6267,7 +6267,7 @@ void CM2Model::SetBoneSequenceDeferred(uint16_t sequenceIndex, M2Data* data, uin
                     }
                 }
 
-                playback = load->m_playbacks.NewNode(2, 0, 0);
+                playback = load->m_playbacks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
                 playback->m_model = this;
                 goto found;
             }
@@ -6285,7 +6285,7 @@ void CM2Model::SetBoneSequenceDeferred(uint16_t sequenceIndex, M2Data* data, uin
             return;
         }
 
-        playback = load->m_playbacks.NewNode(2, 0, 0);
+        playback = load->m_playbacks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         playback->m_model = this;
     }
 
@@ -6314,7 +6314,7 @@ found:
 void CM2Model::CancelAllDeferredSequences() {
     TSList<CM2SequenceLoad>& loads = this->m_shared->m_sequenceLoads;
 
-    if (!(this->m_shared->m_flags & 0x10)) {
+    if (!(this->m_shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_SEQUENCE_CALLBACK)) {
         for (CM2SequenceLoad* load = loads.Head(); !loads.IsEnd(load); load = loads.RawNext(load)) {
             CM2SequencePlayBack* playback = load->m_playbacks.Head();
 
@@ -6342,7 +6342,7 @@ void CM2Model::CancelAllDeferredSequences() {
 void CM2Model::CancelDeferredSequences(uint16_t boneIndex, bool primary) {
     TSList<CM2SequenceLoad>& loads = this->m_shared->m_sequenceLoads;
 
-    if (!(this->m_shared->m_flags & 0x10)) {
+    if (!(this->m_shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_SEQUENCE_CALLBACK)) {
         for (CM2SequenceLoad* load = loads.Head(); !loads.IsEnd(load); load = loads.RawNext(load)) {
             CM2SequencePlayBack* playback = load->m_playbacks.Head();
 
@@ -6441,9 +6441,9 @@ void CM2Model::CallCallbacks() {
     for (uint32_t i = 0; i < count; i++) {
         M2ModelCallback* entry = &CM2Model::s_sequenceCallbacks.m_data[i];
 
-        if (entry->m_type == 0) {
+        if (entry->m_type == M2ModelCallback::SEQUENCE) {
             this->CallSequenceCallback(entry);
-        } else if (entry->m_type == 1) {
+        } else if (entry->m_type == M2ModelCallback::EVENT) {
             M2EventCallback callback = reinterpret_cast<M2EventCallback>(entry->m_callback);
             callback(entry->m_model, entry->m_boneId, entry->m_id, entry->m_value, reinterpret_cast<const C3Vector*>(entry->m_args), entry->m_time, entry->m_param);
         }
@@ -6455,7 +6455,7 @@ void CM2Model::CallCallbacks() {
 // VERIFY: 7263f300 manual
 // OFFSET: 0x00832260
 int32_t CM2Model::ProcessCallbacks() {
-    if (this->m_lastAnimTime || !(this->m_fFlags & 0x400000)) {
+    if (this->m_lastAnimTime || !(this->m_runtimeFlags & 0x400000)) {
         return 1;
     }
 
@@ -6541,7 +6541,7 @@ int32_t CM2Model::ProcessCallbacks() {
 // VERIFY: 8ce97631 manual
 // OFFSET: 0x00832450
 void CM2Model::ProcessCallbacksRecursive() {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         return;
     }
 
@@ -6552,7 +6552,7 @@ void CM2Model::ProcessCallbacksRecursive() {
             bool hidden;
 
             if (child->m_attachmentIndex == 0xFFFF) {
-                hidden = !(child->m_fFlags & 0x40000);
+                hidden = !(child->m_runtimeFlags & 0x40000);
             } else {
                 hidden = this->m_attachments[child->m_attachmentIndex].m_currentValue == 0;
             }
@@ -6644,12 +6644,12 @@ CM2Model::~CM2Model() {
             child->m_attachNext->m_attachPrev = child->m_attachPrev;
         }
 
-        child->m_fFlags &= ~0x40000u;
+        child->m_runtimeFlags &= ~0x40000u;
         bool release = child->m_refCount-- == 1;
         child->m_attachPrev = nullptr;
         child->m_attachNext = nullptr;
         child->m_attachParent = nullptr;
-        child->m_attachmentId = 0xFFFFFFFF;
+        child->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
         child->m_frameOfReference = nullptr;
 
         if (release) {
@@ -6686,11 +6686,11 @@ CM2Model::~CM2Model() {
 // VERIFY: 3202a5f5 manual
 // OFFSET: 0x00832840
 void CM2Model::UnsetBoneSequence(uint32_t boneId, int32_t blend, int32_t primary) {
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 6;
+            call->m_type = EModelModQ::MODEL_UNSET_BONE_SEQUENCE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             call->m_args[0] = boneId;
@@ -6703,7 +6703,7 @@ void CM2Model::UnsetBoneSequence(uint32_t boneId, int32_t blend, int32_t primary
         return;
     }
 
-    if (this->m_fFlags & 0x800) {
+    if (this->m_runtimeFlags & 0x800) {
         blend = 0;
     }
 
@@ -6765,7 +6765,7 @@ void CM2Model::UnsetBoneSequence(uint32_t boneId, int32_t blend, int32_t primary
         bone->m_sequence.m_speed = 0.0f;
         bone->m_sequence.m_sequenceIndex = 0xFFFF;
         bone->m_sequence.m_invSpeed = 0.0f;
-        bone->m_sequenceId = 0xFFFFFFFF;
+        bone->m_sequenceId = INVALID_ANIMATION;
         bone->m_variationIndex = 0;
         bone->m_sequence.m_startTime = 0;
         bone->m_sequence.m_endTime = 0;
@@ -6783,16 +6783,16 @@ void CM2Model::UnsetBoneSequence(uint32_t boneId, int32_t blend, int32_t primary
 // VERIFY: 6d0c8da6 manual
 // OFFSET: 0x00832AB0
 void CM2Model::SetBoneSequence(uint32_t boneId, uint32_t sequenceId, uint32_t variation, uint32_t time, float speed, int32_t blend, int32_t primary) {
-    if (sequenceId == 0xFFFFFFFF) {
+    if (sequenceId == INVALID_ANIMATION) {
         this->UnsetBoneSequence(boneId, blend, primary);
         return;
     }
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         CM2ModelCall* call = new (__FILE__, __LINE__) CM2ModelCall();
 
         if (call) {
-            call->m_type = 5;
+            call->m_type = EModelModQ::MODEL_SET_BONE_SEQUENCE;
             call->m_next = nullptr;
             call->m_time = this->m_scene->m_time;
             *reinterpret_cast<float*>(&call->m_args[4]) = speed;
@@ -6809,7 +6809,7 @@ void CM2Model::SetBoneSequence(uint32_t boneId, uint32_t sequenceId, uint32_t va
         return;
     }
 
-    if (this->m_fFlags & 0x800) {
+    if (this->m_runtimeFlags & 0x800) {
         blend = 0;
     }
 
@@ -7000,7 +7000,7 @@ void CModelBatchList::Optimize() {
 int32_t CM2Model::InitializeLoaded() {
     CM2Shared* shared = this->m_shared;
 
-    if (!(shared->m_flags & 1) || !(shared->m_flags & 2)) {
+    if (!(shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_MODEL_LOADED) || !(shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_SKIN_LOADED)) {
         return 1;
     }
 
@@ -7285,7 +7285,7 @@ int32_t CM2Model::InitializeLoaded() {
             }
 
             CParticleEmitter2* emitter = this->m_particleEmitters[i];
-            emitter->m_flags &= ~1u;
+            emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::DATA_EMITTING;
 
             if (particleData->m_emissionRateTrack.m_sequenceKeys[0].m_count) {
                 emitter->SetEmissionRate(particleData->m_emissionRateTrack.m_sequenceKeys[0][0]);
@@ -7334,96 +7334,96 @@ int32_t CM2Model::InitializeLoaded() {
             uint32_t flags = particleData->m_flags;
 
             if (flags & 0x10) {
-                emitter->m_flags |= 0x200;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE;
             } else {
-                emitter->m_flags &= ~0x200u;
+                emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE;
             }
 
             if (flags & 0x40) {
-                emitter->m_flags |= 0x800;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY;
             }
 
             if (flags & 0x20) {
-                emitter->m_flags |= 0x400;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::TRANSFORM_SCALE;
             }
 
             if (flags & 0x800) {
-                emitter->m_flags |= 0x2000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::EMIT_ALONG_MOTION;
             }
 
             if (flags & 0x1000) {
-                emitter->m_flags |= 0x4000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::USE_BILLBOARD_AXIS;
             }
 
             if (particleData->m_emitterType == 2) {
                 if (flags & 0x80) {
-                    emitter->m_flags |= 0x1000;
+                    emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::KILL_OUTWARD_PARTICLES;
                 }
 
                 if (flags & 0x100) {
-                    emitter->m_flags |= 0x8000;
+                    emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::SPHERE_Z_VELOCITY;
                 }
             }
 
             if (flags & 0x200) {
-                emitter->m_flags |= 0x10000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::RANDOM_SPIN_DIRECTION;
             }
 
             if (flags & 0x2000) {
-                emitter->m_flags |= 0x40000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::PROJECT;
             }
 
             if (flags & 0x4000) {
-                emitter->m_flags |= 0x80000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::FOLLOW;
             }
 
             if (flags & 0x8000) {
-                emitter->m_flags &= ~1u;
+                emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::DATA_EMITTING;
             }
 
             if (flags & 0x80000) {
-                emitter->m_flags |= 0x800000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::SCALE_VARIATION;
             }
 
             emitter->SetParticleStyle(flags & 0x20000, flags & 0x40000, particleData->m_tailLength, flags & 0x400);
 
             CParticleMat material;
             material.m_flags = 7;
-            material.m_blendMode = 0;
+            material.m_blendMode = GxBlend_Opaque;
 
             switch (particleData->m_blendMode) {
-                case 0:
-                    material.m_blendMode = 0;
+                case M2PARTICLEBLEND_OPAQUE:
+                    material.m_blendMode = GxBlend_Opaque;
                     material.m_flags |= 4;
                     break;
 
-                case 1:
-                    material.m_blendMode = 1;
+                case M2PARTICLEBLEND_ALPHA_KEY:
+                    material.m_blendMode = GxBlend_AlphaKey;
                     material.m_flags |= 4;
                     break;
 
-                case 2:
-                    material.m_blendMode = 2;
+                case M2PARTICLEBLEND_ALPHA:
+                    material.m_blendMode = GxBlend_Alpha;
                     material.m_flags &= ~4u;
                     break;
 
-                case 3:
-                    material.m_blendMode = 10;
+                case M2PARTICLEBLEND_NO_ALPHA_ADD:
+                    material.m_blendMode = GxBlend_NoAlphaAdd;
                     material.m_flags &= ~4u;
                     break;
 
-                case 4:
-                    material.m_blendMode = 3;
+                case M2PARTICLEBLEND_ADD:
+                    material.m_blendMode = GxBlend_Add;
                     material.m_flags &= ~4u;
                     break;
 
-                case 5:
-                    material.m_blendMode = 4;
+                case M2PARTICLEBLEND_MOD:
+                    material.m_blendMode = GxBlend_Mod;
                     material.m_flags &= ~4u;
                     break;
 
-                case 6:
-                    material.m_blendMode = 5;
+                case M2PARTICLEBLEND_MOD2X:
+                    material.m_blendMode = GxBlend_Mod2x;
                     material.m_flags &= ~4u;
                     break;
             }
@@ -7432,11 +7432,11 @@ int32_t CM2Model::InitializeLoaded() {
             material.m_flags = (material.m_flags & ~2u) | ((flags & 8) ? 0 : 2);
 
             if (flags & 2) {
-                emitter->m_flags |= 0x20;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::SORT_PARTICLES;
             }
 
             if (flags & 4) {
-                emitter->m_flags |= 0x200000;
+                emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::VELOCITY_ALIGNED_HEAD;
             }
 
             emitter->SetTextureDimensions(particleData->m_rows, particleData->m_cols);
@@ -7456,7 +7456,7 @@ int32_t CM2Model::InitializeLoaded() {
 
             CM2Model* source = this->m_model30;
 
-            if (source && (source->m_particleEmitters[i]->m_flags & 0x10)) {
+            if (source && (source->m_particleEmitters[i]->m_flags & CParticleEmitter2::RUNTIME_FLAGS::REPLACEMENT_COLORS)) {
                 CImVector color0;
                 CImVector color1;
                 CImVector color2;
@@ -7505,12 +7505,12 @@ int32_t CM2Model::InitializeLoaded() {
 
     uint32_t optimize = 0;
 
-    if (this->m_shared->m_maxInstances > 1 && (!this->m_model30 || (this->m_model30->m_fFlags & 0x10))) {
+    if (this->m_shared->m_maxInstances > 1 && (!this->m_model30 || (this->m_model30->m_runtimeFlags & 0x10))) {
         optimize = 1;
     }
 
     CM2Model* source = this->m_model30;
-    this->m_fFlags = (this->m_fFlags & ~0x10u) | (optimize << 4);
+    this->m_runtimeFlags = (this->m_runtimeFlags & ~0x10u) | (optimize << 4);
 
     if (source) {
         if (source->m_refCount-- == 1) {
@@ -7528,7 +7528,7 @@ int32_t CM2Model::InitializeLoaded() {
         M2Data* current = this->m_shared->m_data;
         uint16_t index = id < current->m_attachmentIndicesById.m_count ? current->m_attachmentIndicesById[id] : 0xFFFF;
 
-        if (index != 0xFFFF || (child->m_fFlags & 0x40000)) {
+        if (index != 0xFFFF || (child->m_runtimeFlags & 0x40000)) {
             child->m_attachmentIndex = index;
             link = &(*link)->m_attachNext;
         } else {
@@ -7543,24 +7543,24 @@ int32_t CM2Model::InitializeLoaded() {
         uint32_t boneFlags = currentData->m_bones[0].m_flags;
 
         if (!(boneFlags & 0x280) && !(boneFlags & 0x78) && !currentData->m_lights.m_count && !currentData->m_cameras.m_count && !currentData->m_ribbons.m_count && !currentData->m_particles.m_count && !currentData->m_colors.m_count) {
-            this->m_fFlags |= 0x1000;
+            this->m_runtimeFlags |= 0x1000;
         }
     }
 
-    this->m_fFlags = (this->m_fFlags & 0xFFFFF7FC) | 0x801;
+    this->m_runtimeFlags = (this->m_runtimeFlags & 0xFFFFF7FC) | 0x801;
 
     M2SequenceFallback fallback;
-    uint16_t standId = this->SequenceFallbackById(&fallback, 0)->m_id;
+    uint16_t standId = this->SequenceFallbackById(&fallback, ANIM_STAND)->m_id;
 
-    if (!(this->m_fFlags & 1)) {
+    if (!(this->m_runtimeFlags & 1)) {
         this->WaitForLoad(nullptr);
     }
 
-    uint32_t sequenceId = this->HasSequence(this->m_shared->m_data, standId) ? 0 : data->m_sequences[0].m_id;
+    uint32_t sequenceId = this->HasSequence(this->m_shared->m_data, standId) ? ANIM_STAND : data->m_sequences[0].m_id;
     this->SetBoneSequence(0xFFFFFFFF, sequenceId, 0xFFFFFFFF, 0, 1.0f, 0, 1);
 
     if (this->m_sequenceCallback || data->m_sequences.m_count > 1 || (this->m_eventCallback && data->m_events.m_count)) {
-        this->m_fFlags |= 0x400000;
+        this->m_runtimeFlags |= 0x400000;
     }
 
     uint32_t time = this->m_scene->m_time;
@@ -7570,63 +7570,63 @@ int32_t CM2Model::InitializeLoaded() {
         this->m_scene->m_time = call->m_time;
 
         switch (call->m_type) {
-            case 0:
+            case EModelModQ::MODEL_REPLACE_TEXTURE:
                 this->ReplaceTexture(call->m_args[0], reinterpret_cast<CTexture*>(call->m_args[1]));
                 break;
 
-            case 1:
+            case EModelModQ::MODEL_SET_GEOMETRY_VISIBLE:
                 this->SetGeometryVisible(call->m_args[0], call->m_args[1], call->m_args[2]);
                 break;
 
-            case 2:
+            case EModelModQ::MODEL_SET_GEOSET_VISIBILITY_RANGE:
                 this->SetGeosetVisibilityRange(call->m_args[0], call->m_args[1], call->m_args[2]);
                 break;
 
-            case 3:
+            case EModelModQ::MODEL_OPTIMIZE_VISIBLE_GEOSETS:
                 this->OptimizeVisibleGeometry();
                 break;
 
-            case 4:
+            case EModelModQ::MODEL_SET_BONE_FLAGS:
                 this->SetBoneFlags(call->m_args[0], call->m_args[1], call->m_args[2]);
                 break;
 
-            case 5:
+            case EModelModQ::MODEL_SET_BONE_SEQUENCE:
                 this->SetBoneSequence(call->m_args[0], call->m_args[1], call->m_args[2], call->m_args[3], *reinterpret_cast<float*>(&call->m_args[4]), call->m_args[5], call->m_args[6]);
                 break;
 
-            case 6:
+            case EModelModQ::MODEL_UNSET_BONE_SEQUENCE:
                 this->UnsetBoneSequence(call->m_args[0], call->m_args[1], call->m_args[2]);
                 break;
 
-            case 7:
+            case EModelModQ::MODEL_SET_BONE_SEQUENCE_TIME:
                 this->SetBoneSequenceTime(call->m_args[0], call->m_args[1]);
                 break;
 
-            case 8:
+            case EModelModQ::MODEL_SET_BONE_SEQUENCE_SPEED:
                 this->SetBoneSequenceSpeed(call->m_args[0], *reinterpret_cast<float*>(&call->m_args[1]));
                 break;
 
-            case 9:
+            case EModelModQ::MODEL_SET_BONE_PROCEDURAL_TRANSFORM:
                 this->SetBoneProceduralTransform(call->m_args[0], *reinterpret_cast<C44Matrix*>(&call->m_args[1]));
                 break;
 
-            case 10:
+            case EModelModQ::MODEL_SET_LIGHT_ENABLED:
                 this->SetLightEnabled(call->m_args[0], call->m_args[1]);
                 break;
 
-            case 11:
+            case EModelModQ::MODEL_REPLACE_PARTICLE_COLOR:
                 this->ReplaceParticleColor(call->m_args[0], *reinterpret_cast<CImVector*>(&call->m_args[1]), *reinterpret_cast<CImVector*>(&call->m_args[2]), *reinterpret_cast<CImVector*>(&call->m_args[3]));
                 break;
 
-            case 12:
+            case EModelModQ::MODEL_SET_EMITTERS_ENABLED:
                 this->SetEmittersEnabled(call->m_args[0]);
                 break;
 
-            case 13:
+            case EModelModQ::MODEL_SET_RIBBONS_ENABLED:
                 this->SetRibbonsEnabled(call->m_args[0]);
                 break;
 
-            case 14:
+            case EModelModQ::MODEL_LOAD_SEQUENCE:
                 this->LoadSequence(call->m_args[0]);
                 break;
         }
@@ -7642,7 +7642,7 @@ int32_t CM2Model::InitializeLoaded() {
 
     this->m_scene->m_time = time;
     this->UpdateLoaded();
-    this->m_fFlags &= ~0x800u;
+    this->m_runtimeFlags &= ~0x800u;
     return 1;
 }
 
@@ -7660,7 +7660,7 @@ void CM2Model::AttachToScene(CM2Scene* scene) {
         this->m_sceneNext->m_scenePrev = &this->m_sceneNext;
     }
 
-    if (this->m_fFlags & 1) {
+    if (this->m_runtimeFlags & 1) {
         M2Data* data = this->m_shared->m_data;
 
         for (uint32_t i = 0; i < data->m_lights.m_count; i++) {
@@ -7668,7 +7668,7 @@ void CM2Model::AttachToScene(CM2Scene* scene) {
         }
 
         M2SequenceFallback fallback;
-        uint32_t sequenceId = this->HasSequence(data, this->SequenceFallbackById(&fallback, 0)->m_id) ? 0 : data->m_sequences[0].m_id;
+        uint32_t sequenceId = this->HasSequence(data, this->SequenceFallbackById(&fallback, ANIM_STAND)->m_id) ? ANIM_STAND : data->m_sequences[0].m_id;
         this->SetBoneSequence(0xFFFFFFFF, sequenceId, 0xFFFFFFFF, 0, 1.0f, 0, 1);
     } else {
         for (CM2ModelCall* call = this->m_modelCallList; call; call = call->m_next) {
@@ -7690,14 +7690,14 @@ void CM2Model::AttachToSceneRecursive(CM2Scene* scene) {
 // VERIFY: 3596777a manual
 // OFFSET: 0x00834660
 void CM2Model::GatherModelBatchesShadowMap(CModelBatchList& untextured, CModelBatchList& textured) {
-    if (!(this->m_fFlags & 1)) {
-        if (!(this->m_flags & 0x20)) {
+    if (!(this->m_runtimeFlags & 1)) {
+        if (!(this->m_creationFlags & INSTANCE_FLAGS::INSTANCE_INITIALIZE_ON_DEMAND)) {
             return;
         }
 
         uint32_t sharedFlags = this->m_shared->m_flags;
 
-        if (!(sharedFlags & 1) || !(sharedFlags & 2)) {
+        if (!(sharedFlags & CM2Shared::SHARED_FLAGS::FLAG_MODEL_LOADED) || !(sharedFlags & CM2Shared::SHARED_FLAGS::FLAG_SKIN_LOADED)) {
             return;
         }
 
@@ -7730,7 +7730,7 @@ void CM2Model::GatherModelBatchesShadowMap(CModelBatchList& untextured, CModelBa
         M2Data* data = this->m_shared->m_data;
         M2Material* material = &data->m_materials[batch->m_materialIndex];
 
-        if ((material->m_flags & 0x40) || (!(material->m_flags & 0x80) && material->m_blendMode > 1)) {
+        if ((material->m_flags & 0x40) || (!(material->m_flags & 0x80) && material->m_blendMode > M2BLEND_ALPHA_KEY)) {
             continue;
         }
 
@@ -7767,7 +7767,7 @@ int32_t CM2Model::Initialize(CM2Scene* scene, CM2Shared* shared, CM2Model* sourc
         source->m_refCount++;
     }
 
-    this->m_flags = flags;
+    this->m_creationFlags = flags;
     this->m_modelCallTail = &this->m_modelCallList;
     this->m_loopOrigin = this->m_scene->m_time;
 
@@ -7791,7 +7791,7 @@ int32_t CM2Model::Initialize(CM2Scene* scene, CM2Shared* shared, CM2Model* sourc
 // VERIFY: 767a1eb1 auto
 // OFFSET: 0x004D8630
 void CM2Model::SetWorldTransform(const C44Matrix& matrix) {
-    this->m_fFlags |= 0x8000;
+    this->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
     this->m_worldTransform = matrix;
 }
 
@@ -7802,17 +7802,17 @@ void CM2Lighting::Reset() {
     this->m_sunDiffuse = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunSpecular = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunDir = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector18 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector24 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector30 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector3C = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector48 = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_redDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_greenDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_blueDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_luminanceDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_diffuseColorSum = C3Vector(0.0f, 0.0f, 0.0f);
 }
 
 // VERIFY: 56d2a807 auto
 // OFFSET: 0x004F5E20
 CAaBox CM2Model::GetBoundingBox() {
-    if (!(this->m_shared->m_flags & 1)) {
+    if (!(this->m_shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_MODEL_LOADED)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -7822,7 +7822,7 @@ CAaBox CM2Model::GetBoundingBox() {
 // VERIFY: 542067ba manual
 // OFFSET: 0x004F5E80
 CAaSphere CM2Model::GetBoundingSphere() {
-    if (!(this->m_shared->m_flags & 1)) {
+    if (!(this->m_shared->m_flags & CM2Shared::SHARED_FLAGS::FLAG_MODEL_LOADED)) {
         this->WaitForLoad(nullptr);
     }
 
@@ -7849,11 +7849,11 @@ CM2Lighting::CM2Lighting(const CAaSphere& sphere) {
     this->m_sphere4.r = 0.0f;
     this->m_sphere4.c.y = 0.0f;
     this->m_sphere4.c.z = 0.0f;
-    this->m_vector18 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector24 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector30 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector3C = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector48 = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_redDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_greenDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_blueDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_luminanceDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_diffuseColorSum = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunAmbient = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunDiffuse = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunSpecular = C3Vector(0.0f, 0.0f, 0.0f);
@@ -7873,11 +7873,11 @@ CM2Lighting::CM2Lighting(const C3Vector& position) {
     this->m_sphere4.r = 0.0f;
     this->m_sphere4.c.y = 0.0f;
     this->m_sphere4.c.z = 0.0f;
-    this->m_vector18 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector24 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector30 = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector3C = C3Vector(0.0f, 0.0f, 0.0f);
-    this->m_vector48 = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_redDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_greenDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_blueDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_luminanceDirectionSum = C3Vector(0.0f, 0.0f, 0.0f);
+    this->m_diffuseColorSum = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunAmbient = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunDiffuse = C3Vector(0.0f, 0.0f, 0.0f);
     this->m_sunSpecular = C3Vector(0.0f, 0.0f, 0.0f);
@@ -7910,7 +7910,7 @@ void M2SequenceInfo::Clear() {
 // VERIFY: 7202abde auto
 // OFFSET: 0x007BABA0
 uint32_t CM2Model::GetBillboardBoneCount() const {
-    if (this->m_fFlags & 0x1) {
+    if (this->m_runtimeFlags & 0x1) {
         return this->m_shared->m_billboardBoneCount;
     }
 

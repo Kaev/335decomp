@@ -1,4 +1,6 @@
 #include "Player_C.h"
+#include "WoW/Source/Game/GameClient/tables.h"
+#include "WoW/Common/Types.h"
 #include <malloc.h>
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
@@ -37,6 +39,7 @@
 #include "WoW/Source/Game/GameClient/ComSatClient.h"
 #include "WoW/Source/LoadingScreen.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Net/Types.h"
 #include "WoW/Source/Object/CGPetition.h"
 #include "WoW/Source/Object/ItemStats.h"
@@ -159,8 +162,8 @@ struct GUILDUPDATETIMESTAMP {
 
 struct InitialSpellStruct {
     /* 0000 */ uint32_t m_spellId;
-    /* 0004 */ uint16_t unk_0004;
-    /* 0006 */ uint16_t unk_0006;
+    /* 0004 */ uint16_t m_slot;
+    /* 0006 */ uint16_t unused_0006;
 };
 
 struct QuestItemLoot {
@@ -216,7 +219,7 @@ static int32_t s_areaTriggerMapID;
 static int32_t s_defenseSpellId;
 
 // STATIC: 0x00C9D4F0
-static uint32_t s_proficiency[17];
+static uint32_t s_proficiency[ITEM_CLASS::NUM_ITEM_CLASSES];
 
 // STATIC: 0x00C9D534
 static uint32_t s_bindAreaId;
@@ -249,7 +252,7 @@ static uint32_t s_pendingMovie;
 WOWGUID CGPlayer_C::s_resurrectOfferer;
 
 // STATIC: 0x00C9EAB0
-static uint32_t s_unk_C9EAB0;
+static uint32_t s_visibleAuraEffectDisplay;
 
 // STATIC: 0x00C9EAC0
 uint32_t CGPlayer_C::s_resurrectOfferSickness;
@@ -258,7 +261,7 @@ uint32_t CGPlayer_C::s_resurrectOfferSickness;
 uint32_t CGPlayer_C::s_resurrectOfferUseTimer;
 
 // STATIC: 0x00C9EAB4
-static uint32_t s_unk_C9EAB4;
+static uint32_t s_visibleAuraEffectFlags;
 
 // STATIC: 0x00C9EACC
 static uint8_t s_tabardSavePending;
@@ -366,9 +369,9 @@ static uint32_t s_missileTrajectorySequence;
 
 // STATIC: 0x00A32450
 static const RestStateInfo s_restStateInfo[3] = {
-    { ERR_MAX_VALUE, 60 },
-    { ERR_EXHAUSTION_RESTED, 25 },
-    { ERR_EXHAUSTION_NORMAL, 60 },
+    { ERR_MAX_VALUE, TUTORIAL::NUM_TUTORIALS },
+    { ERR_EXHAUSTION_RESTED, TUTORIAL::TUTORIAL_RESTED },
+    { ERR_EXHAUSTION_NORMAL, TUTORIAL::NUM_TUTORIALS },
 };
 
 // STATIC: 0x00C9EC68
@@ -389,7 +392,7 @@ static int32_t OnUpdatePVPTitle(WOWGUID guid, uint32_t fieldOffset, uint32_t fie
 // OFFSET: 0x006D1970
 static int32_t PetChangeHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
     if (guid == ClntObjMgrGetActivePlayer() || CGGameUI::IsPartyMember(guid)) {
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
         if (!player) {
             SErrDisplayAppFatalMessage("", "", 0);
@@ -400,7 +403,7 @@ static int32_t PetChangeHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fie
             WOWGUID newGuid = i ? player->m_unit->m_unitFieldSummon : player->m_unit->m_unitFieldCharm;
 
             if (oldGuid) {
-                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(oldGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(oldGuid, TYPE_UNIT, __FILE__, __LINE__));
 
                 if (unit) {
                     unit->UpdateScriptRegistration();
@@ -415,7 +418,7 @@ static int32_t PetChangeHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fie
             }
 
             if (newGuid) {
-                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(newGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(newGuid, TYPE_UNIT, __FILE__, __LINE__));
 
                 if (unit) {
                     unit->UpdateScriptRegistration();
@@ -446,7 +449,7 @@ static int32_t GuildRankUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32
 // VERIFY: c6201d41 manual
 // OFFSET: 0x006D1B20
 static int32_t DuelTeamUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->UpdateReaction(true);
@@ -469,7 +472,7 @@ static int32_t GetWeaponSubClassCount(int32_t* count) {
     while (index--) {
         const ItemSubClassRec* rec = index >= 0 && index < g_itemSubClassDB.m_numRecords ? &g_itemSubClassDB.m_records[index] : nullptr;
 
-        if (rec->m_classID == 2) {
+        if (rec->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON) {
             found = 1;
 
             if (maxSubClass <= rec->m_subClassID) {
@@ -486,13 +489,13 @@ static int32_t GetWeaponSubClassCount(int32_t* count) {
 // VERIFY: d6521b3e manual
 // OFFSET: 0x006DA6B0
 static int32_t OnUpdateInebriation(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         float drunkness = player->GetDrunknessTurnValue();
 
         if (player->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
-            CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_UNIT, __FILE__, __LINE__));
 
             if (target && player->CanAttack(target)) {
                 FrameScript_SignalEvent(SCRIPT_EVENT_UNIT_LEVEL, "%s", "target");
@@ -509,11 +512,11 @@ static int32_t OnUpdateInebriation(WOWGUID guid, uint32_t fieldOffset, uint32_t 
 // VERIFY: 3507ab43 manual
 // OFFSET: 0x006DA7F0
 static int32_t OnUpdatePlayerHairColor(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         if (player->m_characterComponent) {
-            player->m_characterComponent->SetHairColor(player->m_player->m_playerBytes[3], true, nullptr);
+            player->m_characterComponent->SetHairColor(player->m_player->hairColorID, true, nullptr);
         }
 
         if (ClntObjMgrGetActivePlayer() == guid) {
@@ -530,11 +533,11 @@ static int32_t OnUpdatePlayerHairColor(WOWGUID guid, uint32_t fieldOffset, uint3
 // VERIFY: f44b3c3d manual
 // OFFSET: 0x006DA870
 static int32_t OnUpdatePlayerSkinID(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         if (player->m_characterComponent) {
-            player->m_characterComponent->SetSkinColor(player->m_player->m_playerBytes[0], true, false, nullptr);
+            player->m_characterComponent->SetSkinColor(player->m_player->skinID, true, false, nullptr);
         }
 
         if (ClntObjMgrGetActivePlayer() == guid) {
@@ -551,16 +554,16 @@ static int32_t OnUpdatePlayerSkinID(WOWGUID guid, uint32_t fieldOffset, uint32_t
 // VERIFY: d2633809 manual
 // OFFSET: 0x006DF530
 static int32_t OnUpdatePlayerHairStyle(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         bool activePlayer = ClntObjMgrGetActivePlayer() == guid;
         CCharacterComponent* component = player->m_characterComponent;
 
         if (component) {
-            component->SetHairStyle(player->m_player->m_playerBytes[2], nullptr);
+            component->SetHairStyle(player->m_player->hairStyleID, nullptr);
 
-            if (!(player->m_player->m_playerFlags & 0x400) && (!activePlayer || !CGBarberShop::m_barberShopEnabled)) {
+            if (!(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) && (!activePlayer || !CGBarberShop::m_barberShopEnabled)) {
                 VisibleItem_C* head = &player->m_player->m_playerVisibleItems[0];
 
                 if (head && head->GetDisplayID() && player->CanEquipItemsInThisForm()) {
@@ -583,16 +586,16 @@ static int32_t OnUpdatePlayerHairStyle(WOWGUID guid, uint32_t fieldOffset, uint3
 // VERIFY: 77d10d5a manual
 // OFFSET: 0x006DF620
 static int32_t OnUpdatePlayerFacialStyle(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         bool activePlayer = ClntObjMgrGetActivePlayer() == guid;
         CCharacterComponent* component = player->m_characterComponent;
 
         if (component) {
-            component->SetBeardStyle(player->m_player->m_playerBytes2[0], true, nullptr);
+            component->SetBeardStyle(player->m_player->facialHairStyleID, true, nullptr);
 
-            if (!(player->m_player->m_playerFlags & 0x400) && (!activePlayer || !CGBarberShop::m_barberShopEnabled)) {
+            if (!(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) && (!activePlayer || !CGBarberShop::m_barberShopEnabled)) {
                 VisibleItem_C* head = &player->m_player->m_playerVisibleItems[0];
 
                 if (head && head->GetDisplayID() && player->CanEquipItemsInThisForm()) {
@@ -637,15 +640,15 @@ static void InitWeaponSkills() {
             SErrDisplayAppFatalMessage("", "", 0);
         }
 
-        if (!(rec.m_attributes & 0x40)) {
+        if (!(rec.m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE)) {
             continue;
         }
 
-        if (!s_defenseSpellId && rec.m_effect[0] == 26) {
+        if (!s_defenseSpellId && rec.m_effect[0] == SPELL_EFFECT_DEFENSE) {
             s_defenseSpellId = rec.m_id;
         }
 
-        if (rec.m_equippedItemClass != 2) {
+        if (rec.m_equippedItemClass != ITEM_CLASS::ITEM_CLASS_WEAPON) {
             continue;
         }
 
@@ -677,9 +680,9 @@ static void InitWeaponSkills() {
 // VERIFY: 07dc9718 manual
 // OFFSET: 0x006E1B40
 static int32_t GuildUpdateHandler(WOWGUID guid, void* param) {
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (object && (object->m_obj->m_type & TYPEMASK_PLAYER) && static_cast<CGPlayer_C*>(object)->m_player->m_playerGuildid == reinterpret_cast<uint32_t>(param)) {
+    if (object && (object->m_obj->m_type & TYPE_PLAYER) && static_cast<CGPlayer_C*>(object)->m_player->m_playerGuildid == reinterpret_cast<uint32_t>(param)) {
         static_cast<CGPlayer_C*>(object)->OnGuildChanged(0);
     }
 
@@ -697,7 +700,7 @@ static void GuildTimestampChanged(int32_t id, const WOWGUID& guid, void* param, 
 // VERIFY: 5687d777 manual
 // OFFSET: 0x006E1BB0
 static int32_t GuildIDUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->OnGuildChanged(1);
@@ -720,7 +723,7 @@ static int32_t GuildIDUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t
 // VERIFY: cdac6d5b manual
 // OFFSET: 0x006E1C20
 static int32_t OnUpdatePlayerFlags(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->TogglePlayerFlag(*static_cast<const uint32_t*>(oldValue));
@@ -732,7 +735,7 @@ static int32_t OnUpdatePlayerFlags(WOWGUID guid, uint32_t fieldOffset, uint32_t 
 // VERIFY: 3504720c manual
 // OFFSET: 0x006E1C60
 static int32_t OnUpdateGuildTimeStamp(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -769,7 +772,7 @@ static int32_t OnUpdateGuildTimeStamp(WOWGUID guid, uint32_t fieldOffset, uint32
 // VERIFY: bdd9f9e6 manual
 // OFFSET: 0x006E4580
 static int32_t OnUpdateInventoryComponent(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSize, const void* oldValue, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->UpdateInventoryComponent(static_cast<INVENTORY_SLOTS>((fieldOffset - offsetof(CGPlayerData, m_playerVisibleItems)) / sizeof(VisibleItem_C)), static_cast<const VisibleItem_C*>(oldValue));
@@ -784,8 +787,8 @@ void CGPlayer_C::Initialize() {
     CGPlayer_C::s_lastVendorListReceived = WOWGUID();
     s_giftWrapItem = WOWGUID();
     s_bindPointSet = 0;
-    s_unk_C9EAB0 = 0;
-    s_unk_C9EAB4 = 0;
+    s_visibleAuraEffectDisplay = 0;
+    s_visibleAuraEffectFlags = 0;
     CGPlayer_C::s_lastUpdatePVPGroup = WOWGUID();
     CGPlayer_C::s_lastUpdatePVPSequence = 0;
     CGPlayer_C::s_lastUpdatePVPTime = 0;
@@ -797,22 +800,22 @@ void CGPlayer_C::Initialize() {
     s_attackSwingErrorTime = FrameTime::s_curTimeMs;
 
     for (uint32_t offset = offsetof(CGPlayerData, m_playerVisibleItems); offset <= offsetof(CGPlayerData, m_playerVisibleItems) + sizeof(CGPlayerData::m_playerVisibleItems) - sizeof(VisibleItem_C); offset += sizeof(VisibleItem_C)) {
-        ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offset, sizeof(VisibleItem_C), OnUpdateInventoryComponent, nullptr, static_cast<HANDLER_PRIORITY>(1), 0);
+        ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offset, sizeof(VisibleItem_C), OnUpdateInventoryComponent, nullptr, HANDLER_PRIORITY_HIGH, 0);
     }
 
-    ClntObjMgrSetTypeMirrorHandler(ID_UNIT, offsetof(CGUnitData, m_unitFieldCharm), 2 * sizeof(WOWGUID), PetChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildid), sizeof(uint32_t), GuildIDUpdateHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildrank), sizeof(uint32_t), GuildRankUpdateHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerDuelTeam), sizeof(uint32_t), DuelTeamUpdateHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerFlags), sizeof(uint32_t), OnUpdatePlayerFlags, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildTimestamp), sizeof(uint32_t), OnUpdateGuildTimeStamp, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes3) + 2, sizeof(uint8_t), OnUpdatePVPTitle, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes3) + 1, sizeof(uint8_t), OnUpdateInebriation, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerChosenTitle), sizeof(uint32_t), OnUpdatePVPTitle, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes) + 3, sizeof(uint8_t), OnUpdatePlayerHairColor, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes) + 2, sizeof(uint8_t), OnUpdatePlayerHairStyle, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes2), sizeof(uint8_t), OnUpdatePlayerFacialStyle, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes), sizeof(uint8_t), OnUpdatePlayerSkinID, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_UNIT, offsetof(CGUnitData, m_unitFieldCharm), 2 * sizeof(WOWGUID), PetChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildid), sizeof(uint32_t), GuildIDUpdateHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildrank), sizeof(uint32_t), GuildRankUpdateHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerDuelTeam), sizeof(uint32_t), DuelTeamUpdateHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerFlags), sizeof(uint32_t), OnUpdatePlayerFlags, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildTimestamp), sizeof(uint32_t), OnUpdateGuildTimeStamp, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, pvpMedal), sizeof(uint8_t), OnUpdatePVPTitle, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, inebriation), sizeof(uint8_t), OnUpdateInebriation, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerChosenTitle), sizeof(uint32_t), OnUpdatePVPTitle, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, hairColorID), sizeof(uint8_t), OnUpdatePlayerHairColor, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, hairStyleID), sizeof(uint8_t), OnUpdatePlayerHairStyle, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, facialHairStyleID), sizeof(uint8_t), OnUpdatePlayerFacialStyle, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, skinID), sizeof(uint8_t), OnUpdatePlayerSkinID, nullptr, HANDLER_PRIORITY_NORMAL, 0);
 }
 
 // VERIFY: 22f04900 manual
@@ -840,12 +843,12 @@ void CGPlayer_C::Shutdown() {
     ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerDuelTeam), DuelTeamUpdateHandler, nullptr);
     ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerFlags), OnUpdatePlayerFlags, nullptr);
     ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerGuildTimestamp), OnUpdateGuildTimeStamp, nullptr);
-    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes3) + 2, OnUpdatePVPTitle, nullptr);
-    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes3) + 1, OnUpdateInebriation, nullptr);
+    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, pvpMedal), OnUpdatePVPTitle, nullptr);
+    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, inebriation), OnUpdateInebriation, nullptr);
     ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerChosenTitle), OnUpdatePVPTitle, nullptr);
-    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes) + 3, OnUpdatePlayerHairColor, nullptr);
-    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes) + 2, OnUpdatePlayerHairStyle, nullptr);
-    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, m_playerBytes2), OnUpdatePlayerFacialStyle, nullptr);
+    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, hairColorID), OnUpdatePlayerHairColor, nullptr);
+    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, hairStyleID), OnUpdatePlayerHairStyle, nullptr);
+    ClntObjMgrUnsetTypeMirrorHandler(ID_PLAYER, offsetof(CGPlayerData, facialHairStyleID), OnUpdatePlayerFacialStyle, nullptr);
 }
 
 // VERIFY: 78b02f45 auto
@@ -853,7 +856,7 @@ void CGPlayer_C::Shutdown() {
 void PlayerClientInitialize() {
     CGPlayer_C::PlayerInitializeMessageHandlers();
 
-    for (uint32_t i = 0; i < 17; i++) {
+    for (uint32_t i = 0; i < ITEM_CLASS::NUM_ITEM_CLASSES; i++) {
         s_proficiency[i] = 0;
     }
 
@@ -884,7 +887,7 @@ void CGPlayer_C::UpdateQuestStatus(CGObject_C* object) {
 // VERIFY: c64646b5 manual
 // OFFSET: 0x006D5130
 void CGPlayer_C::UpdateTaxiStatus(CGUnit_C* unit) {
-    if (unit->UnitReaction(this) <= 1 || !(unit->m_unit->m_unitNpcFlags & 0x2000)) {
+    if (unit->UnitReaction(this) <= UNIT_REACTION_HOSTILE || !(unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_FLIGHT_MASTER)) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
@@ -923,8 +926,8 @@ void CGPlayer_C::HandleRepopRequest(bool a2) {
 
 // VERIFY: 63c9a7c3 manual
 // OFFSET: 0x006DCB40
-void CGPlayer_C::ChangeStandState(uint32_t standState) {
-    if (standState >= 11) {
+void CGPlayer_C::ChangeStandState(UNITSTANDSTATE standState) {
+    if (standState >= UNIT_NUMSTANDSTATES) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
@@ -932,13 +935,13 @@ void CGPlayer_C::ChangeStandState(uint32_t standState) {
         return;
     }
 
-    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & 0x10000000)) {
+    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING)) {
         return;
     }
 
     CGUnitData* unit = this->m_unit;
 
-    if ((unit->m_unitFieldFlags & 0x100000) || unit->m_unitFieldHealth <= 0 || (unit->m_unitFieldFlags2 & 0x1) || this->IsInVehicle() || (this->m_animationState & 0x400) || this->m_castSpellId || !this->IsLocalClientControlled()) {
+    if ((unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) || unit->m_unitFieldHealth <= 0 || (unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_FEIGN_DEATH) || this->IsInVehicle() || (this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_CASTING) || this->m_castSpellId || !this->IsLocalClientControlled()) {
         return;
     }
 
@@ -946,24 +949,24 @@ void CGPlayer_C::ChangeStandState(uint32_t standState) {
         SpellRec spellRec;
         g_spellDB.GetRecord(this->m_unit->m_unitChannelSpell, &spellRec);
 
-        if (!(spellRec.m_attributes & 0x8000000)) {
+        if (!(spellRec.m_attributes & SPELL_ATTR0::SPELL_ATTR0_ALLOW_WHILE_SITTING)) {
             return;
         }
     }
 
     uint32_t moveFlags = this->m_movement->m_flags;
 
-    if ((moveFlags & 0x30) && (standState == 3 || standState == 1)) {
+    if ((moveFlags & MOVEMENTFLAG_TURN_MASK) && (standState == UNIT_SLEEPING || standState == UNIT_SITTING)) {
         return;
     }
 
-    if (standState && (moveFlags & 0x2E0100F)) {
+    if ((standState != UNIT_STANDING) && (moveFlags & MOVEMENTFLAG_LOCOMOTION_MASK)) {
         return;
     }
 
     CDataStore msg;
     msg.Put(static_cast<uint32_t>(CMSG_STAND_STATE_CHANGE));
-    msg.Put(standState);
+    msg.Put(static_cast<uint32_t>(standState));
     msg.Finalize();
     ClientServices::Send2(&msg);
     this->UpdateClientStandState(standState);
@@ -971,7 +974,7 @@ void CGPlayer_C::ChangeStandState(uint32_t standState) {
 
 // VERIFY: b464ce44 auto
 // OFFSET: 0x006E2B30
-void CGPlayer_C::SetClientStandState(uint32_t standState) {
+void CGPlayer_C::SetClientStandState(UNITSTANDSTATE standState) {
     if (this->m_obj->m_guid != ClntObjMgrGetActivePlayer()) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
@@ -982,7 +985,7 @@ void CGPlayer_C::SetClientStandState(uint32_t standState) {
 
     this->m_clientStandState = standState;
 
-    if (!standState) {
+    if ((standState == UNIT_STANDING)) {
         CGInputControl::GetActive()->UpdatePlayer(OsGetAsyncTimeMs(), 1);
     } else {
         if (this->IsLooting()) {
@@ -993,7 +996,7 @@ void CGPlayer_C::SetClientStandState(uint32_t standState) {
             this->SetCombatMode();
         }
 
-        if (standState >= 4 && standState <= 6) {
+        if (standState >= UNIT_FIRSTCHAIRSIT && standState <= UNIT_LASTCHAIRSIT) {
             return;
         }
     }
@@ -1030,7 +1033,7 @@ void CGPlayer_C::PreAnimate(CGWorldFrame* frame) {
 void CGPlayer_C::ShouldRender(uint32_t flags, int32_t& culled, int32_t& hidden) {
     this->CGUnit_C::ShouldRender(flags, culled, hidden);
 
-    if (this->IsCommentatorUberOrInArena() || ((this->m_clientFlags & 0x400000) && this->unk_18B8)) {
+    if (this->IsCommentatorUberOrInArena() || ((this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_COMPONENT_INITIALIZATION_PENDING) && this->m_pendingItemCacheCount)) {
         hidden = 1;
     } else if (!s_playerRenderDisabled && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         hidden = 1;
@@ -1100,7 +1103,7 @@ bool CGPlayer_C::VehicleAllowsInteraction() const {
         return true;
     }
 
-    CGUnit_C* transport = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_movementData.m_transportGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* transport = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_movementData.m_transportGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!transport) {
         return true;
@@ -1111,7 +1114,7 @@ bool CGPlayer_C::VehicleAllowsInteraction() const {
     }
 
     VehicleSeatRec* seat = transport->m_vehicle->GetVehicleSeatRec(static_cast<uint8_t>(this->m_movementData.m_transportSeat));
-    return seat && (seat->m_flags & 0x80000000);
+    return seat && (seat->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_ALLOWS_INTERACTION);
 }
 
 // VERIFY: eb153e9f auto
@@ -1127,20 +1130,20 @@ void CGPlayer_C::SetAutoLoot(int32_t autoLoot) {
 // VERIFY: 21ce503c manual
 // OFFSET: 0x00729530
 bool CGPlayer_C::CanInteract(const CGUnit_C* unit) const {
-    bool isPlayer = (this->m_obj->m_type & TYPEMASK_PLAYER) != 0;
+    bool isPlayer = (this->m_obj->m_type & TYPE_PLAYER) != 0;
 
-    if (isPlayer && (this->m_player->m_playerFlags & 0x10) && (!unit->m_creatureCacheEntry || !(unit->m_creatureCacheEntry->m_typeFlags & 0x2))) {
+    if (isPlayer && (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST) && (!unit->m_creatureCacheEntry || !(unit->m_creatureCacheEntry->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_VISIBLE_TO_GHOSTS))) {
         return false;
     }
 
     CGUnitData* data = unit->m_unit;
     uint32_t npcFlags = data->m_unitNpcFlags;
 
-    if ((npcFlags & 0x1) && isPlayer && !(unit->m_obj->m_type & TYPEMASK_PLAYER) && unit->m_creatureCacheEntry && (unit->m_creatureCacheEntry->m_typeFlags & 0x800000) && data->m_unitFieldCreatedby != this->m_obj->m_guid) {
+    if ((npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_GOSSIP) && isPlayer && !(unit->m_obj->m_type & TYPE_PLAYER) && unit->m_creatureCacheEntry && (unit->m_creatureCacheEntry->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_GOSSIP_ONLY_WITH_CREATOR) && data->m_unitFieldCreatedby != this->m_obj->m_guid) {
         return false;
     }
 
-    return !(data->m_unitFieldFlags & 0x2000000) && npcFlags && ((unit->UnitReaction(this) >= 3 && this->UnitReaction(unit) >= 3) || (unit->m_unit->m_unitFieldFlags2 & 0x4000));
+    return !(data->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_UNINTERACTIBLE) && npcFlags && ((unit->UnitReaction(this) >= UNIT_REACTION_NEUTRAL && this->UnitReaction(unit) >= UNIT_REACTION_NEUTRAL) || (unit->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_ALLOW_ENEMY_INTERACTION));
 }
 
 // VERIFY: c3ce918a manual
@@ -1188,10 +1191,10 @@ uint32_t CGPlayer_C::GetCoinage() const {
 // VERIFY: cd4355a9 manual
 // OFFSET: 0x0052E6D0
 const char* CGPlayer_C::GetHairCustomizationName() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        ChrRacesRec* rec = g_chrRacesDB.GetRecord(player->m_unit->m_unitFieldBytes0[0]);
+        ChrRacesRec* rec = g_chrRacesDB.GetRecord(player->m_unit->m_raceID);
 
         if (rec) {
             return rec->m_hairCustomization;
@@ -1204,13 +1207,13 @@ const char* CGPlayer_C::GetHairCustomizationName() {
 // VERIFY: 08168323 manual
 // OFFSET: 0x0052E730
 const char* CGPlayer_C::GetFacialHairCustomizationName() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        ChrRacesRec* rec = g_chrRacesDB.GetRecord(player->m_unit->m_unitFieldBytes0[0]);
+        ChrRacesRec* rec = g_chrRacesDB.GetRecord(player->m_unit->m_raceID);
 
         if (rec) {
-            return rec->m_facialHairCustomization[player->m_player->m_playerBytes3[0]];
+            return rec->m_facialHairCustomization[player->m_player->sex];
         }
     }
 
@@ -1302,7 +1305,7 @@ int32_t CGPlayer_C::CanLoot(const CGObject_C* object) {
     if (checkRange) {
         float range;
 
-        if (object->m_obj->m_type & TYPEMASK_UNIT) {
+        if (object->m_obj->m_type & TYPE_UNIT) {
             range = this->GetMeleeRange(static_cast<const CGUnit_C*>(object));
         } else {
             range = 5.0f;
@@ -1314,7 +1317,7 @@ int32_t CGPlayer_C::CanLoot(const CGObject_C* object) {
     if (this->IsShapeShifted()) {
         SpellShapeshiftFormRec* form = g_spellShapeshiftFormDB.GetRecord(this->GetShapeshiftForm());
 
-        if (form && (form->m_flags & 0x100)) {
+        if (form && (form->m_flags & SPELL_SHAPESHIFT_FORM_FLAG_NO_AUTO_UNSHIFT)) {
             return 0;
         }
     }
@@ -1336,7 +1339,7 @@ int32_t CGPlayer_C::CanLoot(const CGObject_C* object) {
         return 0;
     }
 
-    return !this->IsDeadOrGhost() && !(this->m_movement->m_flags & 0x1000) && !(this->m_unit->m_unitFieldFlags & 0x40000) && this->IsLocalClientControlled();
+    return !this->IsDeadOrGhost() && !(this->m_movement->m_flags & MOVEMENTFLAG_FALLING) && !(this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_STUNNED) && this->IsLocalClientControlled();
 }
 
 // VERIFY: 37ec0ce6 auto
@@ -1383,7 +1386,7 @@ uint32_t CGPlayer_C::GetBindAreaID() {
 
 // VERIFY: f0168031 auto
 // OFFSET: 0x006CEF20
-void __stdcall SignalPlayerAttackEvent(int32_t a1) {
+void __stdcall SignalPlayerAttackEvent(int32_t unused_a1) {
     FrameScript_SignalEvent(SCRIPT_EVENT_UNIT_ATTACK, "%s", "player");
 }
 
@@ -1403,18 +1406,18 @@ int32_t CGPlayer_C::IsGiftWrapping() {
 
 // VERIFY: 58af1e18 auto
 // OFFSET: 0x006CF240
-PlaySpellVisuaKitData::PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, uint32_t a4) {
+PlaySpellVisuaKitData::PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, uint32_t kitType) {
     this->m_spellRec = spellRec;
-    this->unk_0008 = a4;
+    this->m_kitType = kitType;
     this->m_impactVisualKit = impactVisualKit;
     this->m_position = nullptr;
     this->m_transportGUID = WOWGUID();
-    this->unk_0018 = 1;
-    this->unk_001C = 0;
-    this->unk_0020 = 0;
-    this->unk_0024 = -1;
+    this->m_playAnim = 1;
+    this->m_harmful = 0;
+    this->unknown_0020 = 0;
+    this->unknown_0024 = -1;
     this->m_someGUID = WOWGUID();
-    this->unk_0030 = 0;
+    this->m_effectFadeTime = 0;
 }
 
 // VERIFY: 6bc8ba4b auto
@@ -1449,7 +1452,7 @@ void CGPlayer_C::SetPlayedTime(int32_t playedTime) {
 // VERIFY: 14d81fae manual
 // OFFSET: 0x006D1CB0
 int32_t SignalPetSpellPowerUpdate(WOWGUID guid) {
-    if (ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__)) {
         FrameScript_SignalEvent(SCRIPT_EVENT_PET_SPELL_POWER_UPDATE, nullptr);
     }
 
@@ -1475,7 +1478,7 @@ void __stdcall CGPlayer_C::AcceptResurrectRequest(int32_t accept) {
 // VERIFY: a7e8dc5b manual
 // OFFSET: 0x006D1FC0
 int32_t CGPlayer_C::CheckSpiritHealerDistance() {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_spiritHealer, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_spiritHealer, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -1494,7 +1497,7 @@ int32_t CGPlayer_C::CheckSpiritHealerDistance() {
 // VERIFY: fdee41de manual
 // OFFSET: 0x006D2070
 int32_t CGPlayer_C::CheckTalentMasterDistance() {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_talentMaster, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_talentMaster, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -1513,7 +1516,7 @@ int32_t CGPlayer_C::CheckTalentMasterDistance() {
 // VERIFY: 9db57599 manual
 // OFFSET: 0x006D2290
 int32_t CGPlayer_C::CheckBinderDistance() {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_binder, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_binder, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -1605,7 +1608,7 @@ uint8_t CGPlayer_C::FindSlotIndex(WOWGUID guid) const {
     uint32_t numSlots = this->m_bag.m_numSlots;
 
     if (!numSlots) {
-        return 0xFF;
+        return INVENTORY_SLOT_INVALID;
     }
 
     for (uint8_t slot = 0; slot < numSlots; slot++) {
@@ -1616,7 +1619,7 @@ uint8_t CGPlayer_C::FindSlotIndex(WOWGUID guid) const {
         }
     }
 
-    return 0xFF;
+    return INVENTORY_SLOT_INVALID;
 }
 
 // VERIFY: da1b57c4 manual
@@ -1644,7 +1647,7 @@ void CGPlayer_C::SellItem(WOWGUID vendor, WOWGUID item, uint32_t count) {
 // VERIFY: c8640d9d manual
 // OFFSET: 0x006D4300
 void CGPlayer_C::GroupInvite(const char* name, uint32_t flags) {
-    CGTutorial::FlagTutorial(17);
+    CGTutorial::FlagTutorial(TUTORIAL::TUTORIAL_GROUPING);
 
     if (!SStrCmpUTF8I(name, this->GetUnitName(nullptr, 1), STORM_MAX_STR)) {
         CGGameUI::DisplayError(ERR_INVITE_SELF);
@@ -1722,10 +1725,10 @@ void __stdcall CGPlayer_C::UnSilencePlayer(WOWGUID guid, bool silence) {
 
 // VERIFY: 2afbda5e manual
 // OFFSET: 0x006D46D0
-void __stdcall CGPlayer_C::SetLootMethod(uint32_t method, WOWGUID master, uint32_t threshold) {
+void __stdcall CGPlayer_C::SetLootMethod(LOOT_METHOD method, WOWGUID master, uint32_t threshold) {
     CDataStore msg;
     msg.Put(static_cast<uint32_t>(CMSG_SET_LOOT_METHOD));
-    msg.Put(method);
+    msg.Put(static_cast<uint32_t>(method));
     msg.Put(master.m_guid);
     msg.Put(threshold);
     msg.Finalize();
@@ -1895,7 +1898,7 @@ void CGPlayer_C::QueryQuestGiverStatusMultiple() {
 const CGUnitVirtualItem* CGPlayer_C::GetDefendingItem() const {
     const CGBag_C* bag = this->GetBag();
     WOWGUID guid = static_cast<uint32_t>(bag->m_numSlots) > 4 ? bag->m_slots[4] : WOWGUID();
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item) {
         return &item->m_virtualItem;
@@ -1918,7 +1921,7 @@ void __stdcall CGPlayer_C::ReadItem(uint8_t bag, uint8_t slot) {
 // VERIFY: 9f933d46 auto
 // OFFSET: 0x006D5E70
 uint32_t CGPlayer_C::GetDefaultLanguage() const {
-    ChrRacesRec* rec = g_chrRacesDB.GetRecord(this->m_unit->m_unitFieldBytes0[0]);
+    ChrRacesRec* rec = g_chrRacesDB.GetRecord(this->m_unit->m_raceID);
 
     return rec ? rec->m_baseLanguage : 0;
 }
@@ -1973,12 +1976,12 @@ void CGPlayer_C::StartTaxiExpress(WOWGUID guid, const uint32_t* nodes, int32_t c
 
 // VERIFY: daeba6e5 auto
 // OFFSET: 0x006D64E0
-uint32_t CGPlayer_C::GetClientStandState() const {
+UNITSTANDSTATE CGPlayer_C::GetClientStandState() const {
     if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         return this->m_clientStandState;
     }
 
-    return this->m_unit->m_unitFieldBytes1[0];
+    return static_cast<UNITSTANDSTATE>(this->m_unit->m_standState);
 }
 
 // VERIFY: ed967909 auto
@@ -2025,7 +2028,7 @@ void __stdcall CGPlayer_C::RequestPetitionSignatures(WOWGUID petition) {
 // VERIFY: 1f8b3e30 auto
 // OFFSET: 0x006D6E90
 int32_t CGPlayer_C::GetPVPFactionIndex() const {
-    ChrRacesRec* raceRec = g_chrRacesDB.GetRecord(this->m_unit->m_unitFieldBytes0[0]);
+    ChrRacesRec* raceRec = g_chrRacesDB.GetRecord(this->m_unit->m_raceID);
 
     if (!raceRec) {
         return -1;
@@ -2091,7 +2094,7 @@ uint32_t CGPlayer_C::GetCreatureTracking() const {
 // VERIFY: 43e0888c manual
 // OFFSET: 0x006DAC10
 bool CGPlayer_C::IsDeadOrGhost() const {
-    return this->m_unit->m_unitFieldHealth <= 0 || ((this->m_player->m_playerFlags >> 4) & 1);
+    return this->m_unit->m_unitFieldHealth <= 0 || (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST);
 }
 
 // VERIFY: 3028b833 auto
@@ -2119,7 +2122,7 @@ int32_t CGPlayer_C::GetSkillIndex(int32_t skillId) const {
 // VERIFY: 43bc2c57 manual
 // OFFSET: 0x006DC8D0
 void CGPlayer_C::GetAFKText(char* buffer, uint32_t size) const {
-    if ((this->m_obj->m_guid == ClntObjMgrGetActivePlayer() && CGChat::m_afk) || (this->m_player->m_playerFlags & 0x2)) {
+    if ((this->m_obj->m_guid == ClntObjMgrGetActivePlayer() && CGChat::m_afk) || (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_AFK)) {
         const char* text = FrameScript_GetText("CHAT_FLAG_AFK", -1, GENDER_NOT_APPLICABLE);
 
         if (text && *text) {
@@ -2131,7 +2134,7 @@ void CGPlayer_C::GetAFKText(char* buffer, uint32_t size) const {
 // VERIFY: 817b7a91 manual
 // OFFSET: 0x006DC940
 void CGPlayer_C::GetDNDText(char* buffer, uint32_t size) const {
-    if (this->m_player->m_playerFlags & 0x4) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DND) {
         const char* text = FrameScript_GetText("CHAT_FLAG_DND", -1, GENDER_NOT_APPLICABLE);
 
         if (text && *text) {
@@ -2145,7 +2148,7 @@ void CGPlayer_C::GetDNDText(char* buffer, uint32_t size) const {
 void CGPlayer_C::GetGMText(char* buffer, uint32_t size) const {
     uint32_t flags = this->m_player->m_playerFlags;
 
-    if ((flags & 0x8) && !((flags >> 15) & 1)) {
+    if ((flags & PLAYER_FLAGS::PLAYER_FLAG_GM) && !(flags & PLAYER_FLAGS::PLAYER_FLAG_DEVELOPER)) {
         const char* text = FrameScript_GetText("CHAT_FLAG_GM", -1, GENDER_NOT_APPLICABLE);
 
         if (text && *text) {
@@ -2157,7 +2160,7 @@ void CGPlayer_C::GetGMText(char* buffer, uint32_t size) const {
 // VERIFY: 66d20b22 manual
 // OFFSET: 0x006DC9D0
 void CGPlayer_C::GetDevText(char* buffer, uint32_t size) const {
-    if (this->m_player->m_playerFlags & 0x8000) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DEVELOPER) {
         SStrPack(buffer, "<Dev>", size);
     }
 }
@@ -2165,7 +2168,7 @@ void CGPlayer_C::GetDevText(char* buffer, uint32_t size) const {
 // VERIFY: 67d51c6d manual
 // OFFSET: 0x006DE130
 bool CGPlayer_C::UnitIsTrivial(const CGUnit_C* unit) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || !unit || ((unit->m_obj->m_type >> 4) & 1)) {
         return false;
@@ -2200,9 +2203,9 @@ const VisibleItem_C* CGPlayer_C::GetVisibleItem(int32_t slot) const {
 void CGPlayer_C::SetPvpCooldownTimestamp(uint32_t flags) {
     uint32_t playerFlags = this->m_player->m_playerFlags;
 
-    if (playerFlags & 0x200) {
+    if (playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_DESIRED) {
         this->m_pvpCooldownTimestamp = 0;
-    } else if (!((playerFlags >> 18) & 1) || !(flags & 0x40000)) {
+    } else if (!(playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_TIMER_ACTIVE) || !(flags & PLAYER_FLAGS::PLAYER_FLAG_PVP_TIMER_ACTIVE)) {
         this->m_pvpCooldownTimestamp = FrameTime::s_curTimeMs + 300000;
     }
 }
@@ -2210,7 +2213,7 @@ void CGPlayer_C::SetPvpCooldownTimestamp(uint32_t flags) {
 // VERIFY: c787d6b7 manual
 // OFFSET: 0x006DE7A0
 int32_t CGPlayer_C::GetPVPToggleTimer() const {
-    if (!(this->m_player->m_playerFlags & 0x40000)) {
+    if (!(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_TIMER_ACTIVE)) {
         return 300000;
     }
 
@@ -2238,13 +2241,15 @@ int32_t CGPlayer_C::IsCommentatorUberOrInArena() const {
     MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
     uint32_t flags = this->m_player->m_playerFlags;
 
-    return ((flags >> 19) & 1) && (((flags >> 22) & 1) || (map && map->m_instanceType == 4));
+    return (flags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)
+        && ((flags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER) || (map
+        && map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD));
 }
 
 // VERIFY: 881f2596 manual
 // OFFSET: 0x006E61B0
 void CGPlayer_C::QueueItemEnchantTime(WOWGUID item, int32_t slot, int32_t duration) {
-    PlayerPendingItemExpiration* expiration = this->m_pendingItemExpirations.NewNode(2, 0, 0);
+    PlayerPendingItemExpiration* expiration = this->m_pendingItemExpirations.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     expiration->m_itemGuid = item;
     expiration->m_slot = slot;
     expiration->m_duration = duration;
@@ -2262,16 +2267,16 @@ int32_t Player_C_SetPlayerRenderDisabled(int32_t disabled) {
 // VERIFY: d4574fd6 auto
 // OFFSET: 0x006D4920
 int32_t CGPlayer_C::SpellUsesWeaponSkill(const SpellRec* spell) {
-    if (spell->m_targets & 0x10) {
+    if (spell->m_targets & SPELL_TARGET_TYPE::TARGET_FLAG_ITEM) {
         return spell->m_id;
     }
 
-    if ((spell->m_attributesExB & 0x8000000) || spell->m_effect[0] == 25 || spell->m_equippedItemClass != 2 || !spell->m_equippedItemSubclass) {
+    if ((spell->m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_IGNORE_WEAPONSKILL) || spell->m_effect[0] == SPELL_EFFECT_WEAPON || spell->m_equippedItemClass != ITEM_CLASS::ITEM_CLASS_WEAPON || !spell->m_equippedItemSubclass) {
         return spell->m_id;
     }
 
-    for (uint32_t slot = 0; slot < 3; slot++) {
-        const CGUnitVirtualItem* item = this->GetVirtualItem(slot, false);
+    for (uint32_t slot = 0; slot < NUM_VIRTUAL_MONSTER_SLOTS; slot++) {
+        const CGUnitVirtualItem* item = this->GetVirtualItem(static_cast<VIRTUAL_MONSTER_SLOT>(slot), false);
 
         if (item && item->m_classID == spell->m_equippedItemClass && ((1 << item->m_subclassID) & spell->m_equippedItemSubclass) && s_weaponSkills.m_data[item->m_subclassID]) {
             return s_weaponSkills.m_data[item->m_subclassID];
@@ -2290,9 +2295,9 @@ void __stdcall CGPlayer_C::OnTaxiNodeStatus(CDataStore* msg) {
     uint8_t status = 0;
     msg->Get(status);
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (unit && ((unit->m_unit->m_unitNpcFlags >> 13) & 1)) {
+    if (unit && (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_FLIGHT_MASTER)) {
         unit->m_interactIconType = status ? 0 : 7;
         unit->UpdateInteractIcon();
     }
@@ -2309,7 +2314,7 @@ int32_t CGItem::IsUsable() const {
 // VERIFY: f7a9f1f8 manual
 // OFFSET: 0x006DA3C0
 int32_t OnHonorCurrencyChanged(WOWGUID guid, uint32_t offset, uint32_t count, const void* value) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && player->m_player->m_playerFieldHonorCurrency < *static_cast<const uint32_t*>(value)) {
         SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
@@ -2324,7 +2329,7 @@ int32_t OnHonorCurrencyChanged(WOWGUID guid, uint32_t offset, uint32_t count, co
 // VERIFY: d617a5c3 manual
 // OFFSET: 0x006DA430
 int32_t OnArenaCurrencyChanged(WOWGUID guid, uint32_t offset, uint32_t count, const void* value) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && player->m_player->m_playerFieldArenaCurrency < *static_cast<const uint32_t*>(value)) {
         SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
@@ -2339,7 +2344,7 @@ int32_t OnArenaCurrencyChanged(WOWGUID guid, uint32_t offset, uint32_t count, co
 // VERIFY: fa2916ef manual
 // OFFSET: 0x006DAA80
 int32_t OnUpdatePlayerGlyph(WOWGUID guid, uint32_t offset, uint32_t count, const void* value) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -2363,7 +2368,7 @@ int32_t OnUpdatePlayerGlyph(WOWGUID guid, uint32_t offset, uint32_t count, const
 // VERIFY: 22efc675 manual
 // OFFSET: 0x006DAB80
 int32_t OnUpdatePlayerGlyphSlotsEnabled(WOWGUID guid, uint32_t offset, uint32_t count, const void* value) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         uint32_t enabled = *static_cast<const uint32_t*>(value);
@@ -2382,6 +2387,16 @@ int32_t OnUpdatePlayerGlyphSlotsEnabled(WOWGUID guid, uint32_t offset, uint32_t 
     }
 
     return 1;
+}
+
+// INLINED
+ITEMSWAP::ITEMSWAP() {
+    this->m_srcContainer = WOWGUID();
+    this->m_dstContainer = WOWGUID();
+    this->m_srcSlot = 0xFFFFFFFF;
+    this->m_dstSlot = 0xFFFFFFFF;
+    this->m_itemId = 0;
+    this->m_item = nullptr;
 }
 
 // VERIFY: baa57619 auto
@@ -2415,7 +2430,7 @@ int32_t CGPlayer_C::GetEquipBypassSkill(uint32_t index) const {
 // VERIFY: 2b34eb63 auto
 // OFFSET: 0x005140E0
 int32_t CGPlayer_C::IsInMelee() const {
-    return (this->m_combatModeFlags & 0x2) || this->CGUnit_C::IsInMelee();
+    return (this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_COMBAT) || this->CGUnit_C::IsInMelee();
 }
 
 // VERIFY: 03afa9dc manual
@@ -2431,7 +2446,7 @@ int32_t CGPlayer_C::HasZoneExplored(int32_t zone) {
 // VERIFY: e1bf01f5 manual
 // OFFSET: 0x006D2A40
 void CGPlayer_C::AutoStoreBankItem(WOWGUID bagGuid, uint32_t slot) {
-    CGObject_C* bagObject = ClntObjMgrObjectPtr(bagGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* bagObject = ClntObjMgrObjectPtr(bagGuid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!bagObject || !bagObject->GetBag()) {
         return;
@@ -2456,7 +2471,7 @@ void CGPlayer_C::AutoStoreBankItem(WOWGUID bagGuid, uint32_t slot) {
 // VERIFY: 6ce36b74 manual
 // OFFSET: 0x006D2B30
 void CGPlayer_C::AutoBankItem(WOWGUID bagGuid, uint32_t slot) {
-    CGObject_C* bagObject = ClntObjMgrObjectPtr(bagGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* bagObject = ClntObjMgrObjectPtr(bagGuid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!bagObject || !bagObject->GetBag()) {
         return;
@@ -2527,13 +2542,13 @@ int32_t CGPlayer_C::OnPetitionShowList(CDataStore* msg) {
         msg->Get(petitionList[i].m_requiredSignatures);
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(vendor, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(vendor, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 1;
     }
 
-    if ((unit->m_unit->m_unitNpcFlags & 0x40000) && (unit->m_unit->m_unitNpcFlags & 0x80000)) {
+    if ((unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_PETITIONER) && (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_TABARD_DESIGNER)) {
         CGGuildRegistrar::SetRegistrar(vendor, petitionList);
         return 1;
     }
@@ -2599,13 +2614,13 @@ bool CGPlayer_C::CanTrackUnit(const CGUnit_C* unit) {
         return false;
     }
 
-    uint8_t flags = unit->m_unit->m_unitFieldBytes1[2];
+    uint8_t flags = unit->m_unit->m_visFlags;
 
-    if (flags & 0x4) {
+    if (flags & UNIT_VIS_FLAG_UNTRACKABLE) {
         return false;
     }
 
-    if (((unit->m_unit->m_unitDynamicFlags >> 1) & 1) || ((flags & 0x2) && (this->m_player->m_playerFieldBytes[0] & 0x2))) {
+    if ((unit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_TRACK_UNIT) || ((flags & UNIT_VIS_FLAG_CREEP) && (this->m_player->m_playerLocalFlags & 0x2))) {
         return true;
     }
 
@@ -2652,7 +2667,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverStatus(CDataStore* msg) {
     uint8_t status;
     msg->Get(status);
 
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (object && object->IsQuestGiver()) {
         object->SetQuestStatus(status);
@@ -2674,7 +2689,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverStatusMultiple(CDataStore* msg) {
         uint8_t status;
         msg->Get(status);
 
-        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (object && object->IsQuestGiver()) {
             object->SetQuestStatus(status);
@@ -2690,7 +2705,7 @@ int32_t __stdcall CGPlayer_C::OnRefundInfo(CDataStore* msg) {
     WOWGUID guid;
     msg->Get(guid.m_guid);
 
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         msg->m_read = msg->m_size;
@@ -2714,7 +2729,7 @@ int32_t __stdcall CGPlayer_C::OnRefundInfo(CDataStore* msg) {
     msg->Get(data->m_honorPoints);
     msg->Get(data->m_arenaPoints);
 
-    for (uint32_t i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < CGItem_C::ItemPurchaseData::NUM_REFUND_ITEMS; i++) {
         msg->Get(data->m_itemId[i]);
         msg->Get(data->m_itemCount[i]);
 
@@ -2722,8 +2737,8 @@ int32_t __stdcall CGPlayer_C::OnRefundInfo(CDataStore* msg) {
         g_itemDBCache.GetRecord(data->m_itemId[i], requester, nullptr, nullptr, true);
     }
 
-    msg->Get(data->unk_0034);
-    msg->Get(data->m_refundTimeLeft);
+    msg->Get(data->unknown_0034);
+    msg->Get(data->m_purchasePlayedTime);
 
     return 1;
 }
@@ -2738,10 +2753,10 @@ void CGPlayer_C::UpdateAttackPosition(const CGUnit_C* target) {
         return;
     }
 
-    float range = this->m_unit->m_unitFieldCombatreach + target->m_unit->m_unitFieldCombatreach + 1.3333334f;
+    float range = this->m_unit->m_unitFieldCombatreach + target->m_unit->m_unitFieldCombatreach + MELEE_COMBAT_REACH_OFFSET;
 
-    if (range < 5.0f) {
-        range = 5.0f;
+    if (range < MELEE_RANGE_MIN) {
+        range = MELEE_RANGE_MIN;
     }
 
     range *= 4.0f;
@@ -2780,9 +2795,9 @@ void __stdcall CGPlayer_C::ClearAFK(int32_t force) {
 // OFFSET: 0x006E6B40
 CGPlayer_C::CGPlayer_C(uint32_t time, const CClientObjCreate& create)
     : CGUnit_C(time, create),
-      unk_1854(-1),
-      m_combatModeFlags(0),
-      unk_18B8(0),
+      unknown_1854(-1),
+      m_combatModeFlags(COMBAT_MODE_FLAGS::COMBAT_MODE_NONE),
+      m_pendingItemCacheCount(0),
       m_companionSpells(),
       m_lootTarget(),
       m_autoLoot(0) {
@@ -2790,7 +2805,7 @@ CGPlayer_C::CGPlayer_C(uint32_t time, const CClientObjCreate& create)
     bool activePlayer = this->m_obj->m_guid == ClntObjMgrGetActivePlayer();
     this->m_bag.m_guid = this->m_obj->m_guid;
     this->m_bag.m_hasBank = 1;
-    this->m_bag.m_numSlots = activePlayer ? 150 : 0;
+    this->m_bag.m_numSlots = activePlayer ? PLAYER_INVENTORY_SLOTS : 0;
     this->m_bag.m_slots = reinterpret_cast<WOWGUID*>(player->m_playerFieldInvSlotHead);
     this->m_combatTarget.m_guid = 0;
 
@@ -2819,7 +2834,7 @@ CGPlayer_C::CGPlayer_C(uint32_t time, const CClientObjCreate& create)
     this->m_dance = nullptr;
     this->m_danceMoveIndex = 0;
 
-    if (create.m_updateFlags & 0x1) {
+    if (create.m_updateFlags & OBJECT_UPDATE_FLAGS::UPDATEFLAG_SELF) {
         Spell_C_SeedMissileTrajectorySequence(static_cast<uint32_t>(this->m_obj->m_guid.m_guid));
     }
 
@@ -2834,7 +2849,7 @@ CGPlayer_C::CGPlayer_C(uint32_t time, const CClientObjCreate& create)
         ClientServices::Send2(&msg);
     }
 
-    this->unk_1954 = 0;
+    this->m_actionButtonsPending = 0;
 }
 
 // VERIFY: 1bf91d47 auto
@@ -2842,23 +2857,23 @@ CGPlayer_C::CGPlayer_C(uint32_t time, const CClientObjCreate& create)
 void CGPlayer_C::SetStorage(uint32_t* storage, uint32_t* saved) {
     this->CGUnit_C::SetStorage(storage, saved);
     this->m_player = reinterpret_cast<CGPlayerLocalData*>(storage + OBJECT_END + sizeof(CGUnitData) / sizeof(uint32_t));
-    this->m_playerMirror = saved + CGUnit::TotalFields();
+    this->m_playerMirror = saved + CGUnit::TotalFieldsSaved();
 }
 
 // VERIFY: aa03190b auto
 // OFFSET: 0x006E8280
 void CGPlayer_C::PostInit(uint32_t time, const CClientObjCreate& create, bool reenable) {
-    this->m_clientStandState = this->m_unit->m_unitFieldBytes1[0];
+    this->m_clientStandState = static_cast<UNITSTANDSTATE>(this->m_unit->m_standState);
     this->CGUnit_C::PostInit(time, create, reenable);
     this->GetUnitName(nullptr, 1);
     this->OnGuildChanged(0);
     CGChat::UpdateGuildStatus();
     this->Animate(0.0f);
-    this->UpdateAmmoModel(this->GetEquippedItemDisplayId(), 30);
+    this->UpdateAmmoModel(this->GetEquippedItemDisplayId(), CGUnit_C::AUTO_AMMO_INVENTORY_TYPE);
     CGPartyInfo::EnableMember(this, 1);
     CGRaidInfo::EnableMember(this, 1);
 
-    if (CGBattlefieldInfo::m_instanceType == 4 && this->m_player->m_playerBytes3[3] != CGBattlefieldInfo::m_arenaFaction) {
+    if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD && this->m_player->arenaFaction != CGBattlefieldInfo::m_arenaFaction) {
         WOWGUID guid = this->m_obj->m_guid;
         CGBattlefieldInfo::AddArenaOpponent(guid);
 
@@ -2883,9 +2898,9 @@ void CGPlayer_C::PostInit(uint32_t time, const CClientObjCreate& create, bool re
 // VERIFY: 5414e18a auto
 // OFFSET: 0x006E6150
 void CGPlayer_C::Reenable() {
-    this->m_clientStandState = this->m_unit->m_unitFieldBytes1[0];
+    this->m_clientStandState = static_cast<UNITSTANDSTATE>(this->m_unit->m_standState);
     this->CGUnit_C::Reenable();
-    this->unk_18B8 = 0;
+    this->m_pendingItemCacheCount = 0;
 
     if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         this->SetActiveMirrorHandlers();
@@ -2900,7 +2915,7 @@ void CGPlayer_C::PostReenable() {
     CGPartyInfo::EnableMember(this, 1);
     CGRaidInfo::EnableMember(this, 1);
 
-    if (CGBattlefieldInfo::m_instanceType == 4 && this->m_player->m_playerBytes3[3] != CGBattlefieldInfo::m_arenaFaction) {
+    if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD && this->m_player->arenaFaction != CGBattlefieldInfo::m_arenaFaction) {
         WOWGUID guid = this->m_obj->m_guid;
         CGBattlefieldInfo::AddArenaOpponent(guid);
 
@@ -2919,12 +2934,12 @@ void CGPlayer_C::PostReenable() {
 // VERIFY: 46563e0e auto
 // OFFSET: 0x006CF3A0
 static float ClampPitch(float pitch) {
-    if (pitch > 1.5707964f) {
-        return 1.5707964f;
+    if (pitch > HALF_PI) {
+        return HALF_PI;
     }
 
-    if (pitch < -1.5707964f) {
-        return -1.5707964f;
+    if (pitch < -HALF_PI) {
+        return -HALF_PI;
     }
 
     return pitch;
@@ -2945,39 +2960,39 @@ static float GetDrunkTurnOffset(uint32_t time, float drunkness) {
 // OFFSET: 0x006DE9E0
 int32_t CGPlayer_C::CanGrantLevel(WOWGUID guid) {
     if (!guid) {
-        return 8;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NO_TARGET;
     }
 
-    CGPlayer_C* target = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* target = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!target) {
-        return 4;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TOO_FAR;
     }
 
     if (!CGPlayer_C::IsRAFPlayer(guid)) {
-        return 1;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NOT_REFERRED_BY;
     }
 
     FactionTemplateRec* faction = g_factionTemplateDB.GetRecord(this->m_unit->m_unitFieldFactiontemplate);
     FactionTemplateRec* targetFaction = g_factionTemplateDB.GetRecord(target->m_unit->m_unitFieldFactiontemplate);
 
     if (faction && targetFaction && faction->m_factionGroup != targetFaction->m_factionGroup) {
-        return 5;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_DIFFERENT_FACTION;
     }
 
     if (target->m_unit->m_unitFieldLevel >= 60) {
-        return 7;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_GRANT_LEVEL_MAX;
     }
 
     if (this->m_unit->m_unitFieldLevel <= target->m_unit->m_unitFieldLevel) {
-        return 2;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_TOO_HIGH;
     }
 
     if (!this->CanAssist(target, false)) {
-        return 6;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NOT_NOW;
     }
 
-    return this->m_player->m_playerFieldBytes[1] == 0 ? 3 : 0;
+    return this->m_player->m_grantableLevels == 0 ? CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_INSUFFICIENT_GRANTABLE_LEVELS : CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_SUCCESS;
 }
 
 // VERIFY: 192067b6 auto
@@ -2995,7 +3010,7 @@ void CGPlayer_C::UpdateActiveMoverDisplay(uint32_t time) {
         return;
     }
 
-    if (drunkness <= 0.0f || !(this->m_movement->m_flags & 0xF)) {
+    if (drunkness <= 0.0f || !(this->m_movement->m_flags & MOVEMENTFLAG_HORIZONTAL_MOVE_MASK)) {
         return;
     }
 
@@ -3003,12 +3018,12 @@ void CGPlayer_C::UpdateActiveMoverDisplay(uint32_t time) {
         return;
     }
 
-    if (!(this->m_movement->m_flags & 0x30) || CGInputControl::GetActive()->CameraCanTurnPlayer()) {
+    if (!(this->m_movement->m_flags & MOVEMENTFLAG_TURN_MASK) || CGInputControl::GetActive()->CameraCanTurnPlayer()) {
         this->OnSetRawFacingLocal(time, CMath::normalizeangle0to2pi_(this->GetRawFacing() + offset));
     }
 
-    if ((this->m_movement->m_flags & 0x2200000) || (this->m_movement->m_flags2 & 0x20)) {
-        if (CGInputControl::GetActive()->CameraCanTurnPlayer() || !(this->m_movementData.m_flags & 0xC0)) {
+    if ((this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) || (this->m_movement->m_flags2 & MOVEMENTFLAG2_ALWAYS_ALLOW_PITCHING)) {
+        if (CGInputControl::GetActive()->CameraCanTurnPlayer() || !(this->m_movementData.m_flags & MOVEMENTFLAG_PITCH_MASK)) {
             this->OnSetPitchLocal(time, ClampPitch(this->GetPitch() + offset * 4.0f));
         }
     }
@@ -3017,9 +3032,9 @@ void CGPlayer_C::UpdateActiveMoverDisplay(uint32_t time) {
 // VERIFY: 1d09cacb manual
 // OFFSET: 0x006D5290
 static int32_t TrackingMaskUpdateProc(WOWGUID guid, void* param) {
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (object && (object->m_obj->m_type & TYPEMASK_GAMEOBJECT)) {
+    if (object && (object->m_obj->m_type & TYPE_GAMEOBJECT)) {
         static_cast<CGGameObject_C*>(object)->CheckForPassiveHighlight();
     }
 
@@ -3029,7 +3044,7 @@ static int32_t TrackingMaskUpdateProc(WOWGUID guid, void* param) {
 // VERIFY: 93a46999 manual
 // OFFSET: 0x006D7030
 static int32_t AuraVisionUpdateHandler(WOWGUID guid, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->AuraVisionUpdated(*static_cast<uint8_t*>(param));
@@ -3041,13 +3056,13 @@ static int32_t AuraVisionUpdateHandler(WOWGUID guid, void* param) {
 // VERIFY: ef96589a manual
 // OFFSET: 0x006E7F50
 void CGPlayer_C::PostInitActivePlayer() {
-    this->m_movementData.m_flags |= 0x200;
+    this->m_movementData.m_flags |= MOVEMENTFLAG_ONTRANSPORT;
     this->SetActiveMirrorHandlers();
-    SI2::InitVocalErrorSounds(this->m_unit->m_unitFieldBytes0[0], this->m_player->m_playerBytes3[0]);
+    SI2::InitVocalErrorSounds(this->m_unit->m_raceID, this->m_player->sex);
     CGSpellBook::ClearSpells();
 
     for (uint32_t i = 0; i < s_initialSpells.Count(); i++) {
-        this->AddKnownSpell(s_initialSpells[i].m_spellId, static_cast<int16_t>(s_initialSpells[i].unk_0004), 0, 1);
+        this->AddKnownSpell(s_initialSpells[i].m_spellId, static_cast<int16_t>(s_initialSpells[i].m_slot), 0, 1);
     }
 
     CGSpellBook::UpdateSpells(1, 0, 1);
@@ -3072,7 +3087,7 @@ void CGPlayer_C::PostInitActivePlayer() {
         FrameScript_SignalEvent(SCRIPT_EVENT_UPDATE_SHAPESHIFT_FORM, nullptr);
     }
 
-    uint8_t auraVision = 0xFF;
+    uint8_t auraVision = AURA_VISION_FLAG_ALL;
     CGWorldFrame::UpdateScreenEffect();
     ClntObjMgrEnumVisibleObjects(AuraVisionUpdateHandler, &auraVision);
     CGWorldFrame::GetActiveCamera()->SetTelescope(0);
@@ -3086,10 +3101,10 @@ void CGPlayer_C::PostInitActivePlayer() {
         WOWGUID controlled;
 
         if (charm) {
-            charmed = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(charm, TYPEMASK_UNIT, __FILE__, __LINE__));
+            charmed = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(charm, TYPE_UNIT, __FILE__, __LINE__));
         }
 
-        if (charmed && (charmed->m_unit->m_unitFieldFlags & 0x1000000) && farsight == charm) {
+        if (charmed && (charmed->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_POSSESSED) && farsight == charm) {
             charmed->SetLocalClientControl(true);
             controlled = charm;
         } else {
@@ -3117,12 +3132,12 @@ void CGPlayer_C::PostInitActivePlayer() {
         LoadingScreenDisable();
     }
 
-    Spell_C_SetPlayerClass(this->m_unit->m_unitFieldBytes0[1]);
+    Spell_C_SetPlayerClass(this->m_unit->m_classID);
     this->CountEquippedGems();
 
-    if (this->m_player->m_playerFlags & 0x200) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_DESIRED) {
         this->m_pvpCooldownTimestamp = 0;
-    } else if (!(this->m_player->m_playerFlags & 0x40000)) {
+    } else if (!(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_TIMER_ACTIVE)) {
         this->m_pvpCooldownTimestamp = FrameTime::s_curTimeMs + 300000;
     }
 
@@ -3141,14 +3156,14 @@ void CGPlayer_C::PostInitActivePlayer() {
 void CGPlayer_C::CancelGiftWrap() {
     CGGameUI::UnlockItem(s_giftWrapItem);
     s_giftWrapItem = WOWGUID();
-    CursorSetResetMode(1);
-    CursorSetMode(1);
+    CursorSetResetMode(POINT_CURSOR);
+    CursorSetMode(POINT_CURSOR);
 }
 
 // VERIFY: e37e66de manual
 // OFFSET: 0x006DD060
 CGUnit_C* CGPlayer_C::GetPossessedUnit() {
-    if (!(this->m_combatModeFlags & 0x1)) {
+    if (!(this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT)) {
         return nullptr;
     }
 
@@ -3158,7 +3173,7 @@ CGUnit_C* CGPlayer_C::GetPossessedUnit() {
         farsight = this->m_player->m_playerFarsight;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(farsight, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(farsight, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return nullptr;
@@ -3193,7 +3208,7 @@ void CGPlayer_C::SetCombatMode() {
     Spell_C_ClearLastAutoRangedCombatError();
     Spell_C_SetAutoRangedCombatSpell(0);
     EventUnregister(EVENT_ID_IDLE, CGPlayer_C::AutoCombatModeEventHandler);
-    this->m_combatModeFlags &= ~0xEu;
+    this->m_combatModeFlags &= ~COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_MASK;
     CGGameUI::UpdateCombatMode();
 
     if (static_cast<int32_t>(this->m_unit->m_unitFieldLevel) < 2) {
@@ -3207,14 +3222,14 @@ void CGPlayer_C::SetCombatMode() {
     uint32_t count = ++s_combatModeExitCount;
 
     if (CGTutorial::m_tutorialFlags.m_count && (CGTutorial::m_tutorialFlags.m_bits.m_data[1] & 0x800000) && count > 4) {
-        if (IsTutorialFlagged(5) && count > 10) {
-            CGTutorial::TriggerTutorial(56);
+        if (IsTutorialFlagged(TUTORIAL::TUTORIAL_SPELLS_AND_ABILITIES) && count > 10) {
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_ENEMY_STATUS);
         }
 
-        CGTutorial::TriggerTutorial(5);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_SPELLS_AND_ABILITIES);
     }
 
-    CGTutorial::TriggerTutorial(55);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_PLAYER_STATUS);
 }
 
 // VERIFY: b85de264 auto
@@ -3336,162 +3351,162 @@ int32_t Packet_SMSG_CALENDAR_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint3
     msg->GetString(name, sizeof(name));
     msg->Get(result);
 
-    if (!result) {
+    if (result == CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_SUCCESS) {
         return 1;
     }
 
     switch (result) {
-        case 1: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_GUILD_EVENTS_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED", 100);
             break;
         }
 
-        case 2: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_EVENTS_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_EVENTS_EXCEEDED", 30);
             break;
         }
 
-        case 3: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_SELF_INVITES_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_SELF_INVITES_EXCEEDED", 0);
             break;
         }
 
-        case 4: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_OTHER_INVITES_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_OTHER_INVITES_EXCEEDED", reinterpret_cast<uintptr_t>(name));
             break;
         }
 
-        case 5: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_PERMISSIONS: {
             CGCalendar::CalendarError("CALENDAR_ERROR_PERMISSIONS", 0);
             break;
         }
 
-        case 6: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_EVENT_INVALID: {
             CGCalendar::CalendarError("CALENDAR_ERROR_EVENT_INVALID", 0);
             break;
         }
 
-        case 7: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NOT_INVITED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NOT_INVITED", 0);
             break;
         }
 
-        case 8: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INTERNAL: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INTERNAL", 0);
             break;
         }
 
-        case 9: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_GUILD_PLAYER_NOT_IN_GUILD: {
             CGCalendar::CalendarError("ERR_GUILD_PLAYER_NOT_IN_GUILD", 0);
             break;
         }
 
-        case 10: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_ALREADY_INVITED_TO_EVENT: {
             CGCalendar::CalendarError("CALENDAR_ERROR_ALREADY_INVITED_TO_EVENT_S", reinterpret_cast<uintptr_t>(name));
             break;
         }
 
-        case 11: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_PLAYER_NOT_FOUND: {
             CGCalendar::CalendarError("PLAYER_NOT_FOUND", 0);
             break;
         }
 
-        case 12: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NOT_ALLIED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NOT_ALLIED", 0);
             break;
         }
 
-        case 13: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_IGNORING_YOU: {
             CGCalendar::CalendarError("ERR_IGNORING_YOU_S", reinterpret_cast<uintptr_t>(name));
             break;
         }
 
-        case 14: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INVITES_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INVITES_EXCEEDED", 100);
             break;
         }
 
-        case 16: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INVALID_DATE: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INVALID_DATE", 0);
             break;
         }
 
-        case 17: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INVALID_TIME: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INVALID_TIME", 0);
             break;
         }
 
-        case 19: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NEEDS_TITLE: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NEEDS_TITLE", 0);
             break;
         }
 
-        case 20: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_EVENT_PASSED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_EVENT_PASSED", 0);
             break;
         }
 
-        case 21: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_EVENT_LOCKED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_EVENT_LOCKED", 0);
             break;
         }
 
-        case 22: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_DELETE_CREATOR_FAILED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_DELETE_CREATOR_FAILED", 0);
             break;
         }
 
-        case 24: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_SYSTEM_DISABLED: {
             CGCalendar::CalendarError("ERR_SYSTEM_DISABLED", 0);
             break;
         }
 
-        case 25: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_RESTRICTED_ACCOUNT: {
             CGCalendar::CalendarError("ERR_RESTRICTED_ACCOUNT", 0);
             break;
         }
 
-        case 26: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_ARENA_EVENTS_EXCEEDED: {
             CGCalendar::CalendarError("CALENDAR_ERROR_ARENA_EVENTS_EXCEEDED", 0);
             break;
         }
 
-        case 27: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_RESTRICTED_LEVEL: {
             CGCalendar::CalendarError("CALENDAR_ERROR_RESTRICTED_LEVEL", 0);
             break;
         }
 
-        case 28: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_USER_SQUELCHED: {
             CGCalendar::CalendarError("ERR_USER_SQUELCHED", 0);
             break;
         }
 
-        case 29: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NO_INVITE: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NO_INVITE", 0);
             break;
         }
 
-        case 36: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_EVENT_WRONG_SERVER: {
             CGCalendar::CalendarError("CALENDAR_ERROR_EVENT_WRONG_SERVER", 0);
             break;
         }
 
-        case 37: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INVITE_WRONG_SERVER: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INVITE_WRONG_SERVER", 0);
             break;
         }
 
-        case 38: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NO_GUILD_INVITES: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NO_GUILD_INVITES", 0);
             break;
         }
 
-        case 39: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_INVALID_SIGNUP: {
             CGCalendar::CalendarError("CALENDAR_ERROR_INVALID_SIGNUP", 0);
             break;
         }
 
-        case 40: {
+        case CALENDAR_COMMAND_RESULT::CALENDAR_RESULT_NO_MODERATOR: {
             CGCalendar::CalendarError("CALENDAR_ERROR_NO_MODERATOR", 0);
             break;
         }
@@ -3557,7 +3572,7 @@ int32_t Packet_SMSG_SPELLORDAMAGE_IMMUNE(void* param, NETMESSAGE msgId, uint32_t
     uint8_t debug = 0;
     msg->Get(debug);
     bool isDebug = debug != 0;
-    UnitCombatLogSpellMissed(casterGuid, targetGuid, spellId, 7, !isDebug, isDebug, 0);
+    UnitCombatLogSpellMissed(casterGuid, targetGuid, spellId, MISS_REASON::MISS_IMMUNE, !isDebug, isDebug, 0);
     return 1;
 }
 
@@ -3575,9 +3590,9 @@ int32_t Packet_SMSG_EMOTE(void* param, NETMESSAGE msgId, uint32_t time, CDataSto
     WOWGUID guid;
     msg->Get(emote);
     msg->Get(guid.m_guid);
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (unit && unit->m_unit->m_unitFieldBytes1[0] != 3 && !(unit->m_movement->m_flags & 0x200000)) {
+    if (unit && unit->m_unit->m_standState != UNIT_SLEEPING && !(unit->m_movement->m_flags & MOVEMENTFLAG_SWIMMING)) {
         unit->PlayEmoteAnimation(emote);
     }
 
@@ -3614,7 +3629,7 @@ int32_t Packet_SMSG_SPELLDAMAGESHIELD(void* param, NETMESSAGE msgId, uint32_t ti
     uint32_t schoolMask = 0;
     msg->Get(schoolMask);
     UnitCombatLogDamageShield(victimGuid, casterGuid, spellId, damage, overkill, schoolMask);
-    CGUnit_C* caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(casterGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(casterGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (caster) {
         caster->AddWorldDamageText(victimGuid, damage, nullptr, false, false, true);
@@ -3641,16 +3656,16 @@ int32_t Packet_SMSG_SPELLHEALLOG(void* param, NETMESSAGE msgId, uint32_t time, C
 int32_t Packet_SMSG_SPELLENERGIZELOG(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     return CombatLog::HandleSpellLogEnergizeLog(msg, 0);
 }
-
+static const int32_t NUM_DAMAGE_CALC_LABELS = 41;
 struct DamageCalcLabel {
-    /* 0000 */ int32_t m_type;
-    /* 0004 */ const char* m_name;
-    /* 0008 */ int32_t m_id;
-    /* 000C */ int32_t m_flags;
+    /* 0000 */ int32_t m_id;
+    /* 0004 */ int32_t m_unknown04;
+    /* 0008 */ int32_t m_unknown08;
+    /* 000C */ const char* m_name;
 };
 
-// STATIC: 0x00AD9CD0
-static const DamageCalcLabel s_damageCalcLabels[41] = { { 0, "Base", 1, 1 }, { 3, "DPS Scaler", 2, 1 }, { 2, "Chain Reduction", 3, 0 }, { 2, "Combo Point Damage", 4, 0 }, { 3, "School Damage Done", 5, 0 }, { 3, "Creature Damage Done", 6, 0 }, { 3, "Creature Weapon Damage Done", 7, 0 }, { 2, "Weapon Effect", 8, 1 }, { 2, "Weapon Effect", 9, 0 }, { 3, "Spell Modifier", 10, 1 }, { 3, "Spell Modifier", 11, 1 }, { 3, "Offhand Penalty", 12, 0 }, { 3, "Attack Power Damage", 13, 1 }, { 3, "Creature Multiplier", 14, 1 }, { 3, "School Damage Done", 15, 1 }, { 3, "Weapon Multiplier", 16, 1 }, { 3, "School Damage Taken", 17, 1 }, { 3, "Source Damage Taken", 18, 1 }, { 3, "School Damage Taken", 19, 1 }, { 3, "Source Damage Taken", 20, 1 }, { 3, "Crit Damage Multiplier", 21, 0 }, { 4, "Crit Damage", 22, 1 }, { 2, "Resistance Coefficient", 23, 1 }, { 2, "Bonus Coefficient", 24, 2 }, { 3, "Critical Chance", 25, 2 }, { 3, "Critical Roll", 26, 2 }, { 3, "Seed For Rounding", 27, 0 }, { 4, "Fraction Adjust", 28, 1 }, { 3, "Resilience Modifier", 29, 1 }, { 3, "Armor Factor", 30, 0 }, { 4, "Armor Reduction", 31, 0 }, { 2, "Shield Block", 32, 1 }, { 2, "Melee Crit/Glance/Crush", 33, 1 }, { 3, "Pet Happiness Mult", 34, 1 }, { 3, "Creature Damage Done", 35, 0 }, { 2, "Number of Targets for Area Damage Cap", 36, 0 }, { 2, "Number of Targets", 37, 1 }, { 2, "Crowd Damage", 38, 1 }, { 3, "Mechanic Modifier", 39, 0 }, { 3, "Bonus From Attack Power Coefficient", 40, 1 }, { 3, "Aura State Modifier", 0x3F000000, static_cast<int32_t>(0xFFFFDE00) } };
+// STATIC: 0x00AD9CC8
+static const DamageCalcLabel s_damageCalcLabels[NUM_DAMAGE_CALC_LABELS] = { { 0, 0, 0, "Base" }, { 1, 1, 3, "DPS Scaler" }, { 2, 1, 2, "Chain Reduction" }, { 3, 0, 2, "Combo Point Damage" }, { 4, 0, 3, "School Damage Done" }, { 5, 0, 3, "Creature Damage Done" }, { 6, 0, 3, "Creature Weapon Damage Done" }, { 7, 0, 2, "Weapon Effect" }, { 8, 1, 2, "Weapon Effect" }, { 9, 0, 3, "Spell Modifier" }, { 10, 1, 3, "Spell Modifier" }, { 11, 1, 3, "Offhand Penalty" }, { 12, 0, 3, "Attack Power Damage" }, { 13, 1, 3, "Creature Multiplier" }, { 14, 1, 3, "School Damage Done" }, { 15, 1, 3, "Weapon Multiplier" }, { 16, 1, 3, "School Damage Taken" }, { 17, 1, 3, "Source Damage Taken" }, { 18, 1, 3, "School Damage Taken" }, { 19, 1, 3, "Source Damage Taken" }, { 20, 1, 3, "Crit Damage Multiplier" }, { 21, 0, 4, "Crit Damage" }, { 22, 1, 2, "Resistance Coefficient" }, { 23, 1, 2, "Bonus Coefficient" }, { 24, 2, 3, "Critical Chance" }, { 25, 2, 3, "Critical Roll" }, { 26, 2, 3, "Seed For Rounding" }, { 27, 0, 4, "Fraction Adjust" }, { 28, 1, 3, "Resilience Modifier" }, { 29, 1, 3, "Armor Factor" }, { 30, 0, 4, "Armor Reduction" }, { 31, 0, 2, "Shield Block" }, { 32, 1, 2, "Melee Crit/Glance/Crush" }, { 33, 1, 3, "Pet Happiness Mult" }, { 34, 1, 3, "Creature Damage Done" }, { 35, 0, 2, "Number of Targets for Area Damage Cap" }, { 36, 0, 2, "Number of Targets" }, { 37, 1, 2, "Crowd Damage" }, { 38, 1, 3, "Mechanic Modifier" }, { 39, 0, 3, "Bonus From Attack Power Coefficient" }, { 40, 1, 3, "Aura State Modifier" } };
 
 // VERIFY: 42d7b454 manual
 // OFFSET: 0x006D3F10
@@ -3665,8 +3680,8 @@ int32_t Packet_SMSG_DAMAGE_CALC_LOG(void* param, NETMESSAGE msgId, uint32_t time
     msg->Get(sourceType);
     msg->Get(spellId);
     msg->Get(reinterpret_cast<uint32_t&>(count));
-    CGUnit_C* attackerUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(attacker, TYPEMASK_UNIT, __FILE__, __LINE__));
-    CGUnit_C* targetUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* attackerUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(attacker, TYPE_UNIT, __FILE__, __LINE__));
+    CGUnit_C* targetUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
     SpellRec spell;
     const char* spellName;
 
@@ -3692,7 +3707,7 @@ int32_t Packet_SMSG_DAMAGE_CALC_LOG(void* param, NETMESSAGE msgId, uint32_t time
 
         if (!SStrCmpI(label, "val", STORM_MAX_STR)) {
             ConsolePrintf("DMG: NOT VALIDATED: Old=%f, New=%f", oldValue, newValue);
-        } else if (index >= 0 && index < 41) {
+        } else if (index >= 0 && index < NUM_DAMAGE_CALC_LABELS) {
             ConsolePrintf("DMG: (%s) '%s'=%8.2f, total=%f", label, s_damageCalcLabels[index].m_name, oldValue, newValue);
         } else {
             ConsolePrintf("DMG: (%s) '%d'=%8.2f, total=%f", label, index, oldValue, newValue);
@@ -3753,7 +3768,7 @@ int32_t Packet_SMSG_COMBAT_LOG_MULTIPLE(void* param, NETMESSAGE msgId, uint32_t 
 int32_t Packet_Group_12(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     WOWGUID activePlayer = ClntObjMgrGetActivePlayer();
 
-    if (!activePlayer.m_guid || !ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!activePlayer.m_guid || !ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }
 
@@ -3924,7 +3939,7 @@ int32_t Packet_SMSG_QUEST_FORCE_REMOVE(void* param, NETMESSAGE msgId, uint32_t t
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }
 
@@ -3944,7 +3959,7 @@ int32_t Packet_SMSG_QUEST_FORCE_REMOVE(void* param, NETMESSAGE msgId, uint32_t t
 int32_t Packet_Group_13(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     WOWGUID activePlayer = ClntObjMgrGetActivePlayer();
 
-    if (!activePlayer.m_guid || !ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!activePlayer.m_guid || !ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }
 
@@ -3977,7 +3992,7 @@ int32_t Packet_Group_13(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
 // VERIFY: 77263fbe auto
 // OFFSET: 0x006D84F0
 int32_t PH_LOOT_OPCODES(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -4029,7 +4044,7 @@ int32_t Packet_SMSG_SUMMON_REQUEST(void* param, NETMESSAGE msgId, uint32_t time,
     msg->Get(summoner.m_guid);
     msg->Get(area);
     msg->Get(timeout);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -4055,11 +4070,11 @@ int32_t Packet_SMSG_ACTION_BUTTONS(void* param, NETMESSAGE msgId, uint32_t time,
     uint8_t state;
     msg->Get(state);
     uint32_t mode = state;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (mode == 2) {
         if (player) {
-            player->unk_1954 = 1;
+            player->m_actionButtonsPending = 1;
         }
 
         return 1;
@@ -4074,12 +4089,12 @@ int32_t Packet_SMSG_ACTION_BUTTONS(void* param, NETMESSAGE msgId, uint32_t time,
     }
 
     if (mode == 1 && player) {
-        player->unk_1954 = 0;
+        player->m_actionButtonsPending = 0;
 
         for (uint32_t i = 0; i < sizeof(s_actionButtons) / sizeof(s_actionButtons[0]); i++) {
             int32_t action = s_actionButtons[i];
 
-            if (((action & 0xF0000000) || player->IsSpellKnown(action)) && ((action & 0xF0000000) != 0x20000000 || CGActionBar::IsEquipmentSetValid(action & 0xDFFFFFFF))) {
+            if (((action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG) || player->IsSpellKnown(action)) && ((action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG) != CGActionBar::ACTION_TAG::ACTION_TAG_EQUIPMENT_SET || CGActionBar::IsEquipmentSetValid(action & CGActionBar::ACTION_MASK::ACTION_MASK_EQUIPMENT_SET_ID))) {
                 CGActionBar::SetAction(i, action, 0, 1);
             } else {
                 CGActionBar::RemoveAction(i);
@@ -4095,7 +4110,7 @@ int32_t Packet_SMSG_ACTION_BUTTONS(void* param, NETMESSAGE msgId, uint32_t time,
 // VERIFY: b8ad26b7 manual
 // OFFSET: 0x006DBDF0
 int32_t Packet_Group_14(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
-    if (ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         CGPlayer_C::ReadItemResult(msgId, msg);
     }
 
@@ -4107,7 +4122,7 @@ int32_t Packet_Group_14(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
 int32_t Packet_SMSG_TIME_SYNC_REQ(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     uint32_t counter = 0;
     msg->Get(counter);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->m_movementData.OnTimeSyncRequest(OsGetAsyncTimeMs(), counter);
@@ -4125,7 +4140,7 @@ int32_t Packet_Group_15(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -4158,7 +4173,7 @@ int32_t Packet_Group_10(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -4193,7 +4208,7 @@ int32_t Packet_SMSG_INITIAL_SPELLS(void* param, NETMESSAGE msgId, uint32_t time,
 
     for (uint16_t i = 0; i < count; i++) {
         msg->Get(s_initialSpells[i].m_spellId);
-        msg->Get(s_initialSpells[i].unk_0004);
+        msg->Get(s_initialSpells[i].m_slot);
     }
 
     msg->Get(count);
@@ -4251,7 +4266,7 @@ int32_t Packet_SMSG_GROUP_INVITE(void* param, NETMESSAGE msgId, uint32_t time, C
 // VERIFY: 5526bdf2 manual
 // OFFSET: 0x006E2210
 int32_t Packet_SMSG_CANCEL_COMBAT(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->SetCombatMode();
@@ -4269,7 +4284,7 @@ int32_t Packet_Group_18(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
 
     WOWGUID itemGuid;
     msg->Get(itemGuid.m_guid);
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(itemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(itemGuid, TYPE_ITEM, __FILE__, __LINE__));
 
     switch (msgId) {
         case SMSG_ITEM_TIME_UPDATE: {
@@ -4295,7 +4310,7 @@ int32_t Packet_Group_18(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
                 return 1;
             }
 
-            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(playerGuid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(playerGuid, TYPE_PLAYER, __FILE__, __LINE__));
 
             if (player || (player = ClntObjMgrGetActivePlayerObj())) {
                 player->QueueItemEnchantTime(itemGuid, slot, seconds);
@@ -4325,7 +4340,7 @@ int32_t Packet_Group_18(void* param, NETMESSAGE msgId, uint32_t time, CDataStore
 int32_t Packet_SMSG_REMOVED_SPELL(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     uint32_t spellId;
     msg->Get(spellId);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->DelKnownSpell(spellId, 0);
@@ -4335,7 +4350,7 @@ int32_t Packet_SMSG_REMOVED_SPELL(void* param, NETMESSAGE msgId, uint32_t time, 
     for (uint32_t i = 0; i < s_initialSpells.Count(); i++) {
         if (s_initialSpells[i].m_spellId == spellId) {
             s_initialSpells[i].m_spellId = 0;
-            s_initialSpells[i].unk_0004 = 0;
+            s_initialSpells[i].m_slot = 0;
         }
     }
 
@@ -4354,14 +4369,14 @@ int32_t Packet_SMSG_LEARNED_SPELL(void* param, NETMESSAGE msgId, uint32_t time, 
         PrefetchSpellVisuals(spellId);
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->AddKnownSpell(spellId, static_cast<int16_t>(slot), 1, 1);
     } else {
         InitialSpellStruct* spell = s_initialSpells.New();
         spell->m_spellId = spellId;
-        spell->unk_0004 = slot;
+        spell->m_slot = slot;
     }
 
     return 1;
@@ -4381,7 +4396,7 @@ int32_t Packet_SMSG_SUPERCEDED_SPELL(void* param, NETMESSAGE msgId, uint32_t tim
 
     CGActionBar::ReplaceSpell(oldSpellId, newSpellId);
     CGSpellBook::ReplaceSpell(oldSpellId, newSpellId);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->DelKnownSpell(oldSpellId, 1);
@@ -4402,7 +4417,7 @@ int32_t Packet_SMSG_SUPERCEDED_SPELL(void* param, NETMESSAGE msgId, uint32_t tim
     if (i == s_initialSpells.Count()) {
         InitialSpellStruct* spell = s_initialSpells.New();
         spell->m_spellId = newSpellId;
-        spell->unk_0004 = 0;
+        spell->m_slot = 0;
     }
 
     CGClassTrainer::RefreshList();
@@ -4586,11 +4601,11 @@ void CGPlayer_C::PlayerInitializeMessageHandlers() {
 // VERIFY: ea8acbe5 manual
 // OFFSET: 0x006E4950
 void CGPlayer_C::CombatModeEnter(const WOWGUID& target, int32_t queueRanged, int32_t silent) {
-    if (!CGGameUI::CanPerformAction(1)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ATTACK)) {
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -4598,7 +4613,7 @@ void CGPlayer_C::CombatModeEnter(const WOWGUID& target, int32_t queueRanged, int
 
     int32_t rangedSpell = s_cvAutoRangedCombat->m_intValue ? CGSpellBook::m_autoRangedSpell : 0;
 
-    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & 0x10000000) && !this->MountedCombatAllowed()) {
+    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING) && !this->MountedCombatAllowed()) {
         float minRange;
         float maxRange;
 
@@ -4621,7 +4636,7 @@ void CGPlayer_C::CombatModeEnter(const WOWGUID& target, int32_t queueRanged, int
         this->Dismount();
     }
 
-    if ((!(this->m_combatModeFlags & 0x2) && !this->CGUnit_C::IsInMelee()) || target != this->m_combatTarget) {
+    if ((!(this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_COMBAT) && !this->CGUnit_C::IsInMelee()) || target != this->m_combatTarget) {
         this->m_combatModeTime = FrameTime::s_curTimeMs;
     }
 
@@ -4632,11 +4647,11 @@ void CGPlayer_C::CombatModeEnter(const WOWGUID& target, int32_t queueRanged, int
         return;
     }
 
-    if (this->m_obj->m_guid != ClntObjMgrGetActivePlayer() || (this->m_unit->m_unitFieldFlags & 0x20000) || !CGGameUI::m_hasControl) {
+    if (this->m_obj->m_guid != ClntObjMgrGetActivePlayer() || (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PACIFIED) || !CGGameUI::m_hasControl) {
         return;
     }
 
-    if (this->m_player->m_playerFlags & 0x1000000) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DISABLE_ATTACKS) {
         CGGameUI::DisplayError(ERR_CLIENT_LOCKED_OUT);
         return;
     }
@@ -4650,15 +4665,15 @@ void CGPlayer_C::CombatModeEnter(const WOWGUID& target, int32_t queueRanged, int
     }
 
     EventRegister(EVENT_ID_IDLE, CGPlayer_C::AutoCombatModeEventHandler);
-    this->m_combatModeFlags |= 0x2;
+    this->m_combatModeFlags |= COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_COMBAT;
     CGGameUI::UpdateCombatMode();
 
     if (!this->IsInMeleeRange(unit)) {
         if (queueRanged) {
-            this->m_combatModeFlags |= 0x8;
+            this->m_combatModeFlags |= COMBAT_MODE_FLAGS::COMBAT_MODE_EXIT_WHEN_NOT_REPEATING;
         }
 
-        this->m_combatModeFlags |= 0x4;
+        this->m_combatModeFlags |= COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_RANGED;
     }
 }
 
@@ -4674,7 +4689,7 @@ int32_t CGPlayer_C::GetLanguageSkill(uint32_t language, uint32_t& skill) {
     int32_t languageSpell = CGSpellBook::m_languageSpells.m_data[language];
 
     if (!languageSpell) {
-        if (!(this->m_unit->m_unitFieldFlags2 & 0x8)) {
+        if (!(this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_COMPREHEND_LANGUAGES)) {
             return 0;
         }
 
@@ -4685,8 +4700,8 @@ int32_t CGPlayer_C::GetLanguageSkill(uint32_t language, uint32_t& skill) {
                 continue;
             }
 
-            for (uint32_t j = 0; j < 3; j++) {
-                if (spell.m_effectAura[j] == 244 && spell.m_effectMiscValue[j] == static_cast<int32_t>(language)) {
+            for (uint32_t j = 0; j < NUM_SPELL_EFFECTS; j++) {
+                if (spell.m_effectAura[j] == SPELL_AURA_COMPREHEND_LANGUAGE && spell.m_effectMiscValue[j] == static_cast<int32_t>(language)) {
                     skill = 300;
                     return 1;
                 }
@@ -4696,7 +4711,7 @@ int32_t CGPlayer_C::GetLanguageSkill(uint32_t language, uint32_t& skill) {
         return 0;
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], languageSpell);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, languageSpell);
 
     if (!ability) {
         return 0;
@@ -4733,7 +4748,7 @@ int16_t CGPlayer_C::GetSkillModifier(int32_t index) {
 // OFFSET: 0x006E7B00
 void CGPlayer_C::AddKnownSpell(int32_t spellId, int32_t a2, int32_t a3, int32_t a4) {
     if (spellId > g_spellDB.m_maxID) {
-        SysMsgPrintf(STATUS_ERROR, 2, "NOSPELLIDFOUND|%d", spellId);
+        SysMsgPrintf(SYSMSG_ERROR, 2, "NOSPELLIDFOUND|%d", spellId);
         return;
     }
 
@@ -4751,14 +4766,14 @@ void CGPlayer_C::AddKnownSpell(int32_t spellId, int32_t a2, int32_t a3, int32_t 
         return;
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], spellId);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, spellId);
     SkillLineRec* skillLine = ability ? g_skillLineDB.GetRecord(ability->m_skillLine) : nullptr;
 
     if (skillLine && skillLine->m_id == 778) {
         this->m_companionSpells.Add(1, &spellId);
     }
 
-    if (spell.m_attributes & 0x20) {
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_IS_TRADESKILL) {
         if (skillLine) {
             HASHKEY_NONE key;
             TRADESKILLLINE* line = this->m_tradeSkillLines.Ptr(skillLine->m_id, key);
@@ -4772,17 +4787,17 @@ void CGPlayer_C::AddKnownSpell(int32_t spellId, int32_t a2, int32_t a3, int32_t 
         }
 
         CGTradeSkillInfo::RefreshList(1);
-    } else if (spell.m_effect[0] == 101) {
+    } else if (spell.m_effect[0] == SPELL_EFFECT_FEED_PET) {
         SpellSetFeedPetSpell(spell.m_id);
-    } else if (spell.m_effect[0] == 155) {
+    } else if (spell.m_effect[0] == SPELL_EFFECT_TITAN_GRIP) {
         if (!this->HasEquipBypassSkill(spellId)) {
             this->m_equipBypassSkills.Add(1, &spellId);
         }
     } else {
         bool proficiency = false;
 
-        for (uint32_t i = 0; i < 3; i++) {
-            if (spell.m_effect[i] == 60) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+            if (spell.m_effect[i] == SPELL_EFFECT_PROFICIENCY) {
                 proficiency = true;
                 break;
             }
@@ -4819,7 +4834,7 @@ void CGPlayer_C::AddKnownSpell(int32_t spellId, int32_t a2, int32_t a3, int32_t 
         CGClassTrainer::RefreshList();
     }
 
-    if (spell.m_effect[0] == 40) {
+    if (spell.m_effect[0] == SPELL_EFFECT_DUAL_WIELD) {
         s_dualWieldSpell = spellId;
     }
 }
@@ -4833,7 +4848,7 @@ int32_t GetModalNextSpell() {
 // VERIFY: 3f2316b1 manual
 // OFFSET: 0x006DE840
 int32_t CGPlayer_C::IsXRayVisionActive() {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -4920,7 +4935,7 @@ int32_t Packet_SMSG_PARTY_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
     msg->Get(reinterpret_cast<uint32_t&>(value));
     char duration[256];
 
-    if (!result) {
+    if (result == PARTY_COMMAND_RESULT::PARTY_RESULT_SUCCESS) {
         if (!operation) {
             if (name[0]) {
                 CGGameUI::DisplayError(ERR_INVITE_PLAYER_S, name);
@@ -4936,62 +4951,62 @@ int32_t Packet_SMSG_PARTY_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
     }
 
     switch (result) {
-        case 1: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_BAD_PLAYER_NAME: {
             CGGameUI::DisplayError(ERR_BAD_PLAYER_NAME_S, name);
             break;
         }
 
-        case 2: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_TARGET_NOT_IN_GROUP: {
             CGGameUI::DisplayError(ERR_TARGET_NOT_IN_GROUP_S, name);
             break;
         }
 
-        case 3: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_TARGET_NOT_IN_INSTANCE: {
             CGGameUI::DisplayError(ERR_TARGET_NOT_IN_INSTANCE_S, name);
             break;
         }
 
-        case 4: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_GROUP_FULL: {
             CGGameUI::DisplayError(ERR_GROUP_FULL);
             break;
         }
 
-        case 5: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_ALREADY_IN_GROUP: {
             CGGameUI::DisplayError(ERR_ALREADY_IN_GROUP_S, name);
             break;
         }
 
-        case 6: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_NOT_IN_GROUP: {
             CGGameUI::DisplayError(ERR_NOT_IN_GROUP);
             break;
         }
 
-        case 7: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_NOT_LEADER: {
             CGGameUI::DisplayError(ERR_NOT_LEADER);
             break;
         }
 
-        case 8: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_PLAYER_WRONG_FACTION: {
             CGGameUI::DisplayError(ERR_PLAYER_WRONG_FACTION);
             break;
         }
 
-        case 9: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_IGNORING_YOU: {
             CGGameUI::DisplayError(ERR_IGNORING_YOU_S, name);
             break;
         }
 
-        case 12: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_PENDING: {
             CGGameUI::DisplayError(ERR_LFG_PENDING);
             break;
         }
 
-        case 13: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_INVITE_RESTRICTED: {
             CGGameUI::DisplayError(ERR_INVITE_RESTRICTED);
             break;
         }
 
-        case 14: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_SWAP_FAILED_OR_INVITE_IN_COMBAT: {
             if (operation == 4) {
                 CGGameUI::DisplayError(ERR_GROUP_SWAP_FAILED);
                 FrameScript_SignalEvent(SCRIPT_EVENT_RAID_ROSTER_UPDATE, nullptr);
@@ -5002,37 +5017,37 @@ int32_t Packet_SMSG_PARTY_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
             break;
         }
 
-        case 15: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_INVITE_UNKNOWN_REALM: {
             CGGameUI::DisplayError(ERR_INVITE_UNKNOWN_REALM);
             break;
         }
 
-        case 16: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_INVITE_NO_PARTY_SERVER: {
             CGGameUI::DisplayError(ERR_INVITE_NO_PARTY_SERVER);
             break;
         }
 
-        case 17: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_INVITE_PARTY_BUSY: {
             CGGameUI::DisplayError(ERR_INVITE_PARTY_BUSY);
             break;
         }
 
-        case 18: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_TARGET_AMBIGUOUS: {
             CGGameUI::DisplayError(ERR_PARTY_TARGET_AMBIGUOUS);
             break;
         }
 
-        case 19: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_INVITE_RAID_LOCKED: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_INVITE_RAID_LOCKED, name);
             break;
         }
 
-        case 20: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_LIMIT: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_LIMIT);
             break;
         }
 
-        case 21: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_COOLDOWN: {
             if (value < 0) {
                 value = 1;
             }
@@ -5042,17 +5057,17 @@ int32_t Packet_SMSG_PARTY_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
             break;
         }
 
-        case 22: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_IN_PROGRESS: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_IN_PROGRESS);
             break;
         }
 
-        case 23: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_TOO_FEW_PLAYERS: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_TOO_FEW_PLAYERS);
             break;
         }
 
-        case 24: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_NOT_ELIGIBLE: {
             if (value < 0) {
                 value = 1;
             }
@@ -5062,32 +5077,32 @@ int32_t Packet_SMSG_PARTY_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
             break;
         }
 
-        case 25: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_RAID_DISALLOWED_BY_LEVEL: {
             CGGameUI::DisplayError(ERR_RAID_DISALLOWED_BY_LEVEL);
             break;
         }
 
-        case 26: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_IN_COMBAT: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_IN_COMBAT);
             break;
         }
 
-        case 27: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_VOTE_KICK_REASON_NEEDED: {
             FrameScript_SignalEvent(SCRIPT_EVENT_VOTE_KICK_REASON_NEEDED, "%s", name);
             break;
         }
 
-        case 28: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_DUNGEON_COMPLETE: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_DUNGEON_COMPLETE);
             break;
         }
 
-        case 29: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_BOOT_LOOT_ROLLS: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_BOOT_LOOT_ROLLS);
             break;
         }
 
-        case 30: {
+        case PARTY_COMMAND_RESULT::PARTY_RESULT_LFG_TELEPORT_IN_COMBAT: {
             CGGameUI::DisplayError(ERR_PARTY_LFG_TELEPORT_IN_COMBAT);
             break;
         }
@@ -5174,7 +5189,7 @@ int32_t Packet_SMSG_GUILD_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
     msg->GetString(name, sizeof(name));
     msg->Get(result);
 
-    if (!result) {
+    if (result == GUILD_COMMAND_RESULT::GUILD_RESULT_SUCCESS) {
         switch (command) {
             case 0: {
                 CGGameUI::DisplayError(ERR_GUILD_CREATE_S, name);
@@ -5210,42 +5225,42 @@ int32_t Packet_SMSG_GUILD_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
     }
 
     switch (result) {
-        case 1: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_INTERNAL: {
             CGGameUI::DisplayError(ERR_GUILD_INTERNAL);
             break;
         }
 
-        case 2: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_ALREADY_IN_GUILD: {
             CGGameUI::DisplayError(ERR_ALREADY_IN_GUILD);
             break;
         }
 
-        case 3: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_PLAYER_ALREADY_IN_GUILD: {
             CGGameUI::DisplayError(ERR_ALREADY_IN_GUILD_S, name);
             break;
         }
 
-        case 4: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_ALREADY_INVITED: {
             CGGameUI::DisplayError(ERR_INVITED_TO_GUILD);
             break;
         }
 
-        case 5: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_PLAYER_ALREADY_INVITED: {
             CGGameUI::DisplayError(ERR_ALREADY_INVITED_TO_GUILD_S, name);
             break;
         }
 
-        case 6: {
-            CGGameUI::DisplayNameError(1);
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_NAME_INVALID: {
+            CGGameUI::DisplayNameError(NAME_FAILURE);
             break;
         }
 
-        case 7: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_NAME_EXISTS: {
             CGGameUI::DisplayError(ERR_GUILD_NAME_EXISTS_S, name);
             break;
         }
 
-        case 8: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_LEADER_CANNOT_LEAVE_OR_NO_PERMISSION: {
             if (command == 3) {
                 CGGameUI::DisplayError(ERR_GUILD_LEADER_LEAVE);
             } else {
@@ -5255,52 +5270,52 @@ int32_t Packet_SMSG_GUILD_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
             break;
         }
 
-        case 9: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_NOT_IN_GUILD: {
             CGGameUI::DisplayError(ERR_GUILD_PLAYER_NOT_IN_GUILD);
             break;
         }
 
-        case 10: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_PLAYER_NOT_IN_GUILD: {
             CGGameUI::DisplayError(ERR_GUILD_PLAYER_NOT_IN_GUILD_S, name);
             break;
         }
 
-        case 11: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_PLAYER_NOT_FOUND: {
             CGGameUI::DisplayError(ERR_GUILD_PLAYER_NOT_FOUND_S, name);
             break;
         }
 
-        case 12: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_NOT_ALLIED: {
             CGGameUI::DisplayError(ERR_GUILD_NOT_ALLIED);
             break;
         }
 
-        case 13: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_RANK_TOO_HIGH: {
             CGGameUI::DisplayError(ERR_GUILD_RANK_TOO_HIGH_S, name);
             break;
         }
 
-        case 14: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_RANK_TOO_LOW: {
             CGGameUI::DisplayError(ERR_GUILD_RANK_TOO_LOW_S, name);
             break;
         }
 
-        case 17: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_RANKS_LOCKED: {
             CGGameUI::DisplayError(ERR_GUILD_RANKS_LOCKED);
             break;
         }
 
-        case 18: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_RANK_IN_USE: {
             CGGameUI::DisplayError(ERR_GUILD_RANK_IN_USE);
             break;
         }
 
-        case 19: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_IGNORING_YOU: {
             CGGameUI::DisplayError(ERR_IGNORING_YOU_S, name);
             break;
         }
 
-        case 20: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_REFRESH_ROSTER: {
             if (command == 5) {
                 UpdateGuildRoster(1);
             }
@@ -5308,22 +5323,22 @@ int32_t Packet_SMSG_GUILD_COMMAND_RESULT(void* param, NETMESSAGE msgId, uint32_t
             break;
         }
 
-        case 25: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_WITHDRAW_LIMIT: {
             CGGameUI::DisplayError(ERR_GUILD_WITHDRAW_LIMIT);
             break;
         }
 
-        case 26: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_NOT_ENOUGH_MONEY: {
             CGGameUI::DisplayError(ERR_GUILD_NOT_ENOUGH_MONEY);
             break;
         }
 
-        case 28: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_BANK_FULL: {
             CGGameUI::DisplayError(ERR_GUILD_BANK_FULL);
             break;
         }
 
-        case 29: {
+        case GUILD_COMMAND_RESULT::GUILD_RESULT_ITEM_NOT_FOUND: {
             CGGameUI::DisplayError(ERR_ITEM_NOT_FOUND);
             break;
         }
@@ -5517,23 +5532,23 @@ int32_t __stdcall CGPlayer_C::OnTurnInPetitionResults(CDataStore* msg) {
     uint32_t result;
     msg->Get(result);
 
-    switch (result) {
-        case 0: {
+    switch (static_cast<PETITION_TURNIN_RESULT>(result)) {
+        case PETITION_TURNIN_SUCCESS: {
             FrameScript_SignalEvent(SCRIPT_EVENT_GUILD_REGISTRAR_CLOSED, nullptr);
             break;
         }
 
-        case 2: {
+        case PETITION_TURNIN_IN_GUILD: {
             CGGameUI::DisplayError(ERR_PETITION_IN_GUILD);
             break;
         }
 
-        case 4: {
+        case PETITION_TURNIN_NOT_ENOUGH_SIGNATURES: {
             CGGameUI::DisplayError(ERR_PETITION_NOT_ENOUGH_SIGNATURES);
             break;
         }
 
-        case 11: {
+        case PETITION_TURNIN_GUILD_PERMISSIONS: {
             CGGameUI::DisplayError(ERR_GUILD_PERMISSIONS);
             break;
         }
@@ -5559,7 +5574,7 @@ int32_t Packet_SMSG_ARENA_TEAM_COMMAND_RESULT(void* param, NETMESSAGE msgId, uin
     msg->GetString(player, sizeof(player));
     msg->Get(error);
 
-    if (error == 0) {
+    if (error == ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_SUCCESS) {
         switch (command) {
             case 0: {
                 CGGameUI::DisplayError(ERR_ARENA_TEAM_CREATE_S, team);
@@ -5586,42 +5601,42 @@ int32_t Packet_SMSG_ARENA_TEAM_COMMAND_RESULT(void* param, NETMESSAGE msgId, uin
     }
 
     switch (error) {
-        case 1: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_INTERNAL: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_INTERNAL);
             break;
         }
 
-        case 2: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_ALREADY_IN_TEAM: {
             CGGameUI::DisplayError(ERR_ALREADY_IN_ARENA_TEAM);
             break;
         }
 
-        case 3: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_PLAYER_ALREADY_IN_TEAM: {
             CGGameUI::DisplayError(ERR_ALREADY_IN_ARENA_TEAM_S, player);
             break;
         }
 
-        case 4: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_ALREADY_INVITED: {
             CGGameUI::DisplayError(ERR_INVITED_TO_ARENA_TEAM);
             break;
         }
 
-        case 5: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_PLAYER_ALREADY_INVITED: {
             CGGameUI::DisplayError(ERR_ALREADY_INVITED_TO_ARENA_TEAM_S, player);
             break;
         }
 
-        case 6: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_NAME_INVALID: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_NAME_INVALID);
             break;
         }
 
-        case 7: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_NAME_EXISTS: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_NAME_EXISTS_S, team);
             break;
         }
 
-        case 8: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_LEADER_CANNOT_LEAVE_OR_NO_PERMISSION: {
             if (command == 3) {
                 CGGameUI::DisplayError(ERR_ARENA_TEAM_LEADER_LEAVE_S, team);
             } else {
@@ -5631,52 +5646,52 @@ int32_t Packet_SMSG_ARENA_TEAM_COMMAND_RESULT(void* param, NETMESSAGE msgId, uin
             break;
         }
 
-        case 9: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_NOT_IN_TEAM: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM);
             break;
         }
 
-        case 10: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_PLAYER_NOT_IN_TEAM: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM_SS, player, team);
             break;
         }
 
-        case 11: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_PLAYER_NOT_FOUND: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_PLAYER_NOT_FOUND_S, player);
             break;
         }
 
-        case 12: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_NOT_ALLIED: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_NOT_ALLIED);
             break;
         }
 
-        case 19: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_IGNORING_YOU: {
             CGGameUI::DisplayError(ERR_IGNORING_YOU_S, player);
             break;
         }
 
-        case 21: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_TARGET_TOO_LOW: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_TARGET_TOO_LOW_S, player);
             break;
         }
 
-        case 22: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_TARGET_TOO_HIGH: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_TARGET_TOO_HIGH_S, player);
             break;
         }
 
-        case 23: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_TOO_MANY_MEMBERS: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_TOO_MANY_MEMBERS_S, team);
             break;
         }
 
-        case 27: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_TEAM_NOT_FOUND: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_NOT_FOUND);
             break;
         }
 
-        case 30: {
+        case ARENA_TEAM_COMMAND_RESULT::ARENA_RESULT_TEAMS_LOCKED: {
             CGGameUI::DisplayError(ERR_ARENA_TEAMS_LOCKED);
             break;
         }
@@ -5690,7 +5705,7 @@ int32_t Packet_SMSG_ARENA_TEAM_COMMAND_RESULT(void* param, NETMESSAGE msgId, uin
 bool CGPlayer_C::CanTrackObject(CGObject_C* object) {
     CGGameObject_C* gameObject = static_cast<CGGameObject_C*>(object);
 
-    if (this->IsDeadOrGhost() || (gameObject->m_gameObject->m_typeID != 25 && !gameObject->CanUse())) {
+    if (this->IsDeadOrGhost() || (gameObject->m_gameObject->m_typeID != TYPE_FISHINGHOLE && !gameObject->CanUse())) {
         return false;
     }
 
@@ -5701,8 +5716,8 @@ bool CGPlayer_C::CanTrackObject(CGObject_C* object) {
         return false;
     }
 
-    for (uint32_t i = 0; i < 8; i++) {
-        if (lock->m_type[i] == 2 && ((1 << (static_cast<uint8_t>(lock->m_index[i]) - 1)) & trackResources)) {
+    for (uint32_t i = 0; i < NUM_LOCK_KEYS; i++) {
+        if (lock->m_type[i] == LOCK_KEY_SKILL && ((1 << (static_cast<uint8_t>(lock->m_index[i]) - 1)) & trackResources)) {
             return true;
         }
     }
@@ -5755,10 +5770,10 @@ void __stdcall CGPlayer_C::ReportPVPAFK(WOWGUID guid) {
 // VERIFY: 6bd01845 manual
 // OFFSET: 0x006D7590
 bool __stdcall CGPlayer_C::IsRAFPlayer(WOWGUID guid) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        return (player->m_unit->m_unitDynamicFlags >> 6) & 1;
+        return (player->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_REFER_A_FRIEND) != 0;
     }
 
     CGPartyMemberState* stats = CGPartyInfo::GetRemoteStats(guid);
@@ -5799,9 +5814,9 @@ CGBag_C* CGPlayer_C::GetBag() {
 int32_t Player_C_ZoneUpdateHandler(const void* data, void* param) {
     if (++s_zoneUpdateCounter >= 10) {
         s_zoneUpdateCounter -= 10;
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_UNIT, __FILE__, __LINE__));
 
-        if (unit || (unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__))) != nullptr) {
+        if (unit || (unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__))) != nullptr) {
             AreaListRegisterLocation(ClntObjMgrGetMapID(), unit->m_worldObject);
         }
     }
@@ -5830,7 +5845,7 @@ bool CGPlayer_C::CanSaveTabardNow() {
 // VERIFY: 042060de manual
 // OFFSET: 0x006DE230
 const CGItem_C* CGPlayer_C::EquippedItemMeetSpellRequirements(const SpellRec* spell, uint32_t slotMask) {
-    if ((this->m_unit->m_unitFieldFlags & 0x200000) || (this->m_unit->m_unitFieldFlags2 & 0x80)) {
+    if ((this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_DISARMED) || (this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_DISARM_OFFHAND)) {
         if (this->IsDisarmed(0)) {
             slotMask &= ~0x8000;
         }
@@ -5840,7 +5855,7 @@ const CGItem_C* CGPlayer_C::EquippedItemMeetSpellRequirements(const SpellRec* sp
         }
     }
 
-    if (this->m_unit->m_unitFieldFlags2 & 0x400) {
+    if (this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_DISARM_RANGED) {
         slotMask &= ~0x20000;
     }
 
@@ -5945,7 +5960,7 @@ static void CountGemsItemCacheCallback(int32_t id, const WOWGUID& guid, void* pa
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->CountEquippedGems();
@@ -5982,7 +5997,7 @@ void CGPlayer_C::CountEquippedGems() {
             int32_t enchantId;
 
             if (ClntObjMgrGetActivePlayer() == this->m_obj->m_guid) {
-                enchantId = (item->GetItemStaticFlags(0) & 0x2000) ? 0 : item->m_item->m_itemFieldEnchantment[socket].m_id;
+                enchantId = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? 0 : item->m_item->m_itemFieldEnchantment[socket].m_id;
             } else if (socket <= 11) {
                 enchantId = inspect->m_enchants[socket];
             } else {
@@ -6051,7 +6066,7 @@ void __stdcall CGPlayer_C::TalkToQuestUnit(const WOWGUID& guid) {
 void __stdcall CGPlayer_C::TalkToTrainer(const WOWGUID& guid) {
     s_lastTrainerRequest = guid;
     WOWGUID none = { 0 };
-    CGClassTrainer::SetTrainer(none, 0);
+    CGClassTrainer::SetTrainer(none, TRAINER_TYPE_GENERAL);
 
     CDataStore msg;
     msg.Put(static_cast<uint32_t>(CMSG_TRAINER_LIST));
@@ -6063,7 +6078,7 @@ void __stdcall CGPlayer_C::TalkToTrainer(const WOWGUID& guid) {
 // VERIFY: 1d12cc15 manual
 // OFFSET: 0x006D2120
 void CGPlayer_C::TalkToBinder(const WOWGUID& guid) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid ? guid : s_binder, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid ? guid : s_binder, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -6105,7 +6120,7 @@ void __stdcall CGPlayer_C::TalkToGuildBanker(const WOWGUID& guid) {
     CDataStore msg;
     msg.Put(static_cast<uint32_t>(CMSG_GUILD_BANK_ACTIVATE));
     msg.Put(guid.m_guid);
-    msg.Put(static_cast<uint8_t>(CGGuildBankInfo::m_guildBankTabInfo[0].unk_2140 != 0));
+    msg.Put(static_cast<uint8_t>(CGGuildBankInfo::m_guildBankTabInfo[0].m_needsFullUpdate != 0));
     msg.Finalize();
     ClientServices::Send2(&msg);
     CGGuildBankInfo::m_pendingBanker = guid;
@@ -6152,11 +6167,11 @@ void __stdcall CGPlayer_C::ShopFromMerchant(const WOWGUID& guid) {
 // VERIFY: e4ffe0d2 manual
 // OFFSET: 0x006DB010
 void CGPlayer_C::TalkToSpiritHealer(const WOWGUID& guid) {
-    if (!(this->m_player->m_playerFlags & 0x10)) {
+    if (!(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST)) {
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid ? guid : s_spiritHealer, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid ? guid : s_spiritHealer, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -6189,7 +6204,7 @@ void CGPlayer_C::TalkToSpiritHealer(const WOWGUID& guid) {
 // VERIFY: 25092c88 manual
 // OFFSET: 0x006DB180
 void CGPlayer_C::TalkToSpiritGuide(const WOWGUID& guid) {
-    if (this->m_player->m_playerFlags & 0x10) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST) {
         WOWGUID none = { 0 };
         CGGameUI::SetAreaSpiritHealer(none);
         CGGameUI::SetAreaSpiritHealer(guid);
@@ -6203,7 +6218,7 @@ void CGPlayer_C::HideHelm() {
         this->m_characterComponent->RemoveItemBySlot(static_cast<INVENTORY_SLOTS>(0));
     }
 
-    if (!(this->m_player->m_playerFlags & 0x400) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
+    if (!(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_SHOWING_HELM));
         msg.Put(static_cast<uint8_t>(0));
@@ -6221,7 +6236,7 @@ void CGPlayer_C::HideCloak() {
         this->m_characterComponent->RemoveItemBySlot(static_cast<INVENTORY_SLOTS>(14));
     }
 
-    if (!(this->m_player->m_playerFlags & 0x800) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
+    if (!(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_SHOWING_CLOAK));
         msg.Put(static_cast<uint8_t>(0));
@@ -6242,14 +6257,14 @@ int32_t CGPlayer_C::OnPetitionRename(CDataStore* msg) {
         return 1;
     }
 
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
-    if (!item || !(item->GetItemStaticFlags(0) & 0x2000) || !item->m_item->m_itemFieldEnchantment[0].m_id) {
+    if (!item || !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) || !item->m_item->m_itemFieldEnchantment[0].m_id) {
         return 1;
     }
 
     WOWGUID none = WOWGUID();
-    int32_t id = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+    int32_t id = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
     CGPetition* petition = g_petitionCache.GetRecord(id, none, nullptr, nullptr, false);
 
     if (petition) {
@@ -6283,13 +6298,13 @@ void CGPlayer_C::TurnInGuildCharter() {
             continue;
         }
 
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
-        if (!item || !(item->GetItemStaticFlags(0) & 0x2000)) {
+        if (!item || !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
             continue;
         }
 
-        int32_t id = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+        int32_t id = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
         CGPetition* petition = g_petitionCache.GetRecord(id, guid, GuildCharterTurnInCallback, nullptr, false);
 
         if (!petition) {
@@ -6308,7 +6323,7 @@ void CGPlayer_C::TurnInGuildCharter() {
 
     for (uint32_t i = 19; i <= 22; i++) {
         WOWGUID bagGuid = i < static_cast<uint32_t>(this->m_bag.m_numSlots) ? this->m_bag.m_slots[i] : WOWGUID();
-        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bagGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bagGuid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!container) {
             continue;
@@ -6322,13 +6337,13 @@ void CGPlayer_C::TurnInGuildCharter() {
                 continue;
             }
 
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
-            if (!item || !(item->GetItemStaticFlags(0) & 0x2000)) {
+            if (!item || !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
                 continue;
             }
 
-            int32_t id = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+            int32_t id = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
             CGPetition* petition = g_petitionCache.GetRecord(id, guid, GuildCharterTurnInCallback, nullptr, false);
 
             if (!petition) {
@@ -6383,14 +6398,14 @@ int32_t CGPlayer_C::TurnInArenaCharter(int32_t turnIn) {
             continue;
         }
 
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
         charter = item;
 
-        if (!item || !(item->GetItemStaticFlags(0) & 0x2000)) {
+        if (!item || !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
             continue;
         }
 
-        int32_t id = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+        int32_t id = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
         CGPetition* petition = g_petitionCache.GetRecord(id, guid, ArenaCharterTurnInCallback, nullptr, false);
 
         if (petition && petition->m_staticType == 1 && (!turnIn || petition->m_minSignatures == teamSize - 1)) {
@@ -6400,7 +6415,7 @@ int32_t CGPlayer_C::TurnInArenaCharter(int32_t turnIn) {
 
     for (uint32_t i = 19; i <= 22 && !found; i++) {
         WOWGUID bagGuid = i < static_cast<uint32_t>(this->m_bag.m_numSlots) ? this->m_bag.m_slots[i] : WOWGUID();
-        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bagGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bagGuid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!container) {
             continue;
@@ -6414,7 +6429,7 @@ int32_t CGPlayer_C::TurnInArenaCharter(int32_t turnIn) {
                 continue;
             }
 
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
             if (!item) {
                 continue;
@@ -6422,11 +6437,11 @@ int32_t CGPlayer_C::TurnInArenaCharter(int32_t turnIn) {
 
             charter = item;
 
-            if (!(item->GetItemStaticFlags(0) & 0x2000)) {
+            if (!(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
                 continue;
             }
 
-            int32_t id = (item->GetItemStaticFlags(0) & 0x2000) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
+            int32_t id = (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) ? item->m_item->m_itemFieldEnchantment[0].m_id : 0;
             CGPetition* petition = g_petitionCache.GetRecord(id, guid, ArenaCharterTurnInCallback, nullptr, false);
 
             if (petition && petition->m_staticType == 1 && (!turnIn || petition->m_minSignatures == teamSize - 1)) {
@@ -6464,7 +6479,7 @@ void CGPlayer_C::HandleOnRightClick(CGUnit_C* unit, bool autoInteract) {
     if (this->IsShapeShifted()) {
         SpellShapeshiftFormRec* form = g_spellShapeshiftFormDB.GetRecord(this->GetShapeshiftForm());
 
-        if (!form || !(form->m_flags & 0x8)) {
+        if (!form || !(form->m_flags & SPELL_SHAPESHIFT_FORM_FLAG_CAN_INTERACT)) {
             if (!this->CanAutoUnshift()) {
                 CGGameUI::DisplayError(ERR_CANT_INTERACT_SHAPESHIFTED);
                 return;
@@ -6487,7 +6502,7 @@ void CGPlayer_C::HandleOnRightClick(CGUnit_C* unit, bool autoInteract) {
         if (reach * reach < distanceSq) {
             WOWGUID guid = unit->m_obj->m_guid;
 
-            if (this->SetTrackingTarget(guid, 5)) {
+            if (this->SetTrackingTarget(guid, TRACKTYPE_INTERACT)) {
                 return;
             }
         }
@@ -6507,8 +6522,8 @@ void CGPlayer_C::HandleOnRightClick(CGUnit_C* unit, bool autoInteract) {
         return;
     }
 
-    if (unit->m_questStatus == 1) {
-        CGTutorial::TriggerTutorial(0x2A);
+    if (unit->m_questStatus == QUEST_GIVER_STATUS::QUEST_GIVER_UNKNOWN_1) {
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_UNAVAILABLE_QUEST_GIVERS);
     }
 
     WOWGUID guid = unit->m_obj->m_guid;
@@ -6521,67 +6536,67 @@ void CGPlayer_C::HandleOnRightClick(CGUnit_C* unit, bool autoInteract) {
         }
     }
 
-    if (unit->m_unit->m_unitNpcFlags & 0x1) {
+    if (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_GOSSIP) {
         CGPlayer_C::TalkToGossip(guid);
-        this->RequestTalkEmote(0);
+        this->RequestTalkEmote(TALKANIM_TALK);
         return;
     }
 
     if (CGUnit_C::UnitCanGossip(unit)) {
         CGPlayer_C::TalkToQuestUnit(guid);
-        this->RequestTalkEmote(0);
+        this->RequestTalkEmote(TALKANIM_TALK);
         return;
     }
 
     uint32_t npcFlags = unit->m_unit->m_unitNpcFlags;
 
-    if (npcFlags & 0x2000) {
+    if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_FLIGHT_MASTER) {
         CGPlayer_C::QueryTaxiNodes(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x80) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_VENDOR) {
         CGPlayer_C::ShopFromMerchant(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x10) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_TRAINER) {
         CGPlayer_C::TalkToTrainer(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x4000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_SPIRIT_HEALER) {
         this->TalkToSpiritHealer(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x8000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_SPIRIT_GUIDE) {
         this->TalkToSpiritGuide(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x10000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_INNKEEPER) {
         this->TalkToBinder(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x20000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_BANKER) {
         CGPlayer_C::TalkToBanker(guid);
-        this->RequestTalkEmote(0);
+        this->RequestTalkEmote(TALKANIM_TALK);
     } else if (unit->IsGuildMaster()) {
         CGPlayer_C::TalkToPetitionVendor(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x40000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_PETITIONER) {
         CGPlayer_C::TalkToPetitionVendor(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x80000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_TABARD_DESIGNER) {
         this->TalkToTabardVendor(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x100000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_BATTLEMASTER) {
         CGPlayer_C::TalkToBattleMaster(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x200000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_AUCTIONEER) {
         CGPlayer_C::TalkToAuctioneer(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x400000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_STABLE_MASTER) {
         CGPlayer_C::TalkToStableMaster(guid);
-        this->RequestTalkEmote(0);
-    } else if (npcFlags & 0x800000) {
+        this->RequestTalkEmote(TALKANIM_TALK);
+    } else if (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_GUILD_BANKER) {
         CGPlayer_C::TalkToGuildBanker(guid);
-        this->RequestTalkEmote(0);
+        this->RequestTalkEmote(TALKANIM_TALK);
     } else if (unit->IsInPartyOrRaid()) {
         CGPlayer_C::TalkToSpellClick(guid);
     } else if (unit->CanBeSpellClickedByLocalPlayer(this)) {
         CGPlayer_C::TalkToRideVehicle(guid);
-    } else if (unit->m_unit->m_unitNpcFlags & 0x4000000) {
+    } else if (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_MAILBOX) {
         CGPlayer_C::TalkToMailbox(unit->m_obj->m_guid);
     }
 }
@@ -6594,9 +6609,9 @@ void CGPlayer_C::RequestAllItemPurchaseData() {
             continue;
         }
 
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(this->m_bag.m_slots[i], TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(this->m_bag.m_slots[i], TYPE_ITEM, __FILE__, __LINE__));
 
-        if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & 0x4) && item->GetStats() && (item->GetStats()->m_flags[0] & 0x1000)) {
+        if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_PURCHASE_DATA_PENDING) && item->GetStats() && (item->GetStats()->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_ITEM_PURCHASE_RECORD)) {
             item->RequestItemPurchaseData();
         }
     }
@@ -6606,16 +6621,16 @@ void CGPlayer_C::RequestAllItemPurchaseData() {
             continue;
         }
 
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(this->m_bag.m_slots[i], TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(this->m_bag.m_slots[i], TYPE_ITEM, __FILE__, __LINE__));
 
-        if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & 0x4) && item->GetStats() && (item->GetStats()->m_flags[0] & 0x1000)) {
+        if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_PURCHASE_DATA_PENDING) && item->GetStats() && (item->GetStats()->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_ITEM_PURCHASE_RECORD)) {
             item->RequestItemPurchaseData();
         }
     }
 
     for (int32_t i = 19; i <= 22; i++) {
         WOWGUID guid = static_cast<uint32_t>(i) < static_cast<uint32_t>(this->m_bag.m_numSlots) ? this->m_bag.m_slots[i] : WOWGUID();
-        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* container = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!container) {
             continue;
@@ -6628,9 +6643,9 @@ void CGPlayer_C::RequestAllItemPurchaseData() {
                 continue;
             }
 
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bag->m_slots[j], TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(bag->m_slots[j], TYPE_ITEM, __FILE__, __LINE__));
 
-            if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & 0x4) && item->GetStats() && (item->GetStats()->m_flags[0] & 0x1000)) {
+            if (item && !item->m_itemPurchaseData && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_PURCHASE_DATA_PENDING) && item->GetStats() && (item->GetStats()->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_ITEM_PURCHASE_RECORD)) {
                 item->RequestItemPurchaseData();
             }
         }
@@ -6655,7 +6670,7 @@ int32_t CGPlayer_C::OnListInventory(CDataStore* msg) {
     }
 
     CGPlayer_C::s_lastVendorListReceived = vendor;
-    uint8_t error = 0xFF;
+    uint8_t error = VENDOR_LIST_RESULT::VENDOR_LIST_RESULT_NOT_READ;
 
     if (count) {
         for (uint8_t i = 0; i < count; i++) {
@@ -6673,23 +6688,23 @@ int32_t CGPlayer_C::OnListInventory(CDataStore* msg) {
         msg->Get(error);
 
         switch (error) {
-            case 0:
+            case VENDOR_LIST_RESULT::VENDOR_LIST_EMPTY:
                 ConsoleWrite("Vendor has no inventory", DEFAULT_COLOR);
                 break;
 
-            case 1:
+            case VENDOR_LIST_RESULT::VENDOR_LIST_VENDOR_DISLIKES_PLAYER:
                 ConsoleWrite("I don't think he likes you very much", DEFAULT_COLOR);
                 break;
 
-            case 2:
+            case VENDOR_LIST_RESULT::VENDOR_LIST_TOO_FAR:
                 ConsoleWrite("You are too far away", DEFAULT_COLOR);
                 break;
 
-            case 3:
+            case VENDOR_LIST_RESULT::VENDOR_LIST_VENDOR_DEAD:
                 ConsoleWrite("Vendor is dead", DEFAULT_COLOR);
                 break;
 
-            case 4:
+            case VENDOR_LIST_RESULT::VENDOR_LIST_PLAYER_DEAD:
                 ConsoleWrite("You can't shop while dead.", DEFAULT_COLOR);
                 break;
 
@@ -6825,26 +6840,26 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestDetails(CDataStore* msg) {
         msg->Get(emotes.m_nodes[i].m_delay);
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
-        if (!(unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+        if (!(unit->m_obj->m_type & TYPE_PLAYER)) {
             unit->PlayEmotes(emotes);
         }
 
-        if ((unit->m_obj->m_type & TYPEMASK_PLAYER) && CGQuestInfo::m_npc) {
+        if ((unit->m_obj->m_type & TYPE_PLAYER) && CGQuestInfo::m_npc) {
             CDataStore response;
             response.Put(static_cast<uint32_t>(MSG_QUEST_PUSH_RESULT));
             response.Put(inform ? inform.m_guid : npc.m_guid);
             response.Put(questId);
-            response.Put(static_cast<uint8_t>(4));
+            response.Put(static_cast<uint8_t>(CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_BUSY));
             response.Finalize();
             ClientServices::Send2(&response);
             return 1;
         }
     }
 
-    CGQuestInfo::SetState(npc, inform, 1, details, questId, startCheat);
+    CGQuestInfo::SetState(npc, inform, QUEST_OFFER, details, questId, startCheat);
     CGQuestInfo::SetLogDescription(objectives);
     CGQuestInfo::AddReward(title, choiceItems, choiceDisplays, choiceCounts, numChoices, rewardItems, rewardDisplays, rewardCounts, numRewards, money, xp, honor, honorMultiplier, spell, spellCast, autoLaunched, suggestedGroupNum, rewardTitle, talents, arenaPoints, factionMask, factionIDs, factionValues, factionOverrides, flags);
     return 1;
@@ -6880,19 +6895,19 @@ int32_t CGPlayer_C::CanUseItem(const ItemStats_C* stats, int32_t& error) {
 
     CGUnitData* unit = this->m_unit;
 
-    if (static_cast<int32_t>(stats->m_requiredLevel) > static_cast<int32_t>(unit->m_unitFieldLevel) || !((1 << (unit->m_unitFieldBytes0[1] - 1)) & stats->m_allowableClass) || !((1 << (unit->m_unitFieldBytes0[0] - 1)) & stats->m_allowableRace)) {
+    if (static_cast<int32_t>(stats->m_requiredLevel) > static_cast<int32_t>(unit->m_unitFieldLevel) || !((1 << (unit->m_classID - 1)) & stats->m_allowableClass) || !((1 << (unit->m_raceID - 1)) & stats->m_allowableRace)) {
         error = ERR_CANT_USE_ITEM;
         return 0;
     }
 
     uint8_t itemClass = static_cast<uint8_t>(stats->m_class);
 
-    if (itemClass < 17 && s_proficiency[itemClass] && !(s_proficiency[itemClass] & (1 << stats->m_subClass))) {
+    if (itemClass < ITEM_CLASS::NUM_ITEM_CLASSES && s_proficiency[itemClass] && !(s_proficiency[itemClass] & (1 << stats->m_subClass))) {
         error = ERR_PROFICIENCY_NEEDED;
         return 0;
     }
 
-    if (stats->m_requiredSkill && !(stats->m_flags[0] & 0x20040000)) {
+    if (stats->m_requiredSkill && !(stats->m_flags[0] & (ITEM_STATIC_FLAGS::ITEM_FLAG_IS_PROSPECTABLE | ITEM_STATIC_FLAGS::ITEM_FLAG_IS_MILLABLE))) {
         int32_t index = this->GetSkillIndex(stats->m_requiredSkill);
 
         if (index < 0 || static_cast<int32_t>(this->GetSkillValue(index)) < static_cast<int32_t>(stats->m_requiredSkillRank)) {
@@ -6906,7 +6921,7 @@ int32_t CGPlayer_C::CanUseItem(const ItemStats_C* stats, int32_t& error) {
         return 0;
     }
 
-    if (stats->m_requiredHonorRank && static_cast<int32_t>(this->m_player->m_playerFieldBytes[3]) < static_cast<int32_t>(stats->m_requiredHonorRank)) {
+    if (stats->m_requiredHonorRank && static_cast<int32_t>(this->m_player->m_maxPvpRank) < static_cast<int32_t>(stats->m_requiredHonorRank)) {
         error = ERR_CANT_USE_ITEM;
         return 0;
     }
@@ -6960,7 +6975,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverOfferReward(CDataStore* msg) {
         msg->Get(reinterpret_cast<uint32_t&>(emotes.m_nodes[i].m_emote));
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->PlayEmotes(emotes);
@@ -7044,7 +7059,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverOfferReward(CDataStore* msg) {
     }
 
     WOWGUID none = { 0 };
-    CGQuestInfo::SetState(npc, none, 3, text, questId, 0);
+    CGQuestInfo::SetState(npc, none, QUEST_REWARD, text, questId, 0);
     CGQuestInfo::AddReward(title, choiceItems, choiceDisplays, choiceCounts, numChoices, rewardItems, rewardDisplays, rewardCounts, numRewards, money, xp, honor, honorMultiplier, spell, spellCast, autoLaunched, suggestedGroupNum, rewardTitle, talents, arenaPoints, factionMask, factionIDs, factionValues, factionOverrides, flags);
     return 1;
 }
@@ -7065,8 +7080,8 @@ float CGPlayer_C::GetQuestXPMultiplier() {
             continue;
         }
 
-        for (uint32_t j = 0; j < 3; j++) {
-            if (spell.m_effectAura[j] == 291) {
+        for (uint32_t j = 0; j < NUM_SPELL_EFFECTS; j++) {
+            if (spell.m_effectAura[j] == SPELL_AURA_MOD_XP_QUEST_PCT) {
                 multiplier = (spell.m_effectBasePoints[j] + 1) * 0.0099999998f + multiplier;
             }
         }
@@ -7092,12 +7107,12 @@ static void QuestAcceptCallback(int32_t id, const WOWGUID& guid, void* param, bo
     CGGameUI::DisplayError(ERR_QUEST_ACCEPTED_S, quest->m_name);
 
     if (quest->m_infoId == 1) {
-        CGTutorial::TriggerTutorial(0x28);
-        CGTutorial::TriggerTutorial(0x26);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_ELITE_QUESTS);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_GROUPS);
     }
 
-    if (!IsTutorialFlagged(0x14) && ++s_questsAccepted >= 4) {
-        CGTutorial::TriggerTutorial(0x14);
+    if (!IsTutorialFlagged(TUTORIAL::TUTORIAL_QUEST_LOG) && ++s_questsAccepted >= 4) {
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUEST_LOG);
     }
 
     FrameScript_SignalEvent(SCRIPT_EVENT_QUEST_ACCEPTED, "%d", CGQuestLog::GetQuestIndex(quest->m_id));
@@ -7106,7 +7121,7 @@ static void QuestAcceptCallback(int32_t id, const WOWGUID& guid, void* param, bo
 // VERIFY: ac232887 manual
 // OFFSET: 0x006DF370
 int32_t OnUpdateQuest(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -7130,12 +7145,12 @@ int32_t OnUpdateQuest(WOWGUID guid, uint32_t offset, uint32_t count, const void*
             CGGameUI::DisplayError(ERR_QUEST_ACCEPTED_S, quest->m_name);
 
             if (quest->m_infoId == 1) {
-                CGTutorial::TriggerTutorial(0x28);
-                CGTutorial::TriggerTutorial(0x26);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_ELITE_QUESTS);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_GROUPS);
             }
 
-            if (!IsTutorialFlagged(0x14) && ++s_questsAccepted >= 4) {
-                CGTutorial::TriggerTutorial(0x14);
+            if (!IsTutorialFlagged(TUTORIAL::TUTORIAL_QUEST_LOG) && ++s_questsAccepted >= 4) {
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUEST_LOG);
             }
 
             FrameScript_SignalEvent(SCRIPT_EVENT_QUEST_ACCEPTED, "%d", CGQuestLog::GetQuestIndex(quest->m_id));
@@ -7147,7 +7162,7 @@ int32_t OnUpdateQuest(WOWGUID guid, uint32_t offset, uint32_t count, const void*
     if (quest) {
         int32_t index = CGQuestLog::GetQuestIndex(quest->m_id) - 1;
 
-        if (index >= 0 && (quest->m_flags & 0x10000) && CGQuestLog::IsQuestCompleteEx(index, 1)) {
+        if (index >= 0 && (quest->m_flags & QUEST_TEMPLATE_FLAGS::QUEST_FLAG_AUTO_COMPLETE) && CGQuestLog::IsQuestCompleteEx(index, 1)) {
             WOWGUID self = player->m_obj->m_guid;
             CGPlayer_C::CompleteQuest(self, quest->m_id);
         }
@@ -7167,92 +7182,92 @@ void CGPlayer_C::SetActiveMirrorHandlers() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x10, 8, CritterUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x10, 8, CritterUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
 
     for (uint32_t i = 0x2C0; i < 0x378; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x3F8; i <= 0x4D0; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x4D8; i <= 0x508; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x570; i <= 0x668; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x670; i <= 0x768; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, InventoryUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x28; i < 0x21C; i += 20) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 20, OnUpdateQuest, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 20, OnUpdateQuest, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
     for (uint32_t i = 0x11B0; i < 0x1214; i += 4) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, ReportDailyQuestsRemaining, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, ReportDailyQuestsRemaining, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFF8, 4, OnUpdateMoney, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x18, 8, CharmChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x1D3, 1, OnUpdateShapeshiftForm, nullptr, static_cast<HANDLER_PRIORITY>(0), 1);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x770, 8, FarsightChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 1);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFF8, 4, OnUpdateMoney, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x18, 8, CharmChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x1D3, 1, OnUpdateShapeshiftForm, nullptr, HANDLER_PRIORITY_NORMAL, 1);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x770, 8, FarsightChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 1);
 
     for (uint32_t i = 0x778; i < 0x790; i += 8) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_KNOWN_TITLES_UPDATE)), static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 8, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_KNOWN_TITLES_UPDATE)), HANDLER_PRIORITY_NORMAL, 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x790, 8, SignalKnownCurrencyTypesUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 1);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x790, 8, SignalKnownCurrencyTypesUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 1);
 
     for (uint32_t i = 0x7A6; i < 0xDA6; i += 12) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i - 2, 2, SkillRankChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 2, SkillMaxRankChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i + 4, 2, SkillMaxRankChangeHandler, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i + 2, 2, SignalPlayerSkillStatEventsAndRefresh, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i - 2, 2, SkillRankChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 2, SkillMaxRankChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i + 4, 2, SkillMaxRankChangeHandler, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i + 2, 2, SignalPlayerSkillStatEventsAndRefresh, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1B, 1, OnUpdateRestState, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFF4, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_UPDATE_EXHAUSTION)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x798, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_XP_UPDATE)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x79C, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_XP_UPDATE)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFFC, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1018, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1034, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1050, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10D4, 2, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E0, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10D8, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1C, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_RANK_CHANGED)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E7, 1, OnUpdatePlayerAuraVision, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E4, 2, OnUpdatePlayerOverrideSpellsID, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E8, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_UPDATE_FACTION)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1150, 0x54, OnArenaTeamsChanged, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x11A4, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnHonorCurrencyChanged), nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x11A8, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnArenaCurrencyChanged), nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10EC, 0x64, SignalCombatRatingUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDEC, 4, SignalCombatRatingUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDB0, 0x34, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x88, 0x38, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1B, 1, OnUpdateRestState, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFF4, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_UPDATE_EXHAUSTION)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x798, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_XP_UPDATE)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x79C, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_XP_UPDATE)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xFFC, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1018, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1034, 0x1C, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1050, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10D4, 2, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E0, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10D8, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_KILLS_CHANGED)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1C, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_PVP_RANK_CHANGED)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E7, 1, OnUpdatePlayerAuraVision, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E4, 2, OnUpdatePlayerOverrideSpellsID, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10E8, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_UPDATE_FACTION)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1150, 0x54, OnArenaTeamsChanged, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x11A4, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnHonorCurrencyChanged), nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x11A8, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnArenaCurrencyChanged), nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x10EC, 0x64, SignalCombatRatingUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDEC, 4, SignalCombatRatingUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDB0, 0x34, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_UNIT, 0x88, 0x38, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
 
     for (uint32_t i = 0x1214; i < 0x1224; i += 4) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, OnUpdatePlayerRuneRegen, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, OnUpdatePlayerRuneRegen, nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDAC, 4, OnUpdatePlayerTrackingMask, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1060, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x105C, 4, SignalCombatRatingUpdate, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1224, 0xC, OnUpdatePlayerNoReagentCost, nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0xDAC, 4, OnUpdatePlayerTrackingMask, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1060, 4, OnUpdatePlayerScriptEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(SCRIPT_EVENT_PLAYER_DAMAGE_DONE_MODS)), HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x105C, 4, SignalCombatRatingUpdate, nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1224, 0xC, OnUpdatePlayerNoReagentCost, nullptr, HANDLER_PRIORITY_NORMAL, 0);
 
     for (uint32_t i = 0x1248; i < 0x1260; i += 4) {
-        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnUpdatePlayerGlyph), nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+        ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, i, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnUpdatePlayerGlyph), nullptr, HANDLER_PRIORITY_NORMAL, 0);
     }
 
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1260, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnUpdatePlayerGlyphSlotsEnabled), nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
-    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1264, 4, reinterpret_cast<MIRRORHANDLERFUNC>(SignalPetSpellPowerUpdate), nullptr, static_cast<HANDLER_PRIORITY>(0), 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1260, 4, reinterpret_cast<MIRRORHANDLERFUNC>(OnUpdatePlayerGlyphSlotsEnabled), nullptr, HANDLER_PRIORITY_NORMAL, 0);
+    ClntObjMgrSetObjMirrorHandler(this->m_obj->m_guid, ID_PLAYER, 0x1264, 4, reinterpret_cast<MIRRORHANDLERFUNC>(SignalPetSpellPowerUpdate), nullptr, HANDLER_PRIORITY_NORMAL, 0);
 }
 
 // VERIFY: 7c2e2f8b manual
@@ -7362,7 +7377,7 @@ struct QuestCompleteRewards {
 // OFFSET: 0x006CFFF0
 static void CrossedInebriationThresholdItemCallback(int32_t id, const WOWGUID& guid, void* param, bool success) {
     int32_t threshold = static_cast<int32_t>(reinterpret_cast<intptr_t>(param));
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -7442,7 +7457,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestList(CDataStore* msg) {
     memset(s_questListLevels, 0, sizeof(s_questListLevels));
     memset(s_questListFlags, 0, sizeof(s_questListFlags));
     memset(s_questListRepeatable, 0, sizeof(s_questListRepeatable));
-    CGQuestInfo::SetState(npc, WOWGUID(), 0, greeting, 0, 0);
+    CGQuestInfo::SetState(npc, WOWGUID(), QUEST_GREETING, greeting, 0, 0);
 
     char titles[32][512];
 
@@ -7467,7 +7482,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestList(CDataStore* msg) {
         }
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->SetEmoteQueue(&emote, 1);
@@ -7533,11 +7548,11 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverRequestItems(CDataStore* msg) {
     uint32_t completable3;
     msg->Get(completable3);
 
-    CGQuestInfo::SetState(npc, WOWGUID(), 2, text, questId, 0);
+    CGQuestInfo::SetState(npc, WOWGUID(), QUEST_ACCEPTED, text, questId, 0);
     int32_t canComplete = completable0 && completable1 && completable2 && completable3;
     CGQuestInfo::AddItemRequest(title, itemIds, itemCounts, itemDisplays, numItems, requiredMoney, canComplete, autoLaunched, suggestedGroupNum, flags);
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(npc, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->SetEmoteQueue(&emote, 1);
@@ -7553,48 +7568,48 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestInvalid(CDataStore* msg) {
     msg->Get(reason);
 
     switch (reason) {
-        case 1:
+        case CGPlayer_C::QUEST_INVALID_REASON::LOW_LEVEL:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_LOW_LEVEL);
             break;
 
-        case 6:
+        case CGPlayer_C::QUEST_INVALID_REASON::WRONG_RACE:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_WRONG_RACE);
             break;
 
-        case 7:
+        case CGPlayer_C::QUEST_INVALID_REASON::ALREADY_DONE:
             CGGameUI::DisplayError(ERR_QUEST_ALREADY_DONE);
             break;
 
-        case 12:
+        case CGPlayer_C::QUEST_INVALID_REASON::ONLY_ONE_TIMED:
             CGGameUI::DisplayError(ERR_QUEST_ONLY_ONE_TIMED);
             break;
 
-        case 13:
-        case 18:
+        case CGPlayer_C::QUEST_INVALID_REASON::UNKNOWN_13:
+        case CGPlayer_C::QUEST_INVALID_REASON::UNKNOWN_18:
             CGGameUI::DisplayError(ERR_QUEST_ALREADY_ON);
             break;
 
-        case 16:
+        case CGPlayer_C::QUEST_INVALID_REASON::EXPANSION:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_EXPANSION);
             break;
 
-        case 21:
+        case CGPlayer_C::QUEST_INVALID_REASON::MISSING_ITEMS:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_MISSING_ITEMS);
             break;
 
-        case 23:
+        case CGPlayer_C::QUEST_INVALID_REASON::NOT_ENOUGH_MONEY:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_NOT_ENOUGH_MONEY);
             break;
 
-        case 26:
+        case CGPlayer_C::QUEST_INVALID_REASON::TOO_MANY_DAILY_QUESTS:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_TOO_MANY_DAILY_QUESTS_I, 25);
             break;
 
-        case 27:
+        case CGPlayer_C::QUEST_INVALID_REASON::CAIS:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_CAIS);
             break;
 
-        case 29:
+        case CGPlayer_C::QUEST_INVALID_REASON::ALREADY_DONE_DAILY:
             CGGameUI::DisplayError(ERR_QUEST_ALREADY_DONE_DAILY);
             break;
 
@@ -7646,18 +7661,18 @@ static void QuestFailedCallback(int32_t id, const WOWGUID& guid, void* param, bo
     }
 
     switch (s_questFailedReason) {
-        case 4:
-        case 16:
-        case 50:
+        case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_4:
+        case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_16:
+        case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_50:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_BAG_FULL_S, quest->m_name);
             CGGameUI::DisplayError(ERR_INV_FULL);
             break;
 
-        case 17:
+        case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UI_MAX_COUNT:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_MAX_COUNT_S, quest->m_name);
             break;
 
-        case 74:
+        case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UI_TOO_MANY_DAILY_QUESTS:
             CGGameUI::DisplayError(ERR_QUEST_FAILED_TOO_MANY_DAILY_QUESTS_I, 25);
             break;
 
@@ -7681,18 +7696,18 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestFailed(CDataStore* msg) {
 
     if (quest) {
         switch (s_questFailedReason) {
-            case 4:
-            case 16:
-            case 50:
+            case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_4:
+            case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_16:
+            case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UNKNOWN_50:
                 CGGameUI::DisplayError(ERR_QUEST_FAILED_BAG_FULL_S, quest->m_name);
                 CGGameUI::DisplayError(ERR_INV_FULL);
                 break;
 
-            case 17:
+            case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UI_MAX_COUNT:
                 CGGameUI::DisplayError(ERR_QUEST_FAILED_MAX_COUNT_S, quest->m_name);
                 break;
 
-            case 74:
+            case CGPlayer_C::QUEST_FAILED_REASON::QF_REASON_UI_TOO_MANY_DAILY_QUESTS:
                 CGGameUI::DisplayError(ERR_QUEST_FAILED_TOO_MANY_DAILY_QUESTS_I, 25);
                 break;
 
@@ -7828,7 +7843,7 @@ int32_t __stdcall CGPlayer_C::OnQuestGiverQuestComplete(CDataStore* msg) {
 // VERIFY: 6f6228c3 manual
 // OFFSET: 0x00518B30
 uint32_t CGItem::GetEnchantmentId(int32_t slot) {
-    if (this->GetItemStaticFlags(0) & 0x2000) {
+    if (this->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) {
         return 0;
     }
 
@@ -7848,7 +7863,7 @@ int32_t CGPlayer_C::GetCharacterPoints(int32_t index) const {
 // VERIFY: 970a6a97 manual
 // OFFSET: 0x005E8290
 uint32_t CGItem::GetEnchantmentDuration(int32_t slot) {
-    if (this->GetItemStaticFlags(0) & 0x2000) {
+    if (this->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) {
         return 0;
     }
 
@@ -7868,7 +7883,7 @@ void CGPlayer_C::CastRandomCritter() {
 // VERIFY: f9b626f7 manual
 // OFFSET: 0x006D7320
 int32_t ClientPlaySpellVisualHandler(WOWGUID guid, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit && unit->IsHostileCritter()) {
         const SpellRec* spell = static_cast<const SpellRec*>(param);
@@ -7883,7 +7898,7 @@ int32_t ClientPlaySpellVisualHandler(WOWGUID guid, void* param) {
             SpellVisualKitRec* kit = g_spellVisualKitDB.GetRecord(visual->m_targetImpactKit);
 
             if (kit) {
-                PlaySpellVisuaKitData data(spell, kit, 6);
+                PlaySpellVisuaKitData data(spell, kit, SPELL_VISUAL_KIT_TARGET_IMPACT);
                 unit->PlaySpellVisualKit(data);
             }
         }
@@ -7894,9 +7909,9 @@ int32_t ClientPlaySpellVisualHandler(WOWGUID guid, void* param) {
 
 // VERIFY: 27cd2fc0 auto
 // OFFSET: 0x006D73B0
-void EnumVisibleForAuraEffect(const SpellRec* spell, int32_t a2, int32_t a3) {
-    s_unk_C9EAB0 = a2;
-    s_unk_C9EAB4 = a2 ? a3 : 0;
+void EnumVisibleForAuraEffect(const SpellRec* spell, int32_t display, int32_t flags) {
+    s_visibleAuraEffectDisplay = display;
+    s_visibleAuraEffectFlags = display ? flags : 0;
     ClntObjMgrEnumVisibleObjects(ClientPlaySpellVisualHandler, const_cast<SpellRec*>(spell));
 }
 
@@ -7909,7 +7924,7 @@ void CGPlayer_C::UpdateXRayVision(const SpellRec* spell) {
 // VERIFY: 371bd036 manual
 // OFFSET: 0x006D1C30
 int32_t OnUpdatePlayerOverrideSpellsID(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    if (ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__)) {
         CGSpellBook::UpdateUsable();
         CGSpellBook::UpdateSelection();
         CGActionBar::UpdateOverrideSpellBar();
@@ -7922,12 +7937,12 @@ int32_t OnUpdatePlayerOverrideSpellsID(WOWGUID guid, uint32_t offset, uint32_t c
 // VERIFY: ad8b210c manual
 // OFFSET: 0x006DA770
 int32_t OnUpdatePlayerAuraVision(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        uint8_t changed = *static_cast<const uint8_t*>(value) ^ reinterpret_cast<const uint8_t*>(&player->m_player->m_playerFieldBytes2)[3];
+        uint8_t changed = *static_cast<const uint8_t*>(value) ^ player->m_player->m_auraVision;
 
-        if (changed & 0x40) {
+        if (changed & AURA_VISION_FLAG_INVISIBILITY_DETECT) {
             CGWorldFrame::UpdateScreenEffect();
         }
 
@@ -7939,9 +7954,9 @@ int32_t OnUpdatePlayerAuraVision(WOWGUID guid, uint32_t offset, uint32_t count, 
 
 // VERIFY: 5071e977 manual
 // OFFSET: 0x006E71D0
-void CGPlayer_C::DelKnownSpell(int32_t spellId, int32_t a3) {
+void CGPlayer_C::DelKnownSpell(int32_t spellId, int32_t silent) {
     if (spellId > g_spellDB.m_maxID) {
-        SysMsgPrintf(STATUS_ERROR, 2, "NOSPELLIDFOUND|%d", spellId);
+        SysMsgPrintf(SYSMSG_ERROR, 2, "NOSPELLIDFOUND|%d", spellId);
         return;
     }
 
@@ -7951,10 +7966,10 @@ void CGPlayer_C::DelKnownSpell(int32_t spellId, int32_t a3) {
         return;
     }
 
-    bool notify = a3 == 0;
+    bool notify = silent == 0;
 
-    if (spell.m_attributes & 0x20) {
-        SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], spellId);
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_IS_TRADESKILL) {
+        SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, spellId);
         SkillLineRec* skillLine = ability ? g_skillLineDB.GetRecord(ability->m_skillLine) : nullptr;
 
         if (skillLine) {
@@ -7980,11 +7995,11 @@ void CGPlayer_C::DelKnownSpell(int32_t spellId, int32_t a3) {
             }
         }
     } else {
-        if (spell.m_effect[0] == 155) {
+        if (spell.m_effect[0] == SPELL_EFFECT_TITAN_GRIP) {
             this->RemoveEquipBypassSkill(spellId);
         }
 
-        if (notify && !(spell.m_attributes & 0x80)) {
+        if (notify && !(spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG)) {
             if (*spell.m_nameSubtext) {
                 char text[512];
                 SStrPrintf(text, sizeof(text), "%s (%s)", spell.m_name, spell.m_nameSubtext);
@@ -7998,7 +8013,7 @@ void CGPlayer_C::DelKnownSpell(int32_t spellId, int32_t a3) {
     CGSpellBook::DelKnownSpell(spellId, 0);
     CGActionBar::RemoveMacro(spellId);
 
-    if (!a3) {
+    if (!silent) {
         CGClassTrainer::RefreshList();
     }
 
@@ -8130,7 +8145,7 @@ int32_t Packet_SMSG_INSPECT_TALENT(void* param, NETMESSAGE msgId, uint32_t time,
 void CGPlayer_C::ExitAutoCombatMode() {
     Spell_C_SetAutoRangedCombatSpell(0);
     EventUnregister(EVENT_ID_IDLE, CGPlayer_C::AutoCombatModeEventHandler);
-    this->m_combatModeFlags &= ~0xEu;
+    this->m_combatModeFlags &= ~COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_MASK;
     CGGameUI::UpdateCombatMode();
 }
 
@@ -8147,16 +8162,16 @@ void CGPlayer_C::MeleeModeLeave() {
 // OFFSET: 0x006CEB10
 static int32_t IsCastAnimation(uint32_t anim) {
     switch (anim) {
-        case 46:
-        case 49:
-        case 105:
-        case 106:
-        case 107:
-        case 108:
-        case 109:
-        case 110:
-        case 111:
-        case 112:
+        case ANIM_ATTACK_BOW:
+        case ANIM_ATTACK_RIFLE:
+        case ANIM_LOAD_BOW:
+        case ANIM_LOAD_RIFLE:
+        case ANIM_ATTACK_THROWN:
+        case ANIM_READY_THROWN:
+        case ANIM_HOLD_BOW:
+        case ANIM_HOLD_RIFLE:
+        case ANIM_HOLD_THROWN:
+        case ANIM_LOAD_THROWN:
             return 1;
 
         default:
@@ -8169,7 +8184,7 @@ static int32_t IsCastAnimation(uint32_t anim) {
 void CGPlayer_C::ToggleSheathe() {
     int32_t casting = 0;
 
-    if (this->m_unit->m_unitChannelSpell || (this->m_animationState & 0x400)) {
+    if (this->m_unit->m_unitChannelSpell || (this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_CASTING)) {
         casting = 1;
     }
 
@@ -8177,11 +8192,11 @@ void CGPlayer_C::ToggleSheathe() {
         return;
     }
 
-    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & 0x10000000)) {
+    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING)) {
         return;
     }
 
-    if ((this->m_unit->m_unitFieldFlags & 0x40000) || this->m_unit->m_unitFieldHealth <= 0) {
+    if ((this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_STUNNED) || this->m_unit->m_unitFieldHealth <= 0) {
         return;
     }
 
@@ -8189,7 +8204,7 @@ void CGPlayer_C::ToggleSheathe() {
         return;
     }
 
-    if (IsCastAnimation(this->GetCurrentTorsoAnimId()) || this->GetClientStandState()) {
+    if (IsCastAnimation(this->GetCurrentTorsoAnimId()) || (this->GetClientStandState() != UNIT_STANDING)) {
         return;
     }
 
@@ -8200,8 +8215,8 @@ void CGPlayer_C::ToggleSheathe() {
             return;
         }
 
-        int32_t hasSheathe = model->HasSequence(90);
-        int32_t hasUnsheathe = model->HasSequence(89);
+        int32_t hasSheathe = model->HasSequence(ANIM_HIP_SHEATH);
+        int32_t hasUnsheathe = model->HasSequence(ANIM_SHEATH);
 
         if (!hasSheathe || !hasUnsheathe || !model->HasBone(3) || !model->HasBone(2)) {
             return;
@@ -8212,21 +8227,21 @@ void CGPlayer_C::ToggleSheathe() {
         }
     }
 
-    const CGUnitVirtualItem* mainHand = this->GetVirtualItem(0, false);
-    const CGUnitVirtualItem* offHand = this->GetVirtualItem(1, false);
-    const CGUnitVirtualItem* ranged = this->GetVirtualItem(2, false);
-    ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(this->m_unit->m_unitFieldBytes0[1]);
+    const CGUnitVirtualItem* mainHand = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, false);
+    const CGUnitVirtualItem* offHand = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_OFFHAND, false);
+    const CGUnitVirtualItem* ranged = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_RANGED, false);
+    ChrClassesRec* playerClass = g_chrClassesDB.GetRecord(this->m_unit->m_classID);
 
     if (!playerClass || (playerClass->m_flags & 0x8)) {
         ranged = nullptr;
     }
 
     switch (this->m_sheatheState) {
-        case 0:
+        case WEAPONMODE_SHEATHEDMODE:
             if (mainHand || offHand) {
-                this->SetSheatheState(1, 0, 0);
+                this->SetSheatheState(WEAPONMODE_NORMALMODE, 0, 0);
             } else if (ranged) {
-                this->SetSheatheState(2, 0, 0);
+                this->SetSheatheState(WEAPONMODE_RANGEDMODE, 0, 0);
             }
 
             if (this->CGUnit_C::IsInMelee()) {
@@ -8235,17 +8250,17 @@ void CGPlayer_C::ToggleSheathe() {
 
             break;
 
-        case 1:
+        case WEAPONMODE_NORMALMODE:
             if (ranged) {
-                this->SetSheatheState(2, 0, 0);
+                this->SetSheatheState(WEAPONMODE_RANGEDMODE, 0, 0);
             } else {
-                this->SetSheatheState(0, 0, 0);
+                this->SetSheatheState(WEAPONMODE_SHEATHEDMODE, 0, 0);
             }
 
             break;
 
-        case 2:
-            this->SetSheatheState(0, 0, 0);
+        case WEAPONMODE_RANGEDMODE:
+            this->SetSheatheState(WEAPONMODE_SHEATHEDMODE, 0, 0);
             break;
     }
 }
@@ -8253,19 +8268,19 @@ void CGPlayer_C::ToggleSheathe() {
 // VERIFY: b949cd28 manual
 // OFFSET: 0x006E2610
 void CGPlayer_C::MeleeModeEnter(const WOWGUID& target) {
-    if (!CGGameUI::CanPerformAction(1)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ATTACK)) {
         return;
     }
 
-    if (this->m_obj->m_guid != ClntObjMgrGetActivePlayer() || (this->m_unit->m_unitFieldFlags & 0x20000)) {
+    if (this->m_obj->m_guid != ClntObjMgrGetActivePlayer() || (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PACIFIED)) {
         return;
     }
 
-    if (!CGGameUI::m_hasControl || (this->m_player->m_playerFlags & 0x1000000)) {
+    if (!CGGameUI::m_hasControl || (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DISABLE_ATTACKS)) {
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -8279,28 +8294,28 @@ void CGPlayer_C::MeleeModeEnter(const WOWGUID& target) {
         return;
     }
 
-    int16_t overrideId = static_cast<int16_t>(this->m_player->m_playerFieldBytes2);
+    int16_t overrideId = static_cast<int16_t>(this->m_player->m_overrideSpellsID);
     OverrideSpellDataRec* overrideRec;
 
-    if (overrideId && (overrideRec = g_overrideSpellDataDB.GetRecord(overrideId)) && !(overrideRec->m_flags & 2)) {
+    if (overrideId && (overrideRec = g_overrideSpellDataDB.GetRecord(overrideId)) && !(overrideRec->m_flags & OVERRIDE_SPELL_DATA_FLAG_ALLOW_ATTACKS)) {
         return;
     }
 
     if (this->IsVehiclePassengerSeated()) {
         WOWGUID transport;
         transport.m_guid = this->GetTransportGUID();
-        CGUnit_C* vehicle = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(transport, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* vehicle = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(transport, TYPE_UNIT, __FILE__, __LINE__));
         VehicleSeatRec* seat;
 
-        if (!vehicle || !(seat = vehicle->GetVehicleSeatRec(this->m_movementData.m_transportSeat)) || !(seat->m_flags & 0x4000)) {
+        if (!vehicle || !(seat = vehicle->GetVehicleSeatRec(this->m_movementData.m_transportSeat)) || !(seat->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_CAN_ATTACK)) {
             return;
         }
     }
 
     Spell_C_CancelRangedSpells();
 
-    if (this->m_unit->m_unitFieldBytes1[0]) {
-        this->ChangeStandState(0);
+    if ((this->m_unit->m_standState != UNIT_STANDING)) {
+        this->ChangeStandState(UNIT_STANDING);
     }
 
     CGGameUI::Target(unit->m_obj->m_guid);
@@ -8319,7 +8334,7 @@ void CGPlayer_C::MeleeModeEnter(const WOWGUID& target) {
         this->m_combat.SetAttackSent(unit->m_obj->m_guid);
     }
 
-    this->SetSheatheState(1, 1, 0);
+    this->SetSheatheState(WEAPONMODE_NORMALMODE, 1, 0);
     Spell_C_SetAutoRangedCombatSpell(0);
     this->SpellInterrupted(this->m_castCount, this->m_castSpellId);
     Spell_C_CancelAutoRepeat(true);
@@ -8336,7 +8351,7 @@ int32_t CGPlayer_C::AutoCombatModeEventHandler(const void* data, void* param) {
         return 1;
     }
 
-    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* target = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!target) {
         return 1;
@@ -8353,7 +8368,7 @@ int32_t CGPlayer_C::AutoCombatModeEventHandler(const void* data, void* param) {
             player->MeleeModeEnter(guid);
         }
 
-        player->m_combatModeFlags &= ~4u;
+        player->m_combatModeFlags &= ~CGPlayer_C::COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_RANGED;
         return 1;
     }
 
@@ -8366,7 +8381,7 @@ int32_t CGPlayer_C::AutoCombatModeEventHandler(const void* data, void* param) {
         return 1;
     }
 
-    if (player->m_combatModeFlags & 8) {
+    if (player->m_combatModeFlags & CGPlayer_C::COMBAT_MODE_FLAGS::COMBAT_MODE_EXIT_WHEN_NOT_REPEATING) {
         player->ExitAutoCombatMode();
         return 1;
     }
@@ -8384,12 +8399,12 @@ int32_t CGPlayer_C::AutoCombatModeEventHandler(const void* data, void* param) {
 
         if (!Spell_C_GetAutoRangedCombatSpell()) {
             Spell_C_SetAutoRangedCombatSpell(CGSpellBook::m_autoRangedSpell);
-            player->m_combatModeFlags |= 4;
+            player->m_combatModeFlags |= CGPlayer_C::COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_RANGED;
         }
 
         C3Vector direction = player->m_movementData.GetDirection();
 
-        if (direction.y * toTarget.y + direction.z * toTarget.z + direction.x * toTarget.x > 0.0f && !(player->m_movement->m_flags & 0x33) && maxRange * maxRange > distanceSq && Spell_C::CastSpell(CGSpellBook::m_autoRangedSpell, nullptr, target->m_obj->m_guid, false)) {
+        if (direction.y * toTarget.y + direction.z * toTarget.z + direction.x * toTarget.x > 0.0f && !(player->m_movement->m_flags & (MOVEMENTFLAG_MOVE_MASK | MOVEMENTFLAG_TURN_MASK)) && maxRange * maxRange > distanceSq && Spell_C::CastSpell(CGSpellBook::m_autoRangedSpell, nullptr, target->m_obj->m_guid, false)) {
             Spell_C_ClearLastAutoRangedCombatError();
         }
     }
@@ -8524,13 +8539,13 @@ void CGPlayer_C::ClearLootingObject() {
 // OFFSET: 0x006D53B0
 int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
     WOWGUID guid;
-    uint8_t lootType;
+    uint8_t lootAcquire;
     msg->Get(guid.m_guid);
-    msg->Get(lootType);
+    msg->Get(lootAcquire);
 
     if (!this->m_lootTarget || this->m_lootTarget != guid) {
-        if (this->m_lootTarget || (lootType != 2 && lootType != 3 && lootType != 4 && lootType != 6 && lootType != 7 && lootType != 8)) {
-            if (lootType) {
+        if (this->m_lootTarget || (lootAcquire != LOOT_ACQUIRE_UNKNOWN_2 && lootAcquire != LOOT_ACQUIRE_FISHING && lootAcquire != LOOT_ACQUIRE_UNKNOWN_4 && lootAcquire != LOOT_ACQUIRE_UNKNOWN_6 && lootAcquire != LOOT_ACQUIRE_UNKNOWN_7 && lootAcquire != LOOT_ACQUIRE_UNKNOWN_8)) {
+            if (lootAcquire) {
                 CDataStore release;
                 release.Put(static_cast<uint32_t>(CMSG_LOOT_RELEASE));
                 release.Put(guid.m_guid);
@@ -8540,7 +8555,7 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
                 uint8_t error;
                 msg->Get(error);
 
-                if (error == 15) {
+                if (error == LOOT_RESPONSE_ERROR::LOOT_ERROR_ALREADY_PICKPOCKETED) {
                     CGGameUI::DisplayError(ERR_ALREADY_PICKPOCKETED);
                 }
             }
@@ -8552,7 +8567,7 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
         }
     }
 
-    if (lootType) {
+    if (lootAcquire) {
         uint32_t coins;
         uint8_t count;
         msg->Get(coins);
@@ -8562,7 +8577,7 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
             count = 18;
         }
 
-        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (!object) {
             CGGameUI::DisplayError(ERR_LOOT_DIDNT_KILL);
@@ -8574,7 +8589,7 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
             return 1;
         }
 
-        if (object->m_obj->m_type & TYPEMASK_ITEM) {
+        if (object->m_obj->m_type & TYPE_ITEM) {
             CGGameUI::LockItem(guid);
         }
 
@@ -8595,9 +8610,9 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
             s_lootItems[slot].m_slotType = slotType;
         }
 
-        CGGameUI::OpenLoot(object, coins, lootType);
+        CGGameUI::OpenLoot(object, coins, static_cast<LOOT_ACQUIRE>(lootAcquire));
 
-        if (this->m_movement->m_flags & 0xC000FF) {
+        if (this->m_movement->m_flags & (MOVEMENTFLAG_MOTION_MASK | MOVEMENTFLAG_ASCEND_DESCEND_MASK)) {
             CGGameUI::CloseLoot(true, true, false);
         }
 
@@ -8608,37 +8623,37 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
     msg->Get(error);
 
     switch (error) {
-    case 4:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_TOO_FAR:
         CGGameUI::DisplayError(ERR_LOOT_TOO_FAR);
         break;
-    case 5:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_BAD_FACING:
         CGGameUI::DisplayError(ERR_LOOT_BAD_FACING);
         break;
-    case 6:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_LOCKED:
         CGGameUI::DisplayError(ERR_LOOT_LOCKED);
         break;
-    case 8:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_NOT_STANDING:
         CGGameUI::DisplayError(ERR_LOOT_NOTSTANDING);
         break;
-    case 9:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_STUNNED:
         CGGameUI::DisplayError(ERR_LOOT_STUNNED);
         break;
-    case 10:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_PLAYER_NOT_FOUND:
         CGGameUI::DisplayError(ERR_LOOT_PLAYER_NOT_FOUND);
         return 1;
-    case 11:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_PLAY_TIME_EXCEEDED:
         CGGameUI::DisplayError(ERR_PLAY_TIME_EXCEEDED);
         break;
-    case 12:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_MASTER_INVENTORY_FULL:
         CGGameUI::DisplayError(ERR_LOOT_MASTER_INV_FULL);
         return 1;
-    case 13:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_MASTER_UNIQUE_ITEM:
         CGGameUI::DisplayError(ERR_LOOT_MASTER_UNIQUE_ITEM);
         return 1;
-    case 14:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_MASTER_OTHER:
         CGGameUI::DisplayError(ERR_LOOT_MASTER_OTHER);
         return 1;
-    case 16:
+    case LOOT_RESPONSE_ERROR::LOOT_ERROR_NOT_WHILE_SHAPESHIFTED:
         CGGameUI::DisplayError(ERR_NOT_WHILE_SHAPESHIFTED);
         return 1;
     default:
@@ -8659,7 +8674,7 @@ int32_t CGPlayer_C::OnLootRemoved(CDataStore* msg) {
     uint8_t slot;
     msg->Get(slot);
 
-    if (ClntObjMgrObjectPtr(this->m_lootTarget, TYPEMASK_OBJECT, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(this->m_lootTarget, TYPE_OBJECT, __FILE__, __LINE__)) {
         memset(&s_lootItems[slot], 0, sizeof(s_lootItems[slot]));
         CGGameUI::ClearLootSlot(slot);
     }
@@ -8675,7 +8690,7 @@ int32_t CGPlayer_C::OnLootSlotChanged(CDataStore* msg) {
     msg->Get(guid.m_guid);
     msg->Get(slot);
 
-    if (!ClntObjMgrObjectPtr(this->m_lootTarget, TYPEMASK_OBJECT, __FILE__, __LINE__) || this->m_lootTarget != guid) {
+    if (!ClntObjMgrObjectPtr(this->m_lootTarget, TYPE_OBJECT, __FILE__, __LINE__) || this->m_lootTarget != guid) {
         msg->m_read = msg->m_size;
         return 1;
     }
@@ -8710,7 +8725,7 @@ int32_t CGPlayer_C::OnLootReleaseResponse(CDataStore* msg) {
 // VERIFY: 346301d0 manual
 // OFFSET: 0x006DAC40
 void CGPlayer_C::LootCorpse(CGCorpse_C* corpse, bool autoInteract) {
-    if (!this->CanLoot(corpse) || !corpse->CanBeLooted() || (this->m_movement->m_flags & 0xC010FF)) {
+    if (!this->CanLoot(corpse) || !corpse->CanBeLooted() || (this->m_movement->m_flags & MOVEMENTFLAG_ACTIVE_MASK)) {
         return;
     }
 
@@ -8724,7 +8739,7 @@ void CGPlayer_C::LootCorpse(CGCorpse_C* corpse, bool autoInteract) {
         if (dx * dx + (dy * dy + dz * dz) > 25.0f) {
             WOWGUID guid = corpse->m_obj->m_guid;
 
-            if (this->SetTrackingTarget(guid, 6)) {
+            if (this->SetTrackingTarget(guid, TRACKTYPE_LOOT)) {
                 return;
             }
         }
@@ -8758,17 +8773,17 @@ void CGPlayer_C::LootUnit(CGUnit_C* unit, bool autoInteract) {
         if (range * range < dx * dx + (dy * dy + dz * dz)) {
             WOWGUID guid = unit->m_obj->m_guid;
 
-            if (this->SetTrackingTarget(guid, 6)) {
+            if (this->SetTrackingTarget(guid, TRACKTYPE_LOOT)) {
                 return;
             }
         }
     }
 
-    if (this->m_movement->m_flags & 0xC010FF) {
+    if (this->m_movement->m_flags & MOVEMENTFLAG_ACTIVE_MASK) {
         return;
     }
 
-    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & 0x10000000) && !this->MountedCombatAllowed()) {
+    if (this->m_mountDisplayId > 0 && !(this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING) && !this->MountedCombatAllowed()) {
         if (!this->CanAutoDismount()) {
             CGGameUI::DisplayError(ERR_NOT_WHILE_MOUNTED);
             return;
@@ -8795,7 +8810,7 @@ void CGPlayer_C::LootUnit(CGUnit_C* unit, bool autoInteract) {
 // OFFSET: 0x006D51F0
 static int32_t InteractUpdateProc(WOWGUID guid, void* param) {
     CGPlayer_C* player = static_cast<CGPlayer_C*>(param);
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return 1;
@@ -8803,17 +8818,17 @@ static int32_t InteractUpdateProc(WOWGUID guid, void* param) {
 
     uint32_t type = object->m_obj->m_type;
 
-    if (type != (TYPEMASK_UNIT | TYPEMASK_OBJECT) && type != (TYPEMASK_GAMEOBJECT | TYPEMASK_OBJECT)) {
+    if (type != (TYPE_UNIT | TYPE_OBJECT) && type != (TYPE_GAMEOBJECT | TYPE_OBJECT)) {
         return 1;
     }
 
-    if (type & TYPEMASK_GAMEOBJECT) {
+    if (type & TYPE_GAMEOBJECT) {
         if (player->CGUnit_C::CanInteract(static_cast<CGGameObject_C*>(object))) {
             return 1;
         }
     } else {
         if (player->CanInteract(static_cast<CGUnit_C*>(object))) {
-            if (static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & 0x2000) {
+            if (static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_FLIGHT_MASTER) {
                 player->UpdateTaxiStatus(static_cast<CGUnit_C*>(object));
             }
 
@@ -8821,7 +8836,7 @@ static int32_t InteractUpdateProc(WOWGUID guid, void* param) {
         }
     }
 
-    object->m_questStatus = 0;
+    object->m_questStatus = QUEST_GIVER_STATUS::QUEST_GIVER_NONE;
     object->m_interactIconType = 0;
     object->RemoveInteractIcon();
     return 1;
@@ -8830,7 +8845,7 @@ static int32_t InteractUpdateProc(WOWGUID guid, void* param) {
 // VERIFY: c1f1a966 manual
 // OFFSET: 0x006DC5A0
 void SendQuestGiverStatusMultipleQuery() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         ClntObjMgrEnumVisibleObjects(InteractUpdateProc, player);
@@ -8856,7 +8871,7 @@ uint16_t CGPlayer_C::GetSkillLineID(int32_t index) const {
 // OFFSET: 0x006DA4A0
 int32_t SkillRankChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
     uint32_t newRank = *static_cast<const uint16_t*>(value);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
     uint32_t index = (offset - offsetof(CGPlayerLocalData, m_playerSkillInfo[0].m_rank)) / sizeof(PlayerSkillInfo);
 
     if (index >= 128) {
@@ -8869,7 +8884,7 @@ int32_t SkillRankChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, co
         ConsolePrintf("Skill %d increased from %d to %d", player->GetSkillLineID(index), newRank, oldRank);
         PlayerSignalSkillStatChanges();
         SkillLineRec* skillLine = g_skillLineDB.GetRecord(player->GetSkillLineID(index));
-        const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], player->GetSkillLineID(index));
+        const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_raceID, player->m_unit->m_classID, player->GetSkillLineID(index));
 
         if (skillLine) {
             if (info && !(info->m_flags & 0x402)) {
@@ -8898,18 +8913,18 @@ bool CGPlayer_C::GetPackAndSlot(const CGItem_C* item, uint8_t* bag, uint8_t* slo
     WOWGUID container = item->m_item->m_itemFieldContained;
 
     if (container == this->m_obj->m_guid) {
-        *bag = 0xFF;
+        *bag = INVENTORY_BAG_PLAYER;
         *slot = this->FindSlotIndex(item->m_obj->m_guid);
-        return *slot != 0xFF;
+        return *slot != INVENTORY_SLOT_INVALID;
     }
 
     *bag = this->FindSlotIndex(container);
 
-    if (*bag == 0xFF) {
+    if (*bag == INVENTORY_SLOT_INVALID) {
         return false;
     }
 
-    CGContainer_C* object = static_cast<CGContainer_C*>(ClntObjMgrObjectPtr(container, TYPEMASK_CONTAINER, __FILE__, __LINE__));
+    CGContainer_C* object = static_cast<CGContainer_C*>(ClntObjMgrObjectPtr(container, TYPE_CONTAINER, __FILE__, __LINE__));
 
     if (!object) {
         return false;
@@ -9044,7 +9059,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
         }
 
         case SMSG_INVENTORY_CHANGE_FAILURE: {
-            uint8_t result = 0;
+            uint8_t result = BAG_OK;
             msg->Get(result);
 
             if (!result) {
@@ -9061,15 +9076,15 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
             CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
             switch (result) {
-                case 1:
-                case 87: {
+                case BAG_CANT_EQUIP_LEVEL_I:
+                case BAG_PURCHASE_LEVEL_TOO_LOW: {
                     uint32_t requiredLevel = 0;
                     msg->Get(requiredLevel);
                     CGGameUI::DisplayError(error, requiredLevel);
                     break;
                 }
 
-                case 16: {
+                case BAG_WRONG_BAG_TYPE_2: {
                     CGPlayer_C* activePlayer = ClntObjMgrGetActivePlayerObj();
 
                     if (!activePlayer || !activePlayer->ReportBagItemSubtypeMismatch(bag)) {
@@ -9079,7 +9094,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
                     break;
                 }
 
-                case 81: {
+                case BAG_AUTOEQUIP_BIND_CONFIRM: {
                     uint64_t a2 = 0;
                     uint32_t a3 = 0;
                     uint64_t a4 = 0;
@@ -9094,9 +9109,9 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
                     break;
                 }
 
-                case 84:
-                case 85:
-                case 89: {
+                case BAG_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS:
+                case BAG_ITEM_MAX_LIMIT_CATEGORY_SOCKETED_EXCEEDED_IS:
+                case BAG_ITEM_MAX_LIMIT_CATEGORY_EQUIPPED_EXCEEDED_IS: {
                     uint32_t category = 0;
                     msg->Get(category);
                     ItemLimitCategoryRec* rec = nullptr;
@@ -9208,7 +9223,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
             msg->Get(count);
             msg->Get(totalCount);
             OnItemPushResult(guid, bag, slot, itemId, suffixFactor, randomPropertyId, received, created, showInChat, count);
-            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
             if (player) {
                 player->CheckForQuestItemLoot(itemId, count, totalCount);
@@ -9238,7 +9253,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
         case SMSG_PET_NAME_INVALID: {
             uint32_t error;
             msg->Get(error);
-            CGGameUI::DisplayNameError(error);
+            CGGameUI::DisplayNameError(static_cast<VALIDATE_NAME_RESULT>(error));
             char name[80];
             msg->GetString(name, sizeof(name));
             uint8_t declined;
@@ -9338,36 +9353,36 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
             int32_t talentPoints = level >= 10;
 
             if (level >= 2) {
-                CGTutorial::TriggerTutorial(0x36);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_LEVEL_UP);
             }
 
             if (level >= 4) {
-                CGTutorial::TriggerTutorial(0xD);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_SKILLS);
             }
 
             if (level >= 6) {
-                CGTutorial::TriggerTutorial(0x16);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_CHATTING);
             }
 
             if (level >= 7) {
-                CGTutorial::TriggerTutorial(0x15);
-                CGTutorial::TriggerTutorial(0x25);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_FRIENDS);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_PROFESSIONS);
             }
 
             if (level >= 8) {
-                CGTutorial::TriggerTutorial(0x20);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_JUMPING);
             }
 
             if (level >= 10) {
-                CGTutorial::TriggerTutorial(0xC);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_TALENTS);
             }
 
             if (level >= 12) {
-                CGTutorial::TriggerTutorial(0x26);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_GROUPS);
             }
 
             if (level >= 15) {
-                CGTutorial::TriggerTutorial(0x32);
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_DUNGEON_FINDER);
             }
 
             FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_LEVEL_UP, "%d%d%d%d%d%d%d%d%d", level, health, power[0], talentPoints, stats[0], stats[1], stats[2], stats[3], stats[4]);
@@ -9403,7 +9418,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
                     return 1;
                 }
 
-                if (!(player->m_player->m_playerFlags & 0x2000000)) {
+                if (!(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_NO_XP_GAIN)) {
                     CGGameUI::DisplayError(ERR_ZONE_EXPLORED_XP, area->m_areaName, experience);
                 }
             }
@@ -9412,7 +9427,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
                 return 1;
             }
 
-            ChrRacesRec* race = g_chrRacesDB.GetRecord(player->m_unit->m_unitFieldBytes0[0]);
+            ChrRacesRec* race = g_chrRacesDB.GetRecord(player->m_unit->m_raceID);
 
             if (race && race->m_explorationSoundID) {
                 SI2::PlaySoundKit(race->m_explorationSoundID, nullptr, nullptr, nullptr, 0, nullptr, 1, 0);
@@ -9491,51 +9506,51 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
             }
 
             switch (result) {
-                case 0:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_SUCCESS:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_SUCCESS_S, name->m_name);
                     break;
 
-                case 1:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_INVALID:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_INVALID_S, name->m_name);
                     break;
 
-                case 2:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_ACCEPTED:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_ACCEPTED_S, name->m_name);
                     break;
 
-                case 3:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_DECLINED:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_DECLINED_S, name->m_name);
                     break;
 
-                case 4:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_BUSY:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_BUSY_S, name->m_name);
                     break;
 
-                case 5:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_LOG_FULL:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_LOG_FULL_S, name->m_name);
                     break;
 
-                case 6:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_ON_QUEST:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_ONQUEST_S, name->m_name);
                     break;
 
-                case 7:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_ALREADY_DONE:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_ALREADY_DONE_S, name->m_name);
                     break;
 
-                case 8:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_NOT_DAILY:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_NOT_DAILY_S, name->m_name);
                     break;
 
-                case 9:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_TIMER_EXPIRED:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_TIMER_EXPIRED_S, name->m_name);
                     break;
 
-                case 10:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_NOT_IN_PARTY:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_NOT_IN_PARTY_S, name->m_name);
                     break;
 
-                case 11:
+                case CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_DIFFERENT_SERVER_DAILY:
                     CGGameUI::DisplayError(ERR_QUEST_PUSH_DIFFERENT_SERVER_DAILY_S, name->m_name);
                     break;
             }
@@ -9551,19 +9566,19 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
 
             if (!bootTime) {
                 switch (reason) {
-                    case 1:
+                    case CGPlayer_C::RAID_GROUP_ONLY_REASON::RG_REASON_UI_LOW_LEVEL:
                         CGGameUI::DisplayError(ERR_RAID_GROUP_LOWLEVEL);
                         break;
 
-                    case 2:
+                    case CGPlayer_C::RAID_GROUP_ONLY_REASON::RG_REASON_UI_RAID_GROUP_ONLY:
                         CGGameUI::DisplayError(ERR_RAID_GROUP_ONLY);
                         break;
 
-                    case 3:
+                    case CGPlayer_C::RAID_GROUP_ONLY_REASON::RG_REASON_UI_GROUP_FULL:
                         CGGameUI::DisplayError(ERR_RAID_GROUP_FULL);
                         break;
 
-                    case 4:
+                    case CGPlayer_C::RAID_GROUP_ONLY_REASON::RG_REASON_UI_REQUIREMENTS_UNMATCH:
                         CGGameUI::DisplayError(ERR_RAID_GROUP_REQUIREMENTS_UNMATCH);
                         break;
                 }
@@ -9666,7 +9681,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
             msg->Get(position.y);
             msg->Get(position.z);
 
-            if (!player || (player->m_player->m_playerFlags & 0x10)) {
+            if (!player || (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST)) {
                 position = C3Vector(0.0f, 0.0f, 0.0f);
                 CGGameUI::SetDeathReleaseLocation(-1, position);
             } else {
@@ -9838,14 +9853,14 @@ void CGPlayer_C::BuyItemInSlot(WOWGUID merchant, const MerchantItem* item, uint3
 // VERIFY: 2389dd48 manual
 // OFFSET: 0x006D6820
 uint8_t CGPlayer_C::FindItemSlot(WOWGUID container, const CGItem_C* item) {
-    CGObject_C* object = ClntObjMgrObjectPtr(container, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(container, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object || !object->GetBag()) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
     if (!object->GetBag()->m_numSlots) {
-        return 0xFF;
+        return INVENTORY_SLOT_INVALID;
     }
 
     for (uint8_t slot = 0; slot < static_cast<uint32_t>(object->GetBag()->m_numSlots); slot++) {
@@ -9854,7 +9869,7 @@ uint8_t CGPlayer_C::FindItemSlot(WOWGUID container, const CGItem_C* item) {
         }
     }
 
-    return 0xFF;
+    return INVENTORY_SLOT_INVALID;
 }
 
 // VERIFY: 5354e118 manual
@@ -9863,8 +9878,9 @@ static void AutoEquipItemCallback(int32_t id, const WOWGUID& guid, void* param, 
     WOWGUID none = WOWGUID();
     ItemStats_C* stats = g_itemDBCache.GetRecord(id, none, nullptr, nullptr, false);
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
+    uint32_t count = s_itemSwaps.m_count;
 
-    for (uint32_t i = 0; i < s_itemSwaps.m_count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         ITEMSWAP& swap = s_itemSwaps.m_data[i];
 
         if (swap.m_itemId != id) {
@@ -9946,9 +9962,10 @@ void CGPlayer_C::SplitItem(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
 static void SwapItemsStatsCallback(int32_t id, const WOWGUID& guid, void* param, bool success) {
     WOWGUID none = WOWGUID();
     ItemStats_C* stats = g_itemDBCache.GetRecord(id, none, nullptr, nullptr, false);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
+    uint32_t count = s_itemSwaps.m_count;
 
-    for (uint32_t i = 0; i < s_itemSwaps.m_count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         ITEMSWAP& swap = s_itemSwaps.m_data[i];
 
         if (swap.m_itemId != id) {
@@ -9959,21 +9976,22 @@ static void SwapItemsStatsCallback(int32_t id, const WOWGUID& guid, void* param,
             player->SwapItems(WOWGUID(), swap.m_srcContainer, swap.m_srcSlot, swap.m_dstContainer, swap.m_dstSlot, 0);
         }
 
-        swap.m_srcContainer = WOWGUID();
-        swap.m_dstContainer = WOWGUID();
-        swap.m_srcSlot = 0xFFFFFFFF;
-        swap.m_dstSlot = 0xFFFFFFFF;
-        swap.m_itemId = 0;
-        swap.m_item = 0;
+        ITEMSWAP& entry = s_itemSwaps.m_data[i];
+        entry.m_srcContainer = WOWGUID();
+        entry.m_dstContainer = WOWGUID();
+        entry.m_srcSlot = 0xFFFFFFFF;
+        entry.m_dstSlot = 0xFFFFFFFF;
+        entry.m_itemId = 0;
+        entry.m_item = nullptr;
     }
 }
 
 // VERIFY: 1cc37cfa manual
 // OFFSET: 0x006DCF20
 void CGPlayer_C::GiftWrap(CGItem_C* item) {
-    CGItem_C* wrap = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(s_giftWrapItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* wrap = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(s_giftWrapItem, TYPE_ITEM, __FILE__, __LINE__));
 
-    if (!wrap || !item || (item->m_itemFlags & 1)) {
+    if (!wrap || !item || (item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_LOCKED)) {
         return;
     }
 
@@ -10007,7 +10025,7 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
 
     WOWGUID self = this->m_obj->m_guid;
 
-    if ((srcContainer == self || dstContainer == self) && !CGGameUI::CanPerformAction(22)) {
+    if ((srcContainer == self || dstContainer == self) && !CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_EQUIP_ITEM)) {
         return;
     }
 
@@ -10018,7 +10036,7 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
     if (srcEquipped != dstEquipped) {
         WOWGUID container = srcEquipped ? dstContainer : srcContainer;
         uint32_t slot = srcEquipped ? dstSlot : srcSlot;
-        CGObject_C* object = ClntObjMgrObjectPtr(container, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(container, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (!object || !object->GetBag()) {
             return;
@@ -10026,7 +10044,7 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
 
         WOWGUID itemGuid;
         itemGuid.m_guid = object->GetBag()->GetItemGuid(slot);
-        CGItem_C* bagItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(itemGuid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* bagItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(itemGuid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (bagItem && !bagItem->IsBound() && !ignoreBind) {
             ItemStats_C* stats = g_itemDBCache.GetRecord(bagItem->m_obj->m_entryID, bagItem->m_obj->m_guid, SwapItemsStatsCallback, nullptr, false);
@@ -10041,7 +10059,7 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
                 return;
             }
 
-            if (stats->m_bonding == 2 && this->CanUseItem(stats, ignoreBind)) {
+            if (stats->m_bonding == ITEM_BINDING::ITEM_BINDING_ON_EQUIP && this->CanUseItem(stats, ignoreBind)) {
                 uint32_t index = FindEmptySwapIndex();
                 s_itemSwaps.m_data[index].m_srcContainer = srcContainer;
                 s_itemSwaps.m_data[index].m_srcSlot = srcSlot;
@@ -10062,7 +10080,7 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
         uint8_t srcBag = this->FindSlotIndex(srcContainer);
         uint8_t dstBag = this->FindSlotIndex(dstContainer);
 
-        if (dstBag == 0xFF && dstContainer != this->m_obj->m_guid) {
+        if (dstBag == INVENTORY_SLOT_INVALID && dstContainer != this->m_obj->m_guid) {
             return;
         }
 
@@ -10081,17 +10099,17 @@ void CGPlayer_C::SwapItems(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot,
 // VERIFY: f8859e1e manual
 // OFFSET: 0x006D4A00
 int32_t CGPlayer_C::ValidateSlot(uint32_t slot, WOWGUID item) {
-    CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!itemObject) {
         return 0;
     }
 
-    if ((itemObject->m_obj->m_type & TYPEMASK_CONTAINER) && (slot < 19 || slot > 22) && (slot < 67 || slot > 73) && itemObject->GetBag()->GetNumItems()) {
+    if ((itemObject->m_obj->m_type & TYPE_CONTAINER) && (slot < 19 || slot > 22) && (slot < 67 || slot > 73) && itemObject->GetBag()->GetNumItems()) {
         return 0;
     }
 
-    ChrClassesRec* classRec = g_chrClassesDB.GetRecord(this->m_unit->m_unitFieldBytes0[1]);
+    ChrClassesRec* classRec = g_chrClassesDB.GetRecord(this->m_unit->m_classID);
 
     if (classRec && (classRec->m_flags & 0x8)) {
         return itemObject->CanGoInSlot(slot, 1);
@@ -10102,7 +10120,7 @@ int32_t CGPlayer_C::ValidateSlot(uint32_t slot, WOWGUID item) {
 
 // VERIFY: 03aa23c8 manual
 // OFFSET: 0x006DBAE0
-void CGPlayer_C::AutoStoreItemInBag(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot, WOWGUID dstBag, int32_t a5) {
+void CGPlayer_C::AutoStoreItemInBag(WOWGUID item, WOWGUID srcContainer, uint32_t srcSlot, WOWGUID dstBag, int32_t unused_a5) {
     if (srcSlot > 255) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
@@ -10113,7 +10131,7 @@ void CGPlayer_C::AutoStoreItemInBag(WOWGUID item, WOWGUID srcContainer, uint32_t
         uint8_t srcBag = this->FindSlotIndex(srcContainer);
         uint8_t dstBagIndex = this->FindSlotIndex(dstBag);
 
-        if (dstBagIndex == 0xFF && dstBag != this->m_obj->m_guid) {
+        if (dstBagIndex == INVENTORY_SLOT_INVALID && dstBag != this->m_obj->m_guid) {
             return;
         }
 
@@ -10140,7 +10158,7 @@ static void AutoEquipStatsCallback(int32_t id, const WOWGUID& guid, void* param,
         return;
     }
 
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPE_ITEM, __FILE__, __LINE__));
 
     if (item && static_cast<int32_t>(item->m_obj->m_entryID) == id) {
         CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
@@ -10154,11 +10172,11 @@ static void AutoEquipStatsCallback(int32_t id, const WOWGUID& guid, void* param,
 // VERIFY: 2b35572b manual
 // OFFSET: 0x006DFC40
 void CGPlayer_C::AutoEquipCursorItem(int32_t ignoreBind) {
-    if (!CGGameUI::CanPerformAction(22)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_EQUIP_ITEM)) {
         return;
     }
 
-    if (CGGameUI::m_cursorItemType == 9) {
+    if (CGGameUI::m_cursorItemType == UICURSOR_AMMO) {
         int32_t ammo = CGGameUI::GetCursorVirtualItem();
 
         if (ammo) {
@@ -10191,7 +10209,7 @@ void CGPlayer_C::AutoEquipCursorItem(int32_t ignoreBind) {
     CDataStore msg;
 
     if (container) {
-        CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!itemObject) {
             return;
@@ -10206,7 +10224,7 @@ void CGPlayer_C::AutoEquipCursorItem(int32_t ignoreBind) {
                 return;
             }
 
-            if (stats->m_bonding == 2 && this->CanUseItem(stats, ignoreBind)) {
+            if (stats->m_bonding == ITEM_BINDING::ITEM_BINDING_ON_EQUIP && this->CanUseItem(stats, ignoreBind)) {
                 uint32_t index = FindEmptySwapIndex();
                 s_itemSwaps.m_data[index].m_srcContainer = container;
                 s_itemSwaps.m_data[index].m_srcSlot = slot;
@@ -10218,7 +10236,7 @@ void CGPlayer_C::AutoEquipCursorItem(int32_t ignoreBind) {
             }
         }
 
-        if (itemObject->GetClassID() == 6) {
+        if (itemObject->GetClassID() == ITEM_CLASS::ITEM_CLASS_PROJECTILE) {
             clearMode = 1;
             msg.Put(static_cast<uint32_t>(CMSG_SET_AMMO));
             msg.Put(static_cast<uint32_t>(itemObject->m_obj->m_entryID));
@@ -10248,7 +10266,7 @@ void CGPlayer_C::UpdateObjComponentVisualsSlot(const VisibleItem_C* item, int32_
         return;
     }
 
-    const CGUnitVirtualItem* virtualItem = this->GetVirtualItem(hand, false);
+    const CGUnitVirtualItem* virtualItem = this->GetVirtualItem(static_cast<VIRTUAL_MONSTER_SLOT>(hand), false);
 
     if (!virtualItem) {
         return;
@@ -10259,16 +10277,16 @@ void CGPlayer_C::UpdateObjComponentVisualsSlot(const VisibleItem_C* item, int32_
     if (this->m_sheatheState) {
         if (slot == 15) {
             this->UpdateObjComponentVisuals(item, CCharacterComponent::GetSheatheLink(sheatheType, true));
-            this->UpdateObjComponentVisuals(item, static_cast<GEOCOMPONENTLINKS>(1));
+            this->UpdateObjComponentVisuals(item, MODEL_ATTACHMENT_ID::ATTACH_HANDR);
         } else if (const_cast<VisibleItem_C*>(item)->GetInventoryType() == 14) {
-            this->UpdateObjComponentVisuals(item, static_cast<GEOCOMPONENTLINKS>(0));
+            this->UpdateObjComponentVisuals(item, MODEL_ATTACHMENT_ID::ATTACH_SHIELD);
         } else {
             this->UpdateObjComponentVisuals(item, CCharacterComponent::GetSheatheLink(sheatheType, false));
-            this->UpdateObjComponentVisuals(item, static_cast<GEOCOMPONENTLINKS>(2));
+            this->UpdateObjComponentVisuals(item, MODEL_ATTACHMENT_ID::ATTACH_HANDL);
         }
     } else {
-        GEOCOMPONENTLINKS link = CCharacterComponent::GetSheatheLink(sheatheType, slot == 15);
-        this->UpdateObjComponentVisuals(item, static_cast<GEOCOMPONENTLINKS>((slot != 15) + 1));
+        MODEL_ATTACHMENT_ID link = CCharacterComponent::GetSheatheLink(sheatheType, slot == 15);
+        this->UpdateObjComponentVisuals(item, static_cast<MODEL_ATTACHMENT_ID>((slot != 15) + MODEL_ATTACHMENT_ID::ATTACH_HANDR));
         this->UpdateObjComponentVisuals(item, link);
     }
 }
@@ -10283,8 +10301,8 @@ uint32_t CGPlayer_C::GetEquippedItemDisplayId() {
 
 // VERIFY: 79a55964 manual
 // OFFSET: 0x006DFEE0
-void CGPlayer_C::AutoEquipItem(WOWGUID container, uint32_t slot, int32_t a3) {
-    CGObject_C* object = ClntObjMgrObjectPtr(container, TYPEMASK_OBJECT, __FILE__, __LINE__);
+void CGPlayer_C::AutoEquipItem(WOWGUID container, uint32_t slot, int32_t ignoreBind) {
+    CGObject_C* object = ClntObjMgrObjectPtr(container, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object || !object->GetBag()) {
         return;
@@ -10308,7 +10326,7 @@ void CGPlayer_C::AutoEquipItem(WOWGUID container, uint32_t slot, int32_t a3) {
     }
 
     CGGameUI::SetCursorItem(item, container, slot, 1, 0, 0);
-    this->AutoEquipCursorItem(a3);
+    this->AutoEquipCursorItem(ignoreBind);
 }
 
 // VERIFY: d775d48d manual
@@ -10347,7 +10365,7 @@ void CGPlayer_C::EquipVisibleItem(const VisibleItem_C* item, int32_t slot) {
         return;
     }
 
-    if ((slot == 0 && (this->m_player->m_playerFlags & 0x400)) || (slot == 14 && (this->m_player->m_playerFlags & 0x800))) {
+    if ((slot == 0 && (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM)) || (slot == 14 && (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK))) {
         return;
     }
 
@@ -10371,14 +10389,14 @@ int32_t CGPlayer_C::RefreshVisibleItems() {
         if (abs(item->m_itemId) && item->m_itemId <= 0) {
             switch (slot) {
                 case 15:
-                    if (this->m_sheatheState <= 1) {
+                    if (this->m_sheatheState <= WEAPONMODE_NORMALMODE) {
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(0), false);
                     }
 
                     break;
 
                 case 16:
-                    if (this->m_sheatheState <= 1) {
+                    if (this->m_sheatheState <= WEAPONMODE_NORMALMODE) {
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(0), false);
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(0), true);
                     }
@@ -10386,11 +10404,11 @@ int32_t CGPlayer_C::RefreshVisibleItems() {
                     break;
 
                 case 17:
-                    if (this->m_sheatheState == 2 || !this->m_sheatheState) {
+                    if (this->m_sheatheState == WEAPONMODE_RANGEDMODE || !this->m_sheatheState) {
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(17), static_cast<SHEATHE_TYPE>(0), false);
                     }
 
-                    if (this->m_sheatheState == 2) {
+                    if (this->m_sheatheState == WEAPONMODE_RANGEDMODE) {
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(0), false);
                         CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(0), false);
                     }
@@ -10425,9 +10443,9 @@ void CGPlayer_C::GetRangedAttackSkillRank(int32_t& rank, int32_t& bonus) {
     bonus = 0;
     rank = 0;
     int32_t spellId = 0;
-    const CGUnitVirtualItem* item = this->GetVirtualItem(2, false);
+    const CGUnitVirtualItem* item = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_RANGED, false);
 
-    if (!item || item->m_classID == 2) {
+    if (!item || item->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON) {
         uint32_t subclass = item ? item->m_subclassID : ClientDBGetUnarmedWeapon();
 
         if (subclass < s_weaponSkills.m_count) {
@@ -10435,7 +10453,7 @@ void CGPlayer_C::GetRangedAttackSkillRank(int32_t& rank, int32_t& bonus) {
         }
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], spellId);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, spellId);
 
     if (ability && ability->m_spell == spellId) {
         this->GetExpandedSkillRank(ability->m_skillLine, rank, bonus);
@@ -10454,7 +10472,7 @@ void CGPlayer_C::ShowHelm() {
         this->m_characterComponent->AddItemBySlot(static_cast<INVENTORY_SLOTS>(0), head->GetDisplayID(), 0);
     }
 
-    if ((this->m_player->m_playerFlags & 0x400) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
+    if ((this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_SHOWING_HELM));
         msg.Put(static_cast<uint8_t>(1));
@@ -10474,7 +10492,7 @@ void CGPlayer_C::ShowCloak() {
         this->m_characterComponent->AddItemBySlot(static_cast<INVENTORY_SLOTS>(14), back->GetDisplayID(), 0);
     }
 
-    if ((this->m_player->m_playerFlags & 0x800) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
+    if ((this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_SHOWING_CLOAK));
         msg.Put(static_cast<uint8_t>(1));
@@ -10485,7 +10503,7 @@ void CGPlayer_C::ShowCloak() {
 
 // VERIFY: 008ff140 manual
 // OFFSET: 0x006E1290
-void CGPlayer_C::UpdateHandItemVisual(GEOCOMPONENTLINKS link, int32_t hand) {
+void CGPlayer_C::UpdateHandItemVisual(MODEL_ATTACHMENT_ID link, int32_t hand) {
     uint32_t slot;
 
     if (hand == 0) {
@@ -10547,21 +10565,21 @@ void CGPlayer_C::UpdateInventoryComponent(INVENTORY_SLOTS slot, const VisibleIte
         }
     }
 
-    const CGUnitVirtualItem* rangedItem = this->GetVirtualItem(2, false);
-    bool thrown = rangedItem && (rangedItem->m_inventoryType == 26 || rangedItem->m_inventoryType == 25);
+    const CGUnitVirtualItem* rangedItem = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_RANGED, false);
+    bool thrown = rangedItem && (rangedItem->m_inventoryType == INVTYPE_RANGEDRIGHT || rangedItem->m_inventoryType == INVTYPE_THROWN);
     CM2Model* detached = nullptr;
 
     switch (slot) {
         case 15:
             this->ClearWeaponTrail(0);
 
-            if (!thrown || this->m_sheatheState != 2) {
+            if (!thrown || this->m_sheatheState != WEAPONMODE_RANGEDMODE) {
                 CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(old->GetSheatheType()), false);
                 break;
             }
 
             for (CM2Model* attached = this->m_worldModel->m_attachList; attached; attached = attached->m_attachNext) {
-                if (attached->m_attachmentId == 1) {
+                if (attached->m_attachmentId == MODEL_ATTACHMENT_ID::ATTACH_HANDR) {
                     attached->m_refCount++;
                     detached = attached;
                     attached->DetachFromParent();
@@ -10572,7 +10590,7 @@ void CGPlayer_C::UpdateInventoryComponent(INVENTORY_SLOTS slot, const VisibleIte
             CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(old->GetSheatheType()), false);
 
             if (detached) {
-                detached->AttachToParent(this->m_worldModel, 1, nullptr, 0);
+                detached->AttachToParent(this->m_worldModel, MODEL_ATTACHMENT_ID::ATTACH_HANDR, nullptr, 0);
                 detached->Release();
             }
 
@@ -10581,13 +10599,13 @@ void CGPlayer_C::UpdateInventoryComponent(INVENTORY_SLOTS slot, const VisibleIte
         case 16:
             this->ClearWeaponTrail(1);
 
-            if (thrown || this->m_sheatheState != 2) {
+            if (thrown || this->m_sheatheState != WEAPONMODE_RANGEDMODE) {
                 CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(old->GetSheatheType()), old->GetInventoryType() == 14);
                 break;
             }
 
             for (CM2Model* attached = this->m_worldModel->m_attachList; attached; attached = attached->m_attachNext) {
-                if (attached->m_attachmentId == 2) {
+                if (attached->m_attachmentId == MODEL_ATTACHMENT_ID::ATTACH_HANDL) {
                     attached->m_refCount++;
                     detached = attached;
                     attached->DetachFromParent();
@@ -10598,36 +10616,36 @@ void CGPlayer_C::UpdateInventoryComponent(INVENTORY_SLOTS slot, const VisibleIte
             CCharacterComponent::RemoveHandItem(this->m_worldModel, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(old->GetSheatheType()), old->GetInventoryType() == 14);
 
             if (detached) {
-                detached->AttachToParent(this->m_worldModel, 2, nullptr, 0);
+                detached->AttachToParent(this->m_worldModel, MODEL_ATTACHMENT_ID::ATTACH_HANDL, nullptr, 0);
                 detached->Release();
             }
 
             break;
 
         case 17:
-            if (this->m_sheatheState == 2) {
+            if (this->m_sheatheState == WEAPONMODE_RANGEDMODE) {
                 uint32_t inventoryType = old->GetInventoryType();
-                this->m_worldModel->DetachAllChildrenById(inventoryType == 26 || inventoryType == 25 ? 1 : 2);
+                this->m_worldModel->DetachAllChildrenById(inventoryType == INVTYPE_RANGEDRIGHT || inventoryType == INVTYPE_THROWN ? MODEL_ATTACHMENT_ID::ATTACH_HANDR : MODEL_ATTACHMENT_ID::ATTACH_HANDL);
             }
 
             if (this->m_characterComponent) {
                 this->m_characterComponent->RemoveItem(ITEMSLOT_11);
             }
 
-            if (!this->unk_0B40) {
+            if (!this->m_rangedWeaponModel) {
                 goto applyEffects;
             }
 
-            if (this->m_sheatheState != 2) {
-                if (this->unk_0B40->m_attachParent) {
-                    this->unk_0B40->DetachFromParent();
+            if (this->m_sheatheState != WEAPONMODE_RANGEDMODE) {
+                if (this->m_rangedWeaponModel->m_attachParent) {
+                    this->m_rangedWeaponModel->DetachFromParent();
                 }
 
-                this->unk_0B40->m_fFlags |= 0x20;
-                this->unk_0B40->m_drawCallback = nullptr;
-                this->unk_0B40->m_drawArg = nullptr;
-                this->unk_0B40->Release();
-                this->unk_0B40 = nullptr;
+                this->m_rangedWeaponModel->m_runtimeFlags |= 0x20;
+                this->m_rangedWeaponModel->m_drawCallback = nullptr;
+                this->m_rangedWeaponModel->m_drawArg = nullptr;
+                this->m_rangedWeaponModel->Release();
+                this->m_rangedWeaponModel = nullptr;
                 goto applyEffects;
             }
 
@@ -10646,8 +10664,8 @@ void CGPlayer_C::UpdateInventoryComponent(INVENTORY_SLOTS slot, const VisibleIte
 applyEffects:
     this->ApplyComponentItemsFromEffects();
 
-    if (this->m_sheatheState == 2 && slot == 17) {
-        this->SetSheatheState(2, 0, 0);
+    if (this->m_sheatheState == WEAPONMODE_RANGEDMODE && slot == 17) {
+        this->SetSheatheState(WEAPONMODE_RANGEDMODE, 0, 0);
         this->UpdateBaseAnimation(0, -1);
     }
 
@@ -10657,7 +10675,7 @@ applyEffects:
 // VERIFY: f9d20eba manual
 // OFFSET: 0x005E82C0
 int32_t CGItem::GetEnchantmentCharges(int32_t slot) {
-    if (this->GetItemStaticFlags(0) & 0x2000) {
+    if (this->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) {
         return 0;
     }
 
@@ -10667,7 +10685,7 @@ int32_t CGItem::GetEnchantmentCharges(int32_t slot) {
 // VERIFY: a2058e4d manual
 // OFFSET: 0x006D7070
 int32_t CGPlayer_C::GetAttackPowerContributionFromStat(int32_t stat, int32_t value) {
-    ChrClassesRec* classRec = g_chrClassesDB.GetRecord(this->m_unit->m_unitFieldBytes0[1]);
+    ChrClassesRec* classRec = g_chrClassesDB.GetRecord(this->m_unit->m_classID);
 
     if (!classRec) {
         return 0;
@@ -10690,7 +10708,7 @@ int32_t CGPlayer_C::GetAttackPowerContributionFromStat(int32_t stat, int32_t val
 
         SpellShapeshiftFormRec* form = g_spellShapeshiftFormDB.GetRecord(this->GetShapeshiftForm());
 
-        if (form && (form->m_flags & 0x20)) {
+        if (form && (form->m_flags & SPELL_SHAPESHIFT_FORM_FLAG_AGILITY_TO_ATTACK_POWER)) {
             attackPower += value;
         }
     }
@@ -10701,8 +10719,8 @@ int32_t CGPlayer_C::GetAttackPowerContributionFromStat(int32_t stat, int32_t val
 // VERIFY: 93bc731c manual
 // OFFSET: 0x006DE410
 float CGPlayer_C::GetCombatRatingPct(int32_t rating) {
-    float base = GetGameTableValue(1, this->m_unit->m_unitFieldLevel - 1, rating);
-    float scalar = GetGameTableValue(11, rating + 1, this->m_unit->m_unitFieldBytes0[1] - 1);
+    float base = GetGameTableValue(GAME_TABLE_COMBAT_RATINGS, this->m_unit->m_unitFieldLevel - 1, rating);
+    float scalar = GetGameTableValue(GAME_TABLE_OCT_CLASS_COMBAT_RATING_SCALAR, rating + 1, this->m_unit->m_classID - 1);
 
     if (base == 0.0f || scalar == 0.0f) {
         return 0.0f;
@@ -10714,7 +10732,7 @@ float CGPlayer_C::GetCombatRatingPct(int32_t rating) {
 // VERIFY: 1e41332c manual
 // OFFSET: 0x006DEDD0
 int32_t InventoryUpdate(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -10760,7 +10778,7 @@ void PlayerNameGuildCallback(int32_t id, const WOWGUID& guid, void* param, bool 
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         unit->UpdateUnitNameText();
@@ -10804,18 +10822,18 @@ static int32_t SoulStoneCompare(const CGItem_C* item, void* param) {
         return 0;
     }
 
-    for (uint32_t i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
         int32_t spellId = stats->m_spellId[i];
 
-        if (spellId < g_spellDB.m_minID || spellId > g_spellDB.m_maxID || !g_spellDB.m_recordsById[spellId - g_spellDB.m_minID] || stats->m_spellTrigger[i]) {
+        if (spellId < g_spellDB.m_minID || spellId > g_spellDB.m_maxID || !g_spellDB.m_recordsById[spellId - g_spellDB.m_minID] || stats->m_spellTrigger[i] != ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_ON_USE) {
             continue;
         }
 
         SpellRec spell;
         g_spellDB.GetRecord(spellId, &spell);
 
-        for (uint32_t j = 0; j < 3; j++) {
-            if (spell.m_effect[j] == 94) {
+        for (uint32_t j = 0; j < NUM_SPELL_EFFECTS; j++) {
+            if (spell.m_effect[j] == SPELL_EFFECT_SELF_RESURRECT) {
                 return 1;
             }
         }
@@ -10836,9 +10854,9 @@ int32_t CGPlayer_C::GetSkillLineForSlot(int32_t hand) {
     int32_t spell = 0;
 
     if (hand < 3) {
-        const CGUnitVirtualItem* item = this->GetVirtualItem(hand, false);
+        const CGUnitVirtualItem* item = this->GetVirtualItem(static_cast<VIRTUAL_MONSTER_SLOT>(hand), false);
 
-        if (!item || item->m_classID == 2) {
+        if (!item || item->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON) {
             uint32_t subclass = item ? item->m_subclassID : ClientDBGetUnarmedWeapon();
 
             if (subclass < s_weaponSkills.Count()) {
@@ -10847,7 +10865,7 @@ int32_t CGPlayer_C::GetSkillLineForSlot(int32_t hand) {
         }
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], spell);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, spell);
 
     if (ability && ability->m_spell == spell) {
         return ability->m_skillLine;
@@ -10922,7 +10940,7 @@ void AreaTriggersInitialize(uint32_t mapId) {
 // OFFSET: 0x006DBE30
 int32_t AreaTriggerCheck(const void* data, void* param) {
     s_areaTriggerTimer = ClientSetTimer(100, AreaTriggerCheck, nullptr);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || player->m_unit->m_unitFieldHealth <= 0) {
         return 1;
@@ -10951,7 +10969,7 @@ int32_t AreaTriggerCheck(const void* data, void* param) {
         s_currentAreaTrigger = nullptr;
     }
 
-    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!mover) {
         return 1;
@@ -10985,22 +11003,22 @@ int32_t AreaTriggerCheck(const void* data, void* param) {
 // OFFSET: 0x006D7630
 int32_t __stdcall CGPlayer_C::CanSummonFriend(WOWGUID guid) {
     if (!guid) {
-        return 8;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NO_TARGET;
     }
 
     if (!CGPlayer_C::IsRAFPlayer(guid)) {
-        return 1;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NOT_REFERRED_BY;
     }
 
     if (!CGPartyInfo::IsMember(guid) && !IsGuidInMyRaid(guid)) {
-        return 9;
+        return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_NOT_IN_GROUP;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         if (static_cast<int32_t>(player->m_unit->m_unitFieldLevel) > 60) {
-            return 10;
+            return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_LEVEL_MAX;
         }
     } else {
         CGPartyMemberState* stats = CGPartyInfo::GetRemoteStats(guid);
@@ -11009,20 +11027,20 @@ int32_t __stdcall CGPlayer_C::CanSummonFriend(WOWGUID guid) {
             stats = CGRaidInfo::GetRemoteStats(guid);
 
             if (!stats) {
-                return 9;
+                return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_NOT_IN_GROUP;
             }
         }
 
         if (!(stats->m_flags & 0x1)) {
-            return 13;
+            return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_OFFLINE;
         }
 
         if (stats->m_level > 60) {
-            return 10;
+            return CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_LEVEL_MAX;
         }
     }
 
-    return Spell_C_GetSpellCooldown(CGSpellBook::m_summonFriendSpell, 0, nullptr, nullptr, nullptr) ? 11 : 0;
+    return Spell_C_GetSpellCooldown(CGSpellBook::m_summonFriendSpell, 0, nullptr, nullptr, nullptr) ? CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_COOLDOWN : CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_SUCCESS;
 }
 
 // VERIFY: 0c3db187 auto
@@ -11075,17 +11093,17 @@ int32_t CGPlayer_C::UpdateUnitCollisionBox(int32_t a2, int32_t a3) {
     float scale = this->GetScaledModelScale(displayInfo, modelData, &modelScale);
 
     if (fabsf(modelData->m_collisionWidth) < 0.00000095367432f || fabsf(modelData->m_collisionHeight) < 0.00000095367432f) {
-        SysMsgPrintf(STATUS_ERROR, 0x10, "NOCOLLISIONBOX|%s", modelData->m_modelName);
+        SysMsgPrintf(SYSMSG_ERROR, 0x10, "NOCOLLISIONBOX|%s", modelData->m_modelName);
         return 1;
     }
 
     if (CMath::fequal(scale, 0.0f)) {
-        SysMsgPrintf(STATUS_ERROR, 2, "ZEROSCALEUNIT|%d|%s", this->m_obj->m_entryID, this->GetUnitName(nullptr, 1));
+        SysMsgPrintf(SYSMSG_ERROR, 2, "ZEROSCALEUNIT|%d|%s", this->m_obj->m_entryID, this->GetUnitName(nullptr, 1));
         return 1;
     }
 
     if (modelData->m_collisionWidth + 0.00000011920929f < 0.4167f) {
-        SysMsgPrintf(STATUS_ERROR, 2, "CreatureModelData record %d (%s) collision width is too small.", displayInfo->m_modelID, modelData->m_modelName);
+        SysMsgPrintf(SYSMSG_ERROR, 2, "CreatureModelData record %d (%s) collision width is too small.", displayInfo->m_modelID, modelData->m_modelName);
     }
 
     if (!a2 && this->IsActivePlayer() && this->m_movementData.CollisionBoxDoesntFit(modelData->m_collisionWidth, modelData->m_collisionHeight, scale)) {
@@ -11138,13 +11156,13 @@ TSGrowableArray<int32_t>* CGPlayer_C::GetTradeSkillSpells(int32_t skillLine) {
 // VERIFY: 1d2b7f27 auto
 // OFFSET: 0x006CF2E0
 uint32_t GetVisibleAuraEffectDisplay() {
-    return s_unk_C9EAB0;
+    return s_visibleAuraEffectDisplay;
 }
 
 // VERIFY: 189d8dee auto
 // OFFSET: 0x006CF2F0
 uint32_t GetVisibleAuraEffectFlags() {
-    return s_unk_C9EAB4;
+    return s_visibleAuraEffectFlags;
 }
 
 // VERIFY: 07b73796 auto
@@ -11166,7 +11184,7 @@ void CGPlayer_C::AutoEquipItemToSlot(CGItem_C* item, uint32_t slot, int32_t igno
         return;
     }
 
-    if (!CGGameUI::CanPerformAction(22)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_EQUIP_ITEM)) {
         return;
     }
 
@@ -11186,7 +11204,7 @@ void CGPlayer_C::AutoEquipItemToSlot(CGItem_C* item, uint32_t slot, int32_t igno
 
         int32_t error;
 
-        if (stats->m_bonding == 2 && this->CanUseItem(stats, error)) {
+        if (stats->m_bonding == ITEM_BINDING::ITEM_BINDING_ON_EQUIP && this->CanUseItem(stats, error)) {
             uint32_t index = FindEmptySwapIndex();
             s_itemSwaps.m_data[index].m_item = item;
             s_itemSwaps.m_data[index].m_srcSlot = slot;
@@ -11223,7 +11241,7 @@ void CGPlayer_C::ClearPendingEquip(uint32_t index, int32_t equip) {
             this->AutoEquipItem(swap->m_srcContainer, swap->m_srcSlot, 1);
         }
     } else {
-        CGObject_C* source = ClntObjMgrObjectPtr(swap->m_srcContainer, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* source = ClntObjMgrObjectPtr(swap->m_srcContainer, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (source && source->GetBag()) {
             WOWGUID item;
@@ -11231,7 +11249,7 @@ void CGPlayer_C::ClearPendingEquip(uint32_t index, int32_t equip) {
             CGGameUI::UnlockItem(item);
         }
 
-        CGObject_C* destination = ClntObjMgrObjectPtr(swap->m_dstContainer, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* destination = ClntObjMgrObjectPtr(swap->m_dstContainer, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (destination && destination->GetBag()) {
             WOWGUID item;
@@ -11481,7 +11499,7 @@ void CGPlayer_C::SaveTabard(int32_t emblemStyle, int32_t emblemColor, int32_t bo
 bool CGPlayer_C::LoadGuildTextures(int32_t displayId) {
     ItemDisplayInfoRec rec;
 
-    if (!this->m_characterComponent || !g_itemDisplayInfoDB.GetRecordByIndex(displayId, &rec) || (this->m_characterComponent->m_flags & 0x40)) {
+    if (!this->m_characterComponent || !g_itemDisplayInfoDB.GetRecord(displayId, &rec) || (this->m_characterComponent->m_flags & 0x40)) {
         return false;
     }
 
@@ -11710,12 +11728,12 @@ int32_t Packet_SMSG_GROUP_LIST(void* param, NETMESSAGE msgId, uint32_t time, CDa
                 CGGameUI::DisplayError(ERR_LEFT_GROUP_S, oldName->m_name);
             }
 
-            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(old, TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(old, TYPE_UNIT, __FILE__, __LINE__));
 
             if (unit) {
                 const WOWGUID& petGuid = unit->m_unit->m_unitFieldCharm.m_guid ? unit->m_unit->m_unitFieldCharm : unit->m_unit->m_unitFieldSummon;
 
-                if (petGuid && !ClntObjMgrObjectPtr(petGuid, TYPEMASK_UNIT, __FILE__, __LINE__)) {
+                if (petGuid && !ClntObjMgrObjectPtr(petGuid, TYPE_UNIT, __FILE__, __LINE__)) {
                     CGGameUI::ClearTarget(petGuid, 1);
                 }
             } else {
@@ -11740,7 +11758,7 @@ int32_t Packet_SMSG_GROUP_LIST(void* param, NETMESSAGE msgId, uint32_t time, CDa
         CGPartyInfo::m_playerAssignments = assignments;
         CGPartyInfo::m_playerRole = roles;
         CGPartyInfo::m_playerLFGFlags = lfgFlags;
-        CGPartyInfo::SetLootMethod(lootMethod, lootMaster, lootThreshold, wasInGroup == 0);
+        CGPartyInfo::SetLootMethod(static_cast<LOOT_METHOD>(lootMethod), lootMaster, lootThreshold, wasInGroup == 0);
         CGPartyInfo::m_dungeonDifficulty = partyDungeonDifficulty;
         CGPartyInfo::m_raidDifficulty = partyRaidDifficulty;
         CGPartyInfo::m_dynamicDifficulty = dynamicDifficulty;
@@ -11776,7 +11794,7 @@ int32_t Packet_SMSG_GROUP_LIST(void* param, NETMESSAGE msgId, uint32_t time, CDa
         }
     }
 
-    if (wasRaid != (CGRaidInfo::m_numMembers != 0) && ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (wasRaid != (CGRaidInfo::m_numMembers != 0) && ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         CDataStore query;
         query.Put(static_cast<uint32_t>(CMSG_QUEST_GIVER_STATUS_MULTIPLE_QUERY));
         query.Finalize();
@@ -11848,34 +11866,34 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
     UIErrors error;
     WOWGUID guid;
 
-    switch (event) {
-        case 0:
+    switch (static_cast<GUILD_EVENT>(event)) {
+        case GUILD_EVENT_PROMOTION:
             error = ERR_GUILD_PROMOTE_SSS;
             break;
 
-        case 1:
+        case GUILD_EVENT_DEMOTION:
             error = ERR_GUILD_DEMOTE_SSS;
             break;
 
-        case 2:
+        case GUILD_EVENT_MOTD:
             FrameScript_SignalEvent(SCRIPT_EVENT_GUILD_MOTD, "%s", strings[0]);
             CGGuildInfo::SetMOTD(strings[0]);
             UpdateGuildRoster(1);
             return 1;
 
-        case 3:
+        case GUILD_EVENT_JOINED:
             error = ERR_GUILD_JOIN_S;
             msg->Get(guid.m_guid);
             CGAutoCompleteName::AddFlags(guid, 34, 0, strings[0]);
             break;
 
-        case 4:
+        case GUILD_EVENT_LEFT:
             error = ERR_GUILD_LEAVE_S;
             msg->Get(guid.m_guid);
             CGAutoCompleteName::RemoveFlags(guid, 2);
             break;
 
-        case 5:
+        case GUILD_EVENT_REMOVED:
             error = ERR_GUILD_REMOVE_SS;
             CGAutoCompleteName::RemoveFlagsByName(strings[0], 2, 1, 0);
 
@@ -11885,23 +11903,23 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
 
             break;
 
-        case 6:
+        case GUILD_EVENT_LEADER_IS:
             error = ERR_GUILD_LEADER_IS_S;
             break;
 
-        case 7:
+        case GUILD_EVENT_LEADER_CHANGED:
             error = ERR_GUILD_LEADER_CHANGED_SS;
             break;
 
-        case 8:
+        case GUILD_EVENT_DISBANDED:
             error = ERR_GUILD_DISBANDED;
             CGAutoCompleteName::RemoveFlagsFromAllNodes(2);
             CGGuildBankInfo::SetGuildBanker(WOWGUID());
             memset(CGGuildBankInfo::m_guildBankTabInfo, 0, sizeof(CGGuildBankInfo::m_guildBankTabInfo));
             break;
 
-        case 10: {
-            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        case GUILD_EVENT_RANK_UPDATED: {
+            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
             if (!player) {
                 return 1;
@@ -11935,8 +11953,8 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             return 1;
         }
 
-        case 11: {
-            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        case GUILD_EVENT_RANK_COUNT_UPDATED: {
+            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
             if (!player) {
                 return 1;
@@ -11954,7 +11972,7 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             return 1;
         }
 
-        case 12:
+        case GUILD_EVENT_SIGNED_ON:
             msg->Get(guid.m_guid);
             CGAutoCompleteName::AddFlags(guid, 32, 0, strings[0]);
 
@@ -11965,7 +11983,7 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             CGGameUI::DisplayError(ERR_FRIEND_ONLINE_SS, strings[0], strings[0]);
             return 1;
 
-        case 13:
+        case GUILD_EVENT_SIGNED_OFF:
             msg->Get(guid.m_guid);
             CGAutoCompleteName::RemoveFlags(guid, 32);
 
@@ -11976,21 +11994,21 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             CGGameUI::DisplayError(ERR_FRIEND_OFFLINE_S, strings[0]);
             return 1;
 
-        case 14:
+        case GUILD_EVENT_BANK_BAG_SLOTS_CHANGED:
             SendGuildBankQueryTabOpcode(CGGuildBankInfo::m_currentTab);
             FrameScript_SignalEvent(SCRIPT_EVENT_GUILDBANKBAGSLOTS_CHANGED, nullptr);
             return 1;
 
-        case 15:
+        case GUILD_EVENT_BANK_TAB_ADDED:
             CGGuildBankInfo::m_numTabs++;
             FrameScript_SignalEvent(SCRIPT_EVENT_GUILDBANK_UPDATE_TABS, nullptr);
             return 1;
 
-        case 16:
+        case GUILD_EVENT_BANK_TAB_UPDATED:
             CGGuildBankInfo::UpdateTabInfo(static_cast<uint8_t>(SStrToInt(strings[0])), strings[1], strings[2]);
             return 1;
 
-        case 17: {
+        case GUILD_EVENT_BANK_MONEY_SET: {
             uint64_t money;
             sscanf(strings[0], "%016I64X", &money);
             CGGuildBankInfo::m_money = money;
@@ -12002,7 +12020,7 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             return 1;
         }
 
-        case 18: {
+        case GUILD_EVENT_BANK_REFRESH: {
             SendGuildBankQueryTabOpcode(CGGuildBankInfo::m_currentTab);
             CDataStore query;
             query.Put(static_cast<uint32_t>(MSG_GUILD_BANK_MONEY_WITHDRAWN));
@@ -12011,7 +12029,7 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
             return 1;
         }
 
-        case 19: {
+        case GUILD_EVENT_BANK_TEXT_CHANGED: {
             int32_t tab = atol(strings[0]);
             CGGuildBankInfo::SetTextUpdate(tab, 1);
             FrameScript_SignalEvent(SCRIPT_EVENT_GUILDBANK_TEXT_CHANGED, "%d", tab + 1);
@@ -12048,13 +12066,13 @@ int32_t Packet_SMSG_GUILD_EVENT(void* param, NETMESSAGE msgId, uint32_t time, CD
 // VERIFY: 4f7b81f9 manual
 // OFFSET: 0x007261B0
 bool CGPlayer_C::IsInFlyableZone(int32_t checkContinent) {
-    return IsInFlyableArea() && (!(this->m_obj->m_type & TYPEMASK_PLAYER) || !checkContinent || CGGameUI::m_iCurrentMapID != 571 || HasSpell(static_cast<uint32_t>(54197)));
+    return IsInFlyableArea() && (!(this->m_obj->m_type & TYPE_PLAYER) || !checkContinent || CGGameUI::m_iCurrentMapID != 571 || HasSpell(static_cast<uint32_t>(54197)));
 }
 
 // VERIFY: 0c1f1342 manual
 // OFFSET: 0x006DA130
 int32_t OnUpdateShapeshiftForm(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (unit) {
         if (unit->m_shapeshiftSuppressed) {
@@ -12069,7 +12087,7 @@ int32_t OnUpdateShapeshiftForm(WOWGUID guid, uint32_t offset, uint32_t count, co
         if (unit->IsShapeShifted()) {
             SpellShapeshiftFormRec* form = g_spellShapeshiftFormDB.GetRecord(unit->GetShapeshiftForm());
 
-            if (form && !(form->m_flags & 0x8)) {
+            if (form && !(form->m_flags & SPELL_SHAPESHIFT_FORM_FLAG_CAN_INTERACT)) {
                 CGGameUI::ClearInteractTarget(CGGameUI::m_interactTarget, 0);
             }
 
@@ -12140,11 +12158,11 @@ int32_t OnUpdatePlayerNoReagentCost(WOWGUID guid, uint32_t offset, uint32_t coun
 // VERIFY: 2bb05660 manual
 // OFFSET: 0x006CF6C0
 int32_t CritterUpdate(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        CGActionBar::UpdateCritter((static_cast<const WOWGUID*>(value)->m_guid >> 24) & 0xFFFFFFF);
-        CGActionBar::UpdateCritter((player->m_unit->m_unitFieldCritter.m_guid >> 24) & 0xFFFFFFF);
+        CGActionBar::UpdateCritter((static_cast<const WOWGUID*>(value)->m_guid >> WOWGUID_ENTRY_SHIFT) & WOWGUID_ENTRY_MASK);
+        CGActionBar::UpdateCritter((player->m_unit->m_unitFieldCritter.m_guid >> WOWGUID_ENTRY_SHIFT) & WOWGUID_ENTRY_MASK);
         CGSpellBook::SendCompanionUpdate(0);
     }
 
@@ -12154,7 +12172,7 @@ int32_t CritterUpdate(WOWGUID guid, uint32_t offset, uint32_t count, const void*
 // VERIFY: e642f3fb manual
 // OFFSET: 0x006D1B60
 int32_t CharmChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->UpdateReaction(false);
@@ -12170,7 +12188,7 @@ int32_t CharmChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, const 
 // VERIFY: 7c2a6122 manual
 // OFFSET: 0x006D1BC0
 int32_t SignalPlayerSkillStatEventsAndRefresh(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    if (ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__)) {
         FrameScript_SignalEvent(SCRIPT_EVENT_UNIT_ATTACK, "%s", "player");
         FrameScript_SignalEvent(SCRIPT_EVENT_UNIT_DEFENSE, "%s", "player");
         FrameScript_SignalEvent(SCRIPT_EVENT_UNIT_RANGED_ATTACK_POWER, "%s", "player");
@@ -12183,7 +12201,7 @@ int32_t SignalPlayerSkillStatEventsAndRefresh(WOWGUID guid, uint32_t offset, uin
 // VERIFY: ac8d5681 manual
 // OFFSET: 0x006D9F20
 int32_t ReportDailyQuestsRemaining(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -12228,7 +12246,7 @@ int32_t OnUpdateMoney(WOWGUID guid, uint32_t offset, uint32_t count, const void*
     SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
     CGClassTrainer::RefreshList();
     FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_MONEY, nullptr);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         CGPlayer_C::QueryQuestGiverStatusMultiple();
@@ -12253,17 +12271,17 @@ int32_t OnUpdateMoney(WOWGUID guid, uint32_t offset, uint32_t count, const void*
 // OFFSET: 0x006DA630
 int32_t OnUpdateRestState(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
     FrameScript_SignalEvent(SCRIPT_EVENT_UPDATE_EXHAUSTION, nullptr);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        uint32_t state = player->m_player->m_playerBytes2[3];
+        uint32_t state = player->m_player->restState;
 
         if (state < 3) {
             if (s_restStateInfo[state].m_error != ERR_MAX_VALUE) {
                 CGGameUI::DisplayError(s_restStateInfo[state].m_error);
             }
 
-            if (s_restStateInfo[state].m_tutorial != 60) {
+            if (s_restStateInfo[state].m_tutorial != TUTORIAL::NUM_TUTORIALS) {
                 CGTutorial::TriggerTutorial(s_restStateInfo[state].m_tutorial);
             }
         }
@@ -12289,7 +12307,7 @@ int32_t __stdcall CGPlayer_C::OnBuyFailed(CDataStore* msg) {
     msg->Get(itemId);
     msg->Get(result);
 
-    if (result == 1 && vendor == CGPlayer_C::s_lastVendorListReceived) {
+    if (result == VENDOR_BUY_RESULT::VENDOR_BUY_SOLD_OUT_REFRESH_STOCK && vendor == CGPlayer_C::s_lastVendorListReceived) {
         for (uint32_t i = 0; i < 150; i++) {
             if (s_vendorItems[i].m_slot == itemId) {
                 s_vendorItems[i].m_maxCount = 0;
@@ -12299,35 +12317,35 @@ int32_t __stdcall CGPlayer_C::OnBuyFailed(CDataStore* msg) {
     }
 
     switch (result) {
-        case 1:
-        case 7:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_SOLD_OUT_REFRESH_STOCK:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_SOLD_OUT:
             CGGameUI::DisplayError(ERR_VENDOR_SOLD_OUT);
             break;
 
-        case 2:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_NOT_ENOUGH_MONEY:
             CGGameUI::DisplayError(ERR_NOT_ENOUGH_MONEY);
             break;
 
-        case 4:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_HOSTILE:
             CGGameUI::DisplayError(ERR_VENDOR_HATES_YOU);
             break;
 
-        case 5:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_TOO_FAR:
             CGGameUI::DisplayError(ERR_VENDOR_TOO_FAR);
             break;
 
-        case 6:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_NO_UI_ERROR:
             break;
 
-        case 8:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_MAX_COUNT:
             CGGameUI::DisplayError(ERR_ITEM_MAX_COUNT);
             break;
 
-        case 11:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_REQUIRES_RANK:
             CGGameUI::DisplayError(ERR_CANT_EQUIP_RANK);
             break;
 
-        case 12:
+        case VENDOR_BUY_RESULT::VENDOR_BUY_REQUIRES_REPUTATION:
             CGGameUI::DisplayError(ERR_CANT_EQUIP_REPUTATION);
             break;
 
@@ -12376,42 +12394,42 @@ int32_t __stdcall CGPlayer_C::OnSellResponse(CDataStore* msg) {
     msg->Get(item.m_guid);
     msg->Get(result);
 
-    if (!result) {
+    if (result == VENDOR_SELL_RESULT::VENDOR_SELL_SUCCESS) {
         return 1;
     }
 
     UIErrors error;
 
     switch (result) {
-        case 1:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_ITEM_NOT_FOUND:
             error = ERR_ITEM_NOT_FOUND;
             break;
 
-        case 2:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_NOT_INTERESTED:
             error = ERR_VENDOR_NOT_INTERESTED;
             break;
 
-        case 3:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_HOSTILE:
             error = ERR_VENDOR_HATES_YOU;
             break;
 
-        case 4:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_NOT_OWNER:
             error = ERR_NOT_OWNER;
             break;
 
-        case 6:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_NONEMPTY_BAG:
             error = ERR_DESTROY_NONEMPTY_BAG;
             break;
 
-        case 7:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_DOESNT_BUY:
             error = ERR_VENDOR_DOESNT_BUY;
             break;
 
-        case 8:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_MUST_REPAIR:
             error = ERR_MUST_REPAIR_DURABILITY;
             break;
 
-        case 9:
+        case VENDOR_SELL_RESULT::VENDOR_SELL_INTERNAL_BAG_ERROR:
             error = ERR_INTERNAL_BAG_ERROR;
             break;
 
@@ -12421,7 +12439,7 @@ int32_t __stdcall CGPlayer_C::OnSellResponse(CDataStore* msg) {
     }
 
     if (error != ERR_MAX_VALUE) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(vendor, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(vendor, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             CGGameUI::AddErrorMessage(unit->GetFrameScriptText(CGGameUI::GetErrorToken(error), -1), 1);
@@ -12456,7 +12474,7 @@ static int32_t OnQuestItemLoot(QuestCache* quest, int32_t itemId, int32_t count,
         return 1;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || totalCount - count >= static_cast<int32_t>(quest->m_collectItemCount[index])) {
         return 1;
@@ -12472,7 +12490,7 @@ static int32_t OnQuestItemLoot(QuestCache* quest, int32_t itemId, int32_t count,
     CGGameUI::DisplayError(ERR_QUEST_ADD_ITEM_SII, name, totalCount > required ? required : totalCount, required);
     FrameScript_SignalEvent(SCRIPT_EVENT_QUEST_WATCH_UPDATE, "%d", CGQuestLog::GetQuestIndex(quest->m_id));
 
-    if ((quest->m_flags & 0x10000) && CGQuestLog::IsQuestCompleteEx(CGQuestLog::GetQuestIndex(quest->m_id) - 1, 1)) {
+    if ((quest->m_flags & QUEST_TEMPLATE_FLAGS::QUEST_FLAG_AUTO_COMPLETE) && CGQuestLog::IsQuestCompleteEx(CGQuestLog::GetQuestIndex(quest->m_id) - 1, 1)) {
         WOWGUID guid = player->m_obj->m_guid;
         CGPlayer_C::CompleteQuest(guid, quest->m_id);
     }
@@ -12538,7 +12556,7 @@ static void ResurrectNameQueryCallback(int32_t id, const WOWGUID& guid, void* pa
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && name->m_name[0] && player->IsDeadOrGhost()) {
         CGGameUI::OpenResurrectRequest(name->m_name);
@@ -12562,7 +12580,7 @@ int32_t Packet_SMSG_RESURRECT_REQUEST(void* param, NETMESSAGE msgId, uint32_t ti
     CGPlayer_C::s_resurrectOfferer = offerer;
     CGPlayer_C::s_resurrectOfferSickness = sickness;
     CGPlayer_C::s_resurrectOfferUseTimer = useTimer;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -12592,11 +12610,11 @@ void CGPlayer_C::UpdateRepopTimer() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    uint8_t bytes = this->m_player->m_playerFieldBytes[0];
+    uint8_t bytes = this->m_player->m_playerLocalFlags;
 
     if (bytes & 0x10) {
         CGGameUI::SetRepopTimeLeft(0);
-    } else if ((bytes & 0x8) && !(this->m_player->m_playerFlags & 0x4000)) {
+    } else if ((bytes & 0x8) && !(this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_OUT_OF_BOUNDS)) {
         CGGameUI::SetRepopTimeLeft(360000);
     } else {
         CGGameUI::ClearRepopTime();
@@ -12606,7 +12624,7 @@ void CGPlayer_C::UpdateRepopTimer() {
 // VERIFY: d3f70371 manual
 // OFFSET: 0x006DC0F0
 void CGPlayer_C::OnDeath() {
-    if (this->m_unit->m_unitDynamicFlags & 0x20) {
+    if (this->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD) {
         return;
     }
 
@@ -12626,7 +12644,7 @@ void CGPlayer_C::OnDeath() {
     CGGameUI::CloseLoot(true, false, false);
     Spell_C_CancelPlayerSpells();
 
-    if (this->m_unit->m_unitFieldFlags & 0x100000) {
+    if (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) {
         this->HandleRepopRequest(false);
     }
 }
@@ -12831,13 +12849,13 @@ void CGPlayer_C::DispatchPartyMemberStatsChanges(const WOWGUID& guid, uint32_t c
     }
 
     if (changes & 0x400) {
-        CGUnit_C* oldPet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(oldState->m_pet.m_guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* oldPet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(oldState->m_pet.m_guid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (oldPet) {
             oldPet->UpdateScriptRegistration();
         }
 
-        CGUnit_C* newPet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(newState->m_pet.m_guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* newPet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(newState->m_pet.m_guid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (newPet) {
             newPet->UpdateScriptRegistration();
@@ -13074,8 +13092,8 @@ int32_t Packet_HandlePartyMemberStats(void* param, NETMESSAGE msgId, uint32_t ti
 // VERIFY: 646d304f manual
 // OFFSET: 0x006DF710
 void CGPlayer_C::UpdateGhostStatus() {
-    if (this->m_player->m_playerFlags & 0x10) {
-        CGTutorial::TriggerTutorial(24);
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST) {
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_DEATH);
     } else {
         CGGameUI::SetAreaSpiritHealer(WOWGUID());
         C3Vector position(0.0f, 0.0f, 0.0f);
@@ -13096,34 +13114,34 @@ void CGPlayer_C::UpdateGhostStatus() {
 void CGPlayer_C::TogglePlayerFlag(uint32_t oldFlags) {
     uint32_t changed = oldFlags ^ this->m_player->m_playerFlags;
 
-    if (changed & 0x800E) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_NAME_TAGS_MASK) {
         PlayerNameTriggerNameRegenerate(this->m_nameDesc);
 
         if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
-            CGChat::m_afk = this->m_player->m_playerFlags & 0x2;
+            CGChat::m_afk = this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_AFK;
         }
     }
 
-    if (changed & 0x40300) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_PVP_STATUS_MASK) {
         this->SetPvpCooldownTimestamp(oldFlags);
     }
 
-    if (changed & 0xC00) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_HIDE_EQUIPMENT_MASK) {
         UpdateModelForUI(this->m_obj->m_guid, 3);
     }
 
     Script_SendUnitSignal(this->m_obj->m_guid, SCRIPT_EVENT_PLAYER_FLAGS_CHANGED);
 
-    if (changed & 0x400) {
-        if (this->m_player->m_playerFlags & 0x400) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) {
             this->HideHelm();
         } else {
             this->ShowHelm();
         }
     }
 
-    if (changed & 0x800) {
-        if (this->m_player->m_playerFlags & 0x800) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK) {
             this->HideCloak();
         } else {
             this->ShowCloak();
@@ -13134,23 +13152,23 @@ void CGPlayer_C::TogglePlayerFlag(uint32_t oldFlags) {
         return;
     }
 
-    if (changed & 0x10) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_GHOST) {
         this->UpdateGhostStatus();
     }
 
-    if (changed & 0x20) {
-        if (this->m_player->m_playerFlags & 0x20) {
-            CGTutorial::TriggerTutorial(29);
-            CGTutorial::TriggerTutorial(30);
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_RESTING) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_RESTING) {
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_RESTING);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_HEARTHSTONES);
         }
 
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_UPDATE_RESTING, nullptr);
     }
 
-    if (changed & 0x200) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_PVP_DESIRED) {
         const char* text;
 
-        if (this->m_player->m_playerFlags & 0x200) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_PVP_DESIRED) {
             CGGameUI::DisplayError(ERR_PVP_TOGGLE_ON);
             text = FrameScript_GetText("PVP_TOGGLE_ON_VERBOSE", -1, GENDER_NOT_APPLICABLE);
         } else {
@@ -13161,32 +13179,32 @@ void CGPlayer_C::TogglePlayerFlag(uint32_t oldFlags) {
         CGChat::AddChatMessage(text, 0, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
     }
 
-    if (changed & 0x3000) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_PLAY_TIME_MASK) {
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYTIME_CHANGED, nullptr);
     }
 
-    if (changed & 0x20000) {
-        if (this->m_player->m_playerFlags & 0x20000) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_TAXI_BENCHMARK) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_TAXI_BENCHMARK) {
             FrameScript_SignalEvent(SCRIPT_EVENT_ENABLE_TAXI_BENCHMARK, nullptr);
         } else {
             FrameScript_SignalEvent(SCRIPT_EVENT_DISABLE_TAXI_BENCHMARK, nullptr);
         }
     }
 
-    if (changed & 0x1800000) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_SPELL_RESTRICTIONS_MASK) {
         CGSpellBook::UpdateUsable();
     }
 
-    if (changed & 0x2000000) {
-        if (this->m_player->m_playerFlags & 0x2000000) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_NO_XP_GAIN) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_NO_XP_GAIN) {
             FrameScript_SignalEvent(SCRIPT_EVENT_DISABLE_XP_GAIN, nullptr);
         } else {
             FrameScript_SignalEvent(SCRIPT_EVENT_ENABLE_XP_GAIN, nullptr);
         }
     }
 
-    if (changed & 0x10000) {
-        if (this->m_player->m_playerFlags & 0x10000) {
+    if (changed & PLAYER_FLAGS::PLAYER_FLAG_LOW_LEVEL_RAID_ENABLED) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_LOW_LEVEL_RAID_ENABLED) {
             FrameScript_SignalEvent(SCRIPT_EVENT_ENABLE_LOW_LEVEL_RAID, nullptr);
         } else {
             FrameScript_SignalEvent(SCRIPT_EVENT_DISABLE_LOW_LEVEL_RAID, nullptr);
@@ -13200,7 +13218,7 @@ static uint32_t s_textEmoteStandStates = 0x10B;
 // VERIFY: 1c3eae7c manual
 // OFFSET: 0x006DD9E0
 void CGPlayer_C::SendTextEmote(const EmotesTextRec* emote, WOWGUID target) {
-    if (!emote || (this->m_unit->m_unitFieldFlags & 0x1000000)) {
+    if (!emote || (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_POSSESSED)) {
         return;
     }
 
@@ -13221,7 +13239,7 @@ void CGPlayer_C::SendTextEmote(const EmotesTextRec* emote, WOWGUID target) {
         return;
     }
 
-    if (this->GetClientStandState() == 3 && rec->m_emoteSpecProc != 1) {
+    if (this->GetClientStandState() == UNIT_SLEEPING && rec->m_emoteSpecProc != EMOTESPECPROC_STANDSTATEHANDLER) {
         return;
     }
 
@@ -13229,10 +13247,10 @@ void CGPlayer_C::SendTextEmote(const EmotesTextRec* emote, WOWGUID target) {
         target = WOWGUID();
     }
 
-    this->SetSheatheState(0, 1, 0);
+    this->SetSheatheState(WEAPONMODE_SHEATHEDMODE, 1, 0);
 
-    if (rec->m_emoteSpecProc == 1 && ((1 << rec->m_emoteSpecProcParam) & s_textEmoteStandStates)) {
-        this->ChangeStandState(rec->m_emoteSpecProcParam);
+    if (rec->m_emoteSpecProc == EMOTESPECPROC_STANDSTATEHANDLER && ((1 << rec->m_emoteSpecProcParam) & s_textEmoteStandStates)) {
+        this->ChangeStandState(static_cast<UNITSTANDSTATE>(rec->m_emoteSpecProcParam));
     } else if (rec->m_animID && this->CanPlayEmoteAnim()) {
         this->PlayBaseAnimation(rec->m_animID, 0);
     }
@@ -13243,7 +13261,7 @@ void CGPlayer_C::SendTextEmote(const EmotesTextRec* emote, WOWGUID target) {
     uint32_t sound;
 
     if (this->m_unit->m_unitFieldNativedisplayid == this->m_unit->m_unitFieldDisplayid) {
-        sound = SI2::GetTextEmoteSoundIndex(emote->m_id, this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[2]);
+        sound = SI2::GetTextEmoteSoundIndex(emote->m_id, this->m_unit->m_raceID, this->m_unit->m_sex);
     } else {
         uint32_t sex = this->GetDisplaySex();
         uint32_t race = this->GetDisplayRace();
@@ -13337,7 +13355,7 @@ void CGPlayer_C::DanceMoveComplete() {
 // VERIFY: 5cf70f73 manual
 // OFFSET: 0x006E1890
 static int32_t DanceTimerCallback(const void* data, uint64_t guid, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->DanceMoveComplete();
@@ -13358,7 +13376,7 @@ void CGPlayer_C::PlayDanceMove(const DanceMovesRec* move) {
             SpellVisualKitRec* kit = g_spellVisualKitDB.GetRecord(move->m_param);
 
             if (kit) {
-                PlaySpellVisuaKitData data(nullptr, kit, 0);
+                PlaySpellVisuaKitData data(nullptr, kit, SPELL_VISUAL_KIT_CAST);
                 this->PlaySpellVisualKit(data);
             }
 
@@ -13425,8 +13443,8 @@ void CGPlayer_C::DestructActivePlayer() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    if (ClntObjMgrGetPlayerType() != 1) {
-        if (this->m_unit->m_unitFieldFlags & 0x80000) {
+    if (ClntObjMgrGetPlayerType() != PLAYER_BOT) {
+        if (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT) {
             CGGameUI::SetRegenEnabled(1);
         }
 
@@ -13439,10 +13457,10 @@ void CGPlayer_C::DestructActivePlayer() {
 
     Spell_C_SetAutoRangedCombatSpell(0);
     EventUnregister(EVENT_ID_IDLE, CGPlayer_C::AutoCombatModeEventHandler);
-    this->m_combatModeFlags &= ~0xEu;
+    this->m_combatModeFlags &= ~COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_MASK;
     CGGameUI::UpdateCombatMode();
-    s_unk_C9EAB0 = 0;
-    s_unk_C9EAB4 = 0;
+    s_visibleAuraEffectDisplay = 0;
+    s_visibleAuraEffectFlags = 0;
 }
 
 // VERIFY: 87e023cc manual
@@ -13495,7 +13513,7 @@ CGPlayer_C::~CGPlayer_C() {
     this->m_proficiencySpells.InternalClear(0);
     this->m_pendingItemExpirations.Clear();
 
-    if (!(this->m_modelFlags & 0x10000)) {
+    if (!(this->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_DISABLED)) {
         CGPartyInfo::EnableMember(this, 0);
         CGRaidInfo::EnableMember(this, 0);
     }
@@ -13546,10 +13564,10 @@ int32_t CGPlayer_C::GetSpellCastingTime(const SpellRec* spell) const {
     }
 
     if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
-        Spell_C_ModifySpellValue(spell, time, 10);
+        Spell_C_ModifySpellValue(spell, time, SPELLMOD_CASTING_TIME);
     }
 
-    if (!(spell->m_attributes & 0x30) && !(spell->m_attributesExC & 0x20000000) && time > 0) {
+    if (!(spell->m_attributes & (SPELL_ATTR0::SPELL_ATTR0_IS_ABILITY | SPELL_ATTR0::SPELL_ATTR0_IS_TRADESKILL)) && !(spell->m_attributesExC & SPELL_ATTR3::SPELL_ATTR3_IGNORE_CASTER_MODIFIERS) && time > 0) {
         CGUnitData* unit = this->m_unit;
 
         if (fnotequal(unit->m_unitModCastSpeed, 1.0f)) {
@@ -13557,8 +13575,8 @@ int32_t CGPlayer_C::GetSpellCastingTime(const SpellRec* spell) const {
         }
     }
 
-    if (spell->m_attributes & 0x2) {
-        time += 500;
+    if (spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) {
+        time += SPELL_RANGED_CAST_TIME_EXTRA_MS;
     }
 
     return time <= 0 ? 0 : time;
@@ -13579,7 +13597,7 @@ int32_t CGPlayer_C::GetSpellRank(const SpellRec* spell) const {
         rankSpell = &weaponSpell;
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], spellId);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, spellId);
 
     if (!ability) {
         return 0;
@@ -13605,7 +13623,7 @@ void CGPlayer_C::GetDefenseSkillRank(int32_t& rank, int32_t& bonus) const {
     int32_t defenseSpell = s_defenseSpellId;
     bonus = 0;
     rank = 0;
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], defenseSpell);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, defenseSpell);
 
     if (ability && ability->m_spell == s_defenseSpellId) {
         this->GetExpandedSkillRank(ability->m_skillLine, rank, bonus);
@@ -13622,12 +13640,12 @@ void CGPlayer_C::GetAttackSkillRank(int32_t hand, int32_t& rank, int32_t& bonus)
     int32_t skillSpell = 0;
 
     if (hand < 3) {
-        const CGUnitVirtualItem* item = this->GetVirtualItem(hand, false);
+        const CGUnitVirtualItem* item = this->GetVirtualItem(static_cast<VIRTUAL_MONSTER_SLOT>(hand), false);
         uint32_t subclass;
 
         if (!item) {
             subclass = ClientDBGetUnarmedWeapon();
-        } else if (item->m_classID == 2) {
+        } else if (item->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON) {
             subclass = item->m_subclassID;
         } else {
             subclass = 0xFFFFFFFF;
@@ -13638,7 +13656,7 @@ void CGPlayer_C::GetAttackSkillRank(int32_t hand, int32_t& rank, int32_t& bonus)
         }
     }
 
-    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_unitFieldBytes0[0], this->m_unit->m_unitFieldBytes0[1], skillSpell);
+    SkillLineAbilityRec* ability = SpellTableLookupAbility(this->m_unit->m_raceID, this->m_unit->m_classID, skillSpell);
 
     if (ability && ability->m_spell == skillSpell) {
         this->GetExpandedSkillRank(ability->m_skillLine, rank, bonus);
@@ -13656,23 +13674,23 @@ void CGPlayer_C::GetAttackSkillRank(int32_t hand, int32_t& rank, int32_t& bonus)
 
 // VERIFY: a1437c5c manual
 // OFFSET: 0x006E04D0
-const CGUnitVirtualItem* CGPlayer_C::GetVirtualItem(uint32_t slot, bool ignoreDisarm) const {
+const CGUnitVirtualItem* CGPlayer_C::GetVirtualItem(VIRTUAL_MONSTER_SLOT slot, bool ignoreDisarm) const {
     VisibleItem_C* item = nullptr;
 
-    if (slot == 0) {
+    if (slot == VIRTUAL_MONSTER_SLOT_MAINHAND) {
         if (!ignoreDisarm && this->IsDisarmed(0)) {
             return nullptr;
         }
 
         item = &this->m_player->m_playerVisibleItems[15];
-    } else if (slot == 1) {
+    } else if (slot == VIRTUAL_MONSTER_SLOT_OFFHAND) {
         if (!ignoreDisarm && this->IsDisarmed(1)) {
             return nullptr;
         }
 
         item = &this->m_player->m_playerVisibleItems[16];
-    } else if (slot == 2) {
-        if (!ignoreDisarm && (this->m_unit->m_unitFieldFlags2 & 0x400)) {
+    } else if (slot == VIRTUAL_MONSTER_SLOT_RANGED) {
+        if (!ignoreDisarm && (this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_DISARM_RANGED)) {
             return nullptr;
         }
 
@@ -13695,22 +13713,22 @@ const CGUnitVirtualItem* CGPlayer_C::GetVirtualItem(uint32_t slot, bool ignoreDi
 
 // VERIFY: db19cffe manual
 // OFFSET: 0x006E05D0
-uint32_t CGPlayer_C::GetVirtualItemDisplayID(uint32_t slot) const {
+uint32_t CGPlayer_C::GetVirtualItemDisplayID(VIRTUAL_MONSTER_SLOT slot) const {
     VisibleItem_C* item;
 
-    if (slot == 0) {
+    if (slot == VIRTUAL_MONSTER_SLOT_MAINHAND) {
         if (this->IsDisarmed(0)) {
             return 0;
         }
 
         item = &this->m_player->m_playerVisibleItems[15];
-    } else if (slot == 1) {
+    } else if (slot == VIRTUAL_MONSTER_SLOT_OFFHAND) {
         if (this->IsDisarmed(1)) {
             return 0;
         }
 
         item = &this->m_player->m_playerVisibleItems[16];
-    } else if (slot == 2) {
+    } else if (slot == VIRTUAL_MONSTER_SLOT_RANGED) {
         item = &this->m_player->m_playerVisibleItems[17];
     } else {
         return 0;
@@ -13722,7 +13740,7 @@ uint32_t CGPlayer_C::GetVirtualItemDisplayID(uint32_t slot) const {
 // VERIFY: 5d485eba manual
 // OFFSET: 0x0073C1D0
 void CGPlayer_C::OnSpellEffectClear(CEffect* effect) {
-    bool updateAnimation = effect->m_kitRec && effect->m_kitRec->m_animID > 0 && (effect->m_flags & 0x1000);
+    bool updateAnimation = effect->m_kitRec && effect->m_kitRec->m_animID > 0 && (effect->m_flags & CEffect::EFFECT_FLAGS::EFFECT_AURA_ANIMATION);
     CGObject_C::OnSpellEffectClear(effect);
 
     if (updateAnimation) {
@@ -13731,11 +13749,11 @@ void CGPlayer_C::OnSpellEffectClear(CEffect* effect) {
 }
 
 // STATIC: 0x00ADBA74
-static const uint32_t s_playerSoundChance[14] = { 35, 100, 30, 100, 100, 40, 100, 100, 100, 100, 100, 100, 100, 0 };
+static const uint32_t s_playerSoundChance[NUM_UNITSOUNDTYPES] = { 35, 100, 30, 100, 100, 40, 100, 100, 100, 100, 100, 100, 100, 0 };
 
 // VERIFY: 904e0dd6 manual
 // OFFSET: 0x007631A0
-void CGPlayer_C::PlayUnitSound(uint32_t soundType, int32_t force) {
+void CGPlayer_C::PlayUnitSound(UNITSOUNDTYPE soundType, int32_t force) {
     if (!force && static_cast<uint32_t>((static_cast<uint64_t>(CRandom::uint32_(g_rndSeed)) * 101) >> 32) > s_playerSoundChance[soundType]) {
         return;
     }
@@ -13752,7 +13770,7 @@ void CGPlayer_C::PlayUnitSound(uint32_t soundType, int32_t force) {
 
     int32_t group;
 
-    if ((soundType == 2 || soundType == 3 || soundType == 9) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
+    if ((soundType == UNITSOUNDTYPE_INJURY || soundType == UNITSOUNDTYPE_INJURYCRITICAL || soundType == UNITSOUNDTYPE_INJURYCRUSHINGBLOW) && this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         group = 12;
     } else {
         group = this->GetUnitSoundKitIndex(soundType);
@@ -13775,9 +13793,9 @@ void CGPlayer_C::PlayUnitSound(uint32_t soundType, int32_t force) {
 
         properties.m_priority = 110;
 
-        if (soundType == 7) {
+        if (soundType == UNITSOUNDTYPE_WINGFLAP) {
             properties.m_maxAudibleBehavior = 0;
-        } else if (soundType != 5 && soundType != 6 && soundType != 10 && soundType != 11 && soundType != 12 && soundType != 13 && this->m_unit->m_unitFieldBytes0[1] == 6) {
+        } else if (soundType != UNITSOUNDTYPE_STAND && soundType != UNITSOUNDTYPE::UNITSOUNDTYPE_UNUSED_6 && soundType != UNITSOUNDTYPE_WINGGLIDE && soundType != UNITSOUNDTYPE_JUMPSTART && soundType != UNITSOUNDTYPE_JUMPEND && soundType != UNITSOUNDTYPE_INJURY_FALL && this->m_unit->m_classID == CLASS_DEATH_KNIGHT) {
             properties.m_useDspChain = 1;
             SI2::DK_GetPlayerFilterName(this, properties.m_dspChainName, sizeof(properties.m_dspChainName));
         }
@@ -13787,7 +13805,7 @@ void CGPlayer_C::PlayUnitSound(uint32_t soundType, int32_t force) {
         properties.ResetToDefaults();
         properties.m_group = group;
 
-        if (soundType != 5 && soundType != 6 && soundType != 7 && soundType != 10 && soundType != 11 && soundType != 12 && soundType != 13 && this->m_unit->m_unitFieldBytes0[1] == 6) {
+        if (soundType != UNITSOUNDTYPE_STAND && soundType != UNITSOUNDTYPE::UNITSOUNDTYPE_UNUSED_6 && soundType != UNITSOUNDTYPE_WINGFLAP && soundType != UNITSOUNDTYPE_WINGGLIDE && soundType != UNITSOUNDTYPE_JUMPSTART && soundType != UNITSOUNDTYPE_JUMPEND && soundType != UNITSOUNDTYPE_INJURY_FALL && this->m_unit->m_classID == CLASS_DEATH_KNIGHT) {
             properties.m_useDspChain = 1;
             SI2::DK_GetPlayerFilterName(this, properties.m_dspChainName, sizeof(properties.m_dspChainName));
         }
@@ -13833,30 +13851,30 @@ int32_t CGPlayer_C::OnSignedResults(CDataStore* msg) {
         return 1;
     }
 
-    switch (result) {
-        case 0:
+    switch (static_cast<PETITION_SIGN_RESULT>(result)) {
+        case PETITION_SIGN_SUCCESS:
             CGGameUI::DisplayError(ERR_PETITION_SIGNED);
             FrameScript_SignalEvent(SCRIPT_EVENT_PETITION_CLOSED, nullptr);
             break;
-        case 1:
+        case PETITION_SIGN_ALREADY_SIGNED:
             CGGameUI::DisplayError(ERR_PETITION_ALREADY_SIGNED);
             break;
-        case 2:
+        case PETITION_SIGN_IN_GUILD:
             CGGameUI::DisplayError(ERR_PETITION_IN_GUILD);
             break;
-        case 3:
+        case PETITION_SIGN_CREATOR:
             CGGameUI::DisplayError(ERR_PETITION_CREATOR);
             break;
-        case 5:
+        case PETITION_SIGN_NOT_SAME_SERVER:
             CGGameUI::DisplayError(ERR_PETITION_NOT_SAME_SERVER);
             break;
-        case 8:
+        case PETITION_SIGN_FULL:
             CGGameUI::DisplayError(ERR_PETITION_FULL);
             break;
-        case 10:
+        case PETITION_SIGN_ALREADY_SIGNED_OTHER:
             CGGameUI::DisplayError(ERR_PETITION_ALREADY_SIGNED_OTHER);
             break;
-        case 11:
+        case PETITION_SIGN_RESTRICTED_ACCOUNT:
             CGGameUI::DisplayError(ERR_PETITION_RESTRICTED_ACCOUNT);
             break;
         default:
@@ -13911,7 +13929,7 @@ int32_t __stdcall CGPlayer_C::OnTrainerList(CDataStore* msg) {
     const int32_t* abilityReqs[3] = { abilityReqs0, abilityReqs1, abilityReqs2 };
 
     if (trainer == s_lastTrainerRequest || trainer == CGGossipInfo::m_gossip) {
-        CGClassTrainer::SetTrainer(trainer, type);
+        CGClassTrainer::SetTrainer(trainer, static_cast<TRAINER_TYPE>(type));
         CGClassTrainer::AddServices(count, spellIds, moneyCosts, pointCosts, levelReqs, skillReqs, skillRankReqs, stepSpells, abilityReqs, states, greeting);
     }
 
@@ -13931,7 +13949,7 @@ void CGPlayer_C::TabardDrawCallback(int32_t guildID, const WOWGUID& guid, void* 
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -13955,7 +13973,7 @@ void __stdcall CGPlayer_C::ReadItemResult(NETMESSAGE msgId, CDataStore* msg) {
     msg->Get(guid.m_guid);
 
     if (msgId == SMSG_READ_ITEM_RESULT_OK) {
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!item) {
             return;
@@ -13984,12 +14002,12 @@ void __stdcall CGPlayer_C::ReadItemResult(NETMESSAGE msgId, CDataStore* msg) {
 // VERIFY: 196810c7 manual
 // OFFSET: 0x006D6720
 bool CGPlayer_C::ReportBagItemSubtypeMismatch(uint8_t bag) {
-    if (bag == 0xFF) {
+    if (bag == INVENTORY_BAG_PLAYER) {
         return false;
     }
 
     WOWGUID guid = bag < this->m_bag.m_numSlots ? this->m_bag.m_slots[bag] : WOWGUID();
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item || !item->GetBagFamily()) {
         return false;
@@ -14016,13 +14034,13 @@ bool CGPlayer_C::ReportBagItemSubtypeMismatch(uint8_t bag) {
 void CGPlayer_C::StartGiftWrap(CGItem_C* item) {
     s_giftWrapItem = item->m_obj->m_guid;
     CGGameUI::LockItem(s_giftWrapItem);
-    CursorSetResetMode(2);
-    CursorSetMode(2);
+    CursorSetResetMode(CAST_CURSOR);
+    CursorSetMode(CAST_CURSOR);
 }
 
 // VERIFY: 35dbeab8 manual
 // OFFSET: 0x006D6BA0
-void CGPlayer_C::UpdateObjComponentVisuals(const VisibleItem_C* item, GEOCOMPONENTLINKS link) {
+void CGPlayer_C::UpdateObjComponentVisuals(const VisibleItem_C* item, MODEL_ATTACHMENT_ID link) {
     int32_t visual = const_cast<VisibleItem_C*>(item)->GetItemEnchantmentVisualID();
 
     if (visual == -1) {
@@ -14051,7 +14069,7 @@ void CGPlayer_C::HandleSkinning(CGObject_C* object, bool autoInteract, bool a4) 
     float dz = position.z - target.z;
 
     if (maxRange * maxRange <= dx * dx + dz * dz + dy * dy && autoInteract) {
-        this->SetTrackingTarget(object->m_obj->m_guid, 9);
+        this->SetTrackingTarget(object->m_obj->m_guid, TRACKTYPE_SKIN);
     } else {
         Spell_C::CastSpell(CGSpellBook::GetSkinningSpell(object), nullptr, object->m_obj->m_guid, false);
     }
@@ -14068,7 +14086,7 @@ void CGPlayer_C::HandleSkinning(CGObject_C* object, bool autoInteract, bool a4) 
 // VERIFY: 1b6ef3fb manual
 // OFFSET: 0x006D73E0
 int32_t CGPlayer_C::XRayVisionEffectProc(WOWGUID guid, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit || !unit->UsesNpcBakedTexture()) {
         return 1;
@@ -14094,7 +14112,7 @@ int32_t CGPlayer_C::XRayVisionEffectProc(WOWGUID guid, void* param) {
         SpellVisualKitRec* kit = g_spellVisualKitDB.GetRecord(visual->m_targetImpactKit);
 
         if (kit) {
-            PlaySpellVisuaKitData data(spell, kit, 6);
+            PlaySpellVisuaKitData data(spell, kit, SPELL_VISUAL_KIT_TARGET_IMPACT);
             unit->PlaySpellVisualKit(data);
         }
     }
@@ -14111,7 +14129,7 @@ int32_t CGPlayer_C::OnItemRefundResult(CDataStore* msg) {
     msg->Get(result);
 
     if (guid) {
-        ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__);
+        ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__);
     }
 
     if (result) {
@@ -14205,7 +14223,7 @@ int32_t CGPlayer_C::OnItemRefundResult(CDataStore* msg) {
 // VERIFY: 76b03ffe manual
 // OFFSET: 0x006DA8F0
 int32_t OnUpdatePlayerRuneRegen(WOWGUID guid, uint32_t offset, uint32_t count, const void* value, void* param) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
@@ -14249,7 +14267,7 @@ int32_t OnUpdatePlayerRuneRegen(WOWGUID guid, uint32_t offset, uint32_t count, c
 // OFFSET: 0x006DB1C0
 void CGPlayer_C::TalkToTalentMaster(const WOWGUID& guid, uint32_t cost) {
     WOWGUID target = guid ? guid : s_talentMaster;
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -14294,7 +14312,7 @@ void CGPlayer_C::TurnOffGuildTabardPurchase() {
     }
 
     WOWGUID tabard = bag->m_numSlots > 18 ? bag->m_slots[18] : WOWGUID();
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tabard, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(tabard, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item && item->GetInventoryType() == 19) {
         int32_t displayId = item->GetDisplayID();
@@ -14317,7 +14335,7 @@ void CGPlayer_C::SetAFK(const char* message) {
     }
 
     if (!CGChat::m_afk) {
-        if (this->m_player->m_playerFlags & 0x4) {
+        if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DND) {
             CGChat::AddChatMessage(FrameScript_GetText("CLEARED_DND", -1, GENDER_NOT_APPLICABLE), 0, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
         }
 
@@ -14385,15 +14403,15 @@ void CGPlayer_C::EquipItem(CGItem_C* item) {
 void CGPlayer_C::FillPartyMemberState(CGPartyMemberState* state) {
     state->m_flags = 1;
 
-    if (this->m_player->m_playerFlags & 0x10) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST) {
         state->m_flags = 9;
     }
 
-    if (this->m_unit->m_unitFieldBytes2[1] & 0x1) {
+    if (this->m_unit->m_pvpFlags & UNIT_PVP_FLAG_PVP) {
         state->m_flags |= 0x2;
     }
 
-    if (this->m_unit->m_unitFieldBytes2[1] & 0x4) {
+    if (this->m_unit->m_pvpFlags & UNIT_PVP_FLAG_FFA) {
         state->m_flags |= 0x10;
     }
 
@@ -14401,15 +14419,15 @@ void CGPlayer_C::FillPartyMemberState(CGPartyMemberState* state) {
         state->m_flags |= 0x4;
     }
 
-    if (this->m_player->m_playerFlags & 0x2) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_AFK) {
         state->m_flags |= 0x40;
     }
 
-    if (this->m_player->m_playerFlags & 0x4) {
+    if (this->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DND) {
         state->m_flags |= 0x80;
     }
 
-    if (this->m_unit->m_unitDynamicFlags & 0x40) {
+    if (this->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_REFER_A_FRIEND) {
         state->m_flags |= 0x100;
     }
 
@@ -14419,7 +14437,7 @@ void CGPlayer_C::FillPartyMemberState(CGPartyMemberState* state) {
 
     state->m_health = this->m_unit->m_unitFieldHealth;
     state->m_maxHealth = this->m_unit->m_unitFieldMaxhealth;
-    uint8_t powerType = this->m_unit->m_unitFieldBytes0[3];
+    uint8_t powerType = this->m_unit->m_displayPower;
     state->m_powerType = powerType;
     state->m_power = this->m_unit->m_unitFieldPower[powerType];
     state->m_maxPower = this->m_unit->m_unitFieldMaxpower[powerType];
@@ -14439,7 +14457,7 @@ void CGPlayer_C::FillPartyMemberState(CGPartyMemberState* state) {
     for (uint32_t i = 0; i < this->GetAuraCount(); i++) {
         AuraData* aura = this->GetAura(i);
 
-        if (!aura->m_spellId || !(aura->m_flags & 0x7)) {
+        if (!aura->m_spellId || !(aura->m_flags & AURA_FLAG_EFFECT_MASK)) {
             continue;
         }
 
@@ -14464,7 +14482,7 @@ void CGPlayer_C::FillPartyMemberState(CGPartyMemberState* state) {
         return;
     }
 
-    CGUnit_C* transport = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->GetTransportGUID() }, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* transport = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->GetTransportGUID() }, TYPE_UNIT, __FILE__, __LINE__));
     VehicleRec* vehicle = transport && transport->m_vehicle ? transport->m_vehicle->m_vehicleRec : nullptr;
     uint8_t seat = this->m_movementData.m_transportSeat;
 
@@ -14498,20 +14516,20 @@ void CGPlayer_C::UpdatePartyMemberState() {
 
 // VERIFY: 1ec0ea5b manual
 // OFFSET: 0x006E1A70
-void __stdcall CGPlayer_C::ServerBindConfirm(WOWGUID item, uint64_t a2, uint32_t a3, uint64_t a4, uint8_t a5) {
-    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+void __stdcall CGPlayer_C::ServerBindConfirm(WOWGUID item, uint64_t srcContainer, uint32_t srcSlot, uint64_t dstContainer, uint8_t dstSlot) {
+    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!object) {
         return;
     }
 
-    CGGameUI::SetCursorItem(item, WOWGUID{ a2 }, a3, 1, 0, 1);
+    CGGameUI::SetCursorItem(item, WOWGUID{ srcContainer }, srcSlot, 1, 0, 1);
     uint32_t index = FindEmptySwapIndex();
     ITEMSWAP* swap = &s_itemSwaps.m_data[index];
-    swap->m_srcContainer.m_guid = a2;
-    swap->m_srcSlot = a3;
-    swap->m_dstContainer.m_guid = a4;
-    swap->m_dstSlot = a5;
+    swap->m_srcContainer.m_guid = srcContainer;
+    swap->m_srcSlot = srcSlot;
+    swap->m_dstContainer.m_guid = dstContainer;
+    swap->m_dstSlot = dstSlot;
     swap->m_itemId = object->m_obj->m_entryID;
     FrameScript_SignalEvent(SCRIPT_EVENT_AUTOEQUIP_BIND_CONFIRM, "%d", index);
 }
@@ -14520,7 +14538,7 @@ void __stdcall CGPlayer_C::ServerBindConfirm(WOWGUID item, uint64_t a2, uint32_t
 // OFFSET: 0x006E2880
 bool CGPlayer_C::ToggleFarSight(CGObject_C* object) {
     WOWGUID farsight = this->m_obj->m_guid == ClntObjMgrGetActivePlayer() ? this->m_player->m_playerFarsight : WOWGUID();
-    CGObject_C* target = ClntObjMgrObjectPtr(farsight, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* target = ClntObjMgrObjectPtr(farsight, TYPE_OBJECT, __FILE__, __LINE__);
     bool hasFarsight = this->m_obj->m_guid == ClntObjMgrGetActivePlayer() && this->m_player->m_playerFarsight;
 
     if (hasFarsight && !target) {
@@ -14534,19 +14552,19 @@ bool CGPlayer_C::ToggleFarSight(CGObject_C* object) {
         return false;
     }
 
-    if (target && (object || !(this->m_combatModeFlags & 0x1))) {
-        if (!(this->m_combatModeFlags & 0x1)) {
+    if (target && (object || !(this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT))) {
+        if (!(this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT)) {
             WDataStore msg;
             msg.Put(static_cast<uint32_t>(CMSG_FAR_SIGHT));
             msg.Put(static_cast<uint8_t>(1));
             msg.Finalize();
             ClientServices::Send2(&msg);
-            this->m_combatModeFlags |= 0x1;
+            this->m_combatModeFlags |= COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT;
         }
 
         this->SetCombatMode();
 
-        if ((target->m_obj->m_type & TYPEMASK_UNIT) && static_cast<CGUnit_C*>(target)->IsLocalClientControlled()) {
+        if ((target->m_obj->m_type & TYPE_UNIT) && static_cast<CGUnit_C*>(target)->IsLocalClientControlled()) {
             CGUnit_C::SetActiveMover(target->m_obj->m_guid.m_guid);
             CGWorldFrame::s_currentWorldFrame->SetCameraTarget(target, 0);
         } else {
@@ -14559,8 +14577,8 @@ bool CGPlayer_C::ToggleFarSight(CGObject_C* object) {
         return true;
     }
 
-    if (this->m_combatModeFlags & 0x1) {
-        this->m_combatModeFlags &= ~0x1u;
+    if (this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT) {
+        this->m_combatModeFlags &= ~COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT;
         WDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_FAR_SIGHT));
         msg.Put(static_cast<uint8_t>(0));
@@ -14581,7 +14599,7 @@ bool CGPlayer_C::ToggleFarSight(CGObject_C* object) {
 // VERIFY: 8ae4c78f auto
 // OFFSET: 0x006E2B00
 void CGPlayer_C::ClearFarSight() {
-    if (!(this->m_combatModeFlags & 0x1)) {
+    if (!(this->m_combatModeFlags & COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT)) {
         return;
     }
 
@@ -14601,13 +14619,13 @@ int32_t FarsightChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, con
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 1;
     }
 
-    CGObject_C* target = ClntObjMgrObjectPtr(WOWGUID{ player->GetFarSightGuid() }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* target = ClntObjMgrObjectPtr(WOWGUID{ player->GetFarSightGuid() }, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (target) {
         player->ToggleFarSight(target);
@@ -14630,7 +14648,7 @@ int32_t FarsightChangeHandler(WOWGUID guid, uint32_t offset, uint32_t count, con
 // VERIFY: d6443501 manual
 // OFFSET: 0x007554F0
 float CGPlayer_C::CalcRewardHonor(float honor) {
-    if (!(this->m_obj->m_type & TYPEMASK_PLAYER)) {
+    if (!(this->m_obj->m_type & TYPE_PLAYER)) {
         return 0.0f;
     }
 
@@ -14724,7 +14742,7 @@ int32_t Packet_SMSG_VOICE_SESSION_LEAVE(void* param, NETMESSAGE msgId, uint32_t 
     msg->Get(talker);
     uint64_t session = 0;
     msg->Get(session);
-    VoiceSessionLeave(talker, session, 4);
+    VoiceSessionLeave(talker, session, COMSATDATA::SESSION_TYPE::NONE);
     return 1;
 }
 
@@ -14775,6 +14793,6 @@ int32_t Packet_SMSG_VOICE_PARENTAL_CONTROLS(void* param, NETMESSAGE msgId, uint3
 
 // VERIFY: a5006ce1 auto
 // OFFSET: 0x006DC7E0
-int32_t CGPlayer_C::GetVirtualItemDisplayRec(uint32_t slot, ItemDisplayInfoRec& rec) const {
+int32_t CGPlayer_C::GetVirtualItemDisplayRec(VIRTUAL_MONSTER_SLOT slot, ItemDisplayInfoRec& rec) const {
     return g_itemDisplayInfoDB.GetRecord(this->GetVirtualItemDisplayID(slot), &rec);
 }

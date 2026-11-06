@@ -13,6 +13,7 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "WoW/Source/WorldClient/MapBaseObj.h"
 #include "Engine/Source/Tempest/C2iVector.h"
+#include "Engine/Source/Tempest/CRange.h"
 #include "WoW/Source/WorldClient/MapObjGroup.h"
 
 class CFacet;
@@ -37,13 +38,13 @@ struct SMChunk;
 struct SMLayer;
 struct SMLiquidChunk;
 
-class CGxVertexPN {
+class CGxVertexPN { // GxVBF_PN: interleaved position and normal, 24 bytes per vertex.
     public:
     /* 0000 */ C3Vector m_position;
     /* 000C */ C3Vector m_normal;
 };
 
-class CGxVertexPNC {
+class CGxVertexPNC { // GxVBF_PNC: position/normal followed by packed BGRA color, 28 bytes per vertex.
     public:
     /* 0000 */ C3Vector m_position;
     /* 000C */ C3Vector m_normal;
@@ -95,8 +96,8 @@ class CMapChunk : public CMapBaseObj {
     /* 0100 */ TSExplicitList<CChunkLiquid, offsetof(CChunkLiquid, m_chunkLink)> m_liquidChunkLinkList;
     /* 010C */ uint8_t* m_chunkInfoBeginPtr;
     /* 0110 */ SMChunk* m_header;
-    /* 0114 */ uint8_t* m_lowQualityTexMap;
-    /* 0118 */ uint8_t* m_predTexture;
+    /* 0114 */ uint16_t* m_predTex;
+    /* 0118 */ uint8_t* m_noEffectDoodad;
     /* 011C */ float* m_height;
     /* 0120 */ uint32_t* m_vertexShading;
     /* 0124 */ int8_t* m_normals;
@@ -151,11 +152,38 @@ class CWSoundEmitter {
 };
 
 struct SLTiles {
-    /* 0000 */ char m_tiles [8][8];
+    /* 0000 */ uint8_t m_tiles [8][8];
 };
 
+struct SWVert {
+    /* 0000 */ uint8_t m_depth;
+    /* 0001 */ uint8_t m_flow0Pct;
+    /* 0002 */ uint8_t m_flow1Pct;
+    /* 0003 */ uint8_t m_filler;
+    /* 0004 */ float m_height;
+};
+
+struct SOVert {
+    /* 0000 */ uint8_t m_depth;
+    /* 0001 */ uint8_t m_foam;
+    /* 0002 */ uint8_t m_wet;
+    /* 0003 */ uint8_t m_filler;
+};
+
+struct SMVert {
+    /* 0000 */ uint16_t m_s;
+    /* 0002 */ uint16_t m_t;
+    /* 0004 */ float m_height;
+};
+
+// 0.5.3 symbols describe these overlapping legacy MCLQ vertex views.
+// The 3.3.5 reader retains their eight-byte stride, including for ocean data.
 struct SLVert {
-    /* 0000 */ uint8_t unk_0000[8];
+    union {
+        /* 0000 */ SWVert m_waterVert;
+        /* 0000 */ SOVert m_oceanVert;
+        /* 0000 */ SMVert m_magmaVert;
+    };
 };
 
 struct SMChunk {
@@ -174,10 +202,10 @@ struct SMChunk {
     /* 0034 */ uint32_t m_areaid;
     /* 0038 */ uint32_t m_nMapObjRefs;
     /* 003C */ uint16_t m_holes;
-    /* 003E */ uint16_t unk_003E;
-    /* 0040 */ uint8_t m_lowQualityTextureMap [16];
-    /* 0050 */ uint32_t m_predTex;
-    /* 0054 */ uint32_t m_nEffectDoodad;
+    /* 003E */ uint16_t unused_003E;
+    // 0.5.3 names; 3.3.5 reads eight WORD selector rows and eight BYTE suppression rows.
+    /* 0040 */ uint16_t m_predTex [8];
+    /* 0050 */ uint8_t m_noEffectDoodad [8];
     /* 0058 */ uint32_t m_ofsSndEmitters;
     /* 005C */ uint32_t m_nSndEmitters;
     /* 0060 */ uint32_t m_ofsLiquid;
@@ -196,34 +224,13 @@ struct SWFlowv {
     /* 0024 */ float m_frequency;
 };
 
+// Legacy MCLQ payload: the data prefix of 0.5.3 CChunkLiquid, without its runtime links.
 struct SMLiquidChunk {
-    /* 0000 */ float m_minHeight;
-    /* 0004 */ float m_maxHeight;
+    /* 0000 */ CRange m_height;
     /* 0008 */ SLVert m_verts [81];
     /* 0290 */ SLTiles m_tiles;
     /* 02D0 */ uint32_t m_nFlowvs;
     /* 02D4 */ SWFlowv m_flowvs [2];
-};
-
-struct SMVert {
-    /* 0000 */ uint16_t m_s;
-    /* 0002 */ uint16_t m_t;
-    /* 0004 */ float m_height;
-};
-
-struct SOVert {
-    /* 0000 */ char m_depth;
-    /* 0001 */ char m_foam;
-    /* 0002 */ char m_wet;
-    /* 0003 */ char m_filler;
-};
-
-struct SWVert {
-    /* 0000 */ char m_depth;
-    /* 0001 */ char m_flow0Pct;
-    /* 0002 */ char m_flow1Pct;
-    /* 0003 */ char m_filler;
-    /* 0004 */ float m_height;
 };
 
 #endif

@@ -1,4 +1,5 @@
 #include "WorldText.h"
+#include "Engine/Source/Tempest/Color.h"
 #include <cmath>
 #include <new>
 #include <typeinfo>
@@ -40,17 +41,17 @@ static float s_critHeightCurve[3][4] = {
 };
 
 // STATIC: 0x00AF4748
-static WORLDTEXTTYPE s_worldTextTypes[11] = {
-    { 2.0f, 150, 760, 1500, 0.018333333f, 0.018333333f, CImVector(0xFF, 0xFF, 0xFF, 0xFF) },
-    { 2.0f, 150, 90, 1500, 0.018333333f, 0.018333333f, CImVector(0xFF, 0xFF, 0xFF, 0xFF) },
-    { 0.0f, 150, 1000, 1500, 0.0f, 0.027499998f, CImVector(0xFF, 0xFF, 0xFF, 0xFF) },
-    { 2.0f, 150, 1000, 1500, 0.018333333f, 0.018333333f, CImVector(0xFF, 0xFF, 0xFF, 0xFF) },
+static WORLDTEXTTYPE s_worldTextTypes[NUM_WORLDTEXTTYPES] = {
+    { 2.0f, 150, 760, 1500, 0.018333333f, 0.018333333f, CImVector(COLOR_WHITE_BGRA) },
+    { 2.0f, 150, 90, 1500, 0.018333333f, 0.018333333f, CImVector(COLOR_WHITE_BGRA) },
+    { 0.0f, 150, 1000, 1500, 0.0f, 0.027499998f, CImVector(COLOR_WHITE_BGRA) },
+    { 2.0f, 150, 1000, 1500, 0.018333333f, 0.018333333f, CImVector(COLOR_WHITE_BGRA) },
     { 0.0f, 500, 2000, 4500, 0.018333333f, 0.018333333f, CImVector(0x8B, 0x00, 0x94, 0x80) },
     { 0.0f, 500, 2000, 4500, 0.018333333f, 0.018333333f, CImVector(0x0A, 0xCA, 0xE0, 0xFF) },
-    { 2.0f, 150, 760, 1500, 0.018333333f, 0.018333333f, CImVector(0x00, 0xFF, 0x00, 0xFF) },
-    { 0.0f, 150, 1000, 1500, 0.0f, 0.027499998f, CImVector(0x00, 0xFF, 0x00, 0xFF) },
-    { 6.0f, 150, 760, 1500, 0.027499998f, 0.027499998f, CImVector(0xFF, 0xFF, 0xFF, 0xFF) },
-    { 6.0f, 150, 760, 1500, 0.027499998f, 0.027499998f, CImVector(0x00, 0xFF, 0x00, 0xFF) },
+    { 2.0f, 150, 760, 1500, 0.018333333f, 0.018333333f, CImVector(COLOR_GREEN_BGRA) },
+    { 0.0f, 150, 1000, 1500, 0.0f, 0.027499998f, CImVector(COLOR_GREEN_BGRA) },
+    { 6.0f, 150, 760, 1500, 0.027499998f, 0.027499998f, CImVector(COLOR_WHITE_BGRA) },
+    { 6.0f, 150, 760, 1500, 0.027499998f, 0.027499998f, CImVector(COLOR_GREEN_BGRA) },
     { 2.0f, 150, 760, 1500, 0.018333333f, 0.018333333f, CImVector(0x00, 0x99, 0xFF, 0xFF) },
 };
 
@@ -93,7 +94,7 @@ static const char* s_pvpRankTextureNames[15] = { "Interface\\PvPRankBadges\\PvPR
 
 // INLINED
 inline WORLDTEXTSTRING::WORLDTEXTSTRING() {
-    this->m_type = 11;
+    this->m_type = NUM_WORLDTEXTTYPES;
     this->m_halfWidth = 0.0f;
     this->m_halfHeight = 0.0f;
     this->m_string = nullptr;
@@ -273,7 +274,7 @@ void WORLDTEXTSTRING::CalculateTextHeight(uint32_t elapsed) {
     float progress = static_cast<float>(elapsed) / static_cast<float>(type.m_duration);
     float height;
 
-    if (this->m_type == 2 || this->m_type == 7) {
+    if (this->m_type == WT_CRIT || this->m_type == WT_CRIT_HEAL) {
         float scale = 1.0f;
 
         for (uint32_t i = 0; i < 3; i++) {
@@ -314,11 +315,11 @@ WORLDTEXTSTRING* WorldTextCreate(uint32_t type, const C3Vector& position, const 
     }
 
     string->m_position = position;
-    string->m_type = type;
+    string->m_type = static_cast<WORLDTEXT_STYLE>(type);
     string->m_startTime = OsGetAsyncTimeMs();
     SStrCopy(string->m_text, text, sizeof(string->m_text));
 
-    if (type == 5 && pvpRank) {
+    if (type == WT_HONORGAIN && pvpRank) {
         string->m_pvpRank = *pvpRank;
     }
 
@@ -350,7 +351,7 @@ bool WORLDTEXTSTRING::Update(uint32_t time) {
     CGCamera* camera = CGWorldFrame::GetActiveCamera();
 
     if (camera) {
-        CGObject_C* transport = ClntObjMgrObjectPtr(camera->m_relativeTo, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        CGObject_C* transport = ClntObjMgrObjectPtr(camera->m_relativeTo, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
         if (transport) {
             position = position * transport->GetMatrix();
@@ -407,7 +408,7 @@ bool WORLDTEXTSTRING::Update(uint32_t time) {
     rect.minX = x - this->m_halfWidth;
     rect.maxY = y - this->m_halfHeight;
     rect.maxX = x + this->m_halfWidth;
-    SmartScreenRectPlace(1, rect);
+    SmartScreenRectPlace(SRECTGRID_WORLDTEXT, rect);
 
     C3Vector stringPosition;
     stringPosition.x = DDCToNDCWidth((rect.maxX + rect.minX) * 0.5f) - this->m_halfWidth;
@@ -508,7 +509,7 @@ void WorldTextRenderBatch() {
     }
 
     g_theGxDevicePtr->BufUnlock(vertexBuf, 0);
-    vertexBuf->unk_001C = 1;
+    vertexBuf->m_hasData = 1;
     GxPrimVertexPtr(vertexBuf, GxVBF_PT);
 
     CGxBuf* indexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Index, sizeof(uint16_t), 6);
@@ -520,7 +521,7 @@ void WorldTextRenderBatch() {
     indices[4] = 1;
     indices[5] = 2;
     g_theGxDevicePtr->BufUnlock(indexBuf, 0);
-    indexBuf->unk_001C = 1;
+    indexBuf->m_hasData = 1;
     g_theGxDevicePtr->PrimIndexPtr(indexBuf);
 
     g_theGxDevicePtr->XformPush(GxXform_World);

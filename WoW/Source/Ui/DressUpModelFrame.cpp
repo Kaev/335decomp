@@ -1,4 +1,5 @@
 #include "DressUpModelFrame.h"
+#include "WoW/Common/Types.h"
 #include <new>
 #include <typeinfo>
 #include "Engine/Source/Frame/CScriptObject.h"
@@ -14,6 +15,7 @@
 #include "WoW/Source/DB/DBClient/DBCacheInstances.h"
 #include "WoW/Source/DB/DBClient/CreatureStats_C.h"
 #include "WoW/Source/DB/Rec/SpellRec.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Object/ItemStats.h"
 #include "WoW/Source/Object/Player.h"
 #include "WoW/Source/Object/Unit.h"
@@ -115,11 +117,11 @@ void CGDressUpModelFrame::UpdateModel() {
     CM2Model* model = this->m_component->m_data.m_model;
 
     if (model->m_attachParent) {
-        model->m_fFlags = (model->m_fFlags & ~0x80u) | (ready << 7);
-        model->m_fFlags = (model->m_fFlags & ~0x20000u) | (ready << 17);
+        model->m_runtimeFlags = (model->m_runtimeFlags & ~0x80u) | (ready << 7);
+        model->m_runtimeFlags = (model->m_runtimeFlags & ~0x20000u) | (ready << 17);
     } else {
-        model->m_fFlags = (model->m_fFlags & ~0x8u) | (ready << 3);
-        model->m_fFlags = (model->m_fFlags & ~0x10000u) | (ready << 16);
+        model->m_runtimeFlags = (model->m_runtimeFlags & ~0x8u) | (ready << 3);
+        model->m_runtimeFlags = (model->m_runtimeFlags & ~0x10000u) | (ready << 16);
     }
 }
 
@@ -146,31 +148,31 @@ void CGDressUpModelFrame::Undress() {
     }
 
     if (this->m_mainHand.m_classID) {
-        CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(this->m_mainHand.m_sheatheType), this->m_mainHand.m_inventoryType == 14);
+        CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(this->m_mainHand.m_sheatheType), this->m_mainHand.m_inventoryType == INVTYPE_SHIELD);
         this->m_mainHand.m_classID = 0;
-        this->m_mainHand.m_inventoryType = 0;
+        this->m_mainHand.m_inventoryType = INVTYPE_NON_EQUIP;
     }
 
     if (this->m_offHand.m_classID) {
-        CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(this->m_offHand.m_sheatheType), this->m_offHand.m_inventoryType == 14);
+        CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(this->m_offHand.m_sheatheType), this->m_offHand.m_inventoryType == INVTYPE_SHIELD);
         this->m_offHand.m_classID = 0;
-        this->m_offHand.m_inventoryType = 0;
+        this->m_offHand.m_inventoryType = INVTYPE_NON_EQUIP;
     }
 }
 
 // VERIFY: d67e4d73 auto
 // OFFSET: 0x00597C50
 static bool HandItemsCompatible(uint32_t mainHandType, uint32_t offHandType, bool dualWield) {
-    if (mainHandType != 13 && mainHandType != 21) {
-        return mainHandType == 17 && offHandType != 15 && CGItem_C::CanGoInSlot(s_mainHandItemId, 16, 0);
+    if (mainHandType != INVTYPE_WEAPON && mainHandType != INVTYPE_WEAPONMAINHAND) {
+        return mainHandType == INVTYPE_2HWEAPON && offHandType != INVTYPE_RANGED && CGItem_C::CanGoInSlot(s_mainHandItemId, 16, 0);
     }
 
-    if (offHandType == 14 || offHandType == 23) {
+    if (offHandType == INVTYPE_SHIELD || offHandType == INVTYPE_HOLDABLE) {
         return true;
     }
 
-    if (offHandType != 13 && offHandType != 22) {
-        return (offHandType == 21 || offHandType == 17) && CGItem_C::CanGoInSlot(s_offHandItemId, 16, 0);
+    if (offHandType != INVTYPE_WEAPON && offHandType != INVTYPE_WEAPONOFFHAND) {
+        return (offHandType == INVTYPE_WEAPONMAINHAND || offHandType == INVTYPE_2HWEAPON) && CGItem_C::CanGoInSlot(s_offHandItemId, 16, 0);
     }
 
     return dualWield;
@@ -257,8 +259,8 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
         visual = 0;
     }
 
-    if (!stats->m_inventoryType) {
-        for (uint32_t i = 0; i < 5; i++) {
+    if ((stats->m_inventoryType == INVTYPE_NON_EQUIP)) {
+        for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
             if (!stats->m_spellId[i]) {
                 continue;
             }
@@ -271,22 +273,22 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
 
             SpellRec learned;
 
-            if (spell.m_effect[0] != 36) {
+            if (spell.m_effect[0] != SPELL_EFFECT_LEARN_SPELL) {
                 continue;
             }
 
             int32_t learnedId = spell.m_effectTriggerSpell[0];
 
             if (!learnedId) {
-                for (uint32_t j = 0; j < 5; j++) {
-                    if (stats->m_spellTrigger[j] == 6) {
+                for (uint32_t j = 0; j < NUM_ITEM_SPELLS; j++) {
+                    if (stats->m_spellTrigger[j] == ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL) {
                         learnedId = stats->m_spellId[j];
                         break;
                     }
                 }
             }
 
-            if (g_spellDB.GetRecord(learnedId, &learned) && learned.m_effect[0] == 24) {
+            if (g_spellDB.GetRecord(learnedId, &learned) && learned.m_effect[0] == SPELL_EFFECT_CREATE_ITEM) {
                 this->TryOn(learned.m_effectItemType[0], nullptr, -1);
                 return;
             }
@@ -296,54 +298,54 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
     ITEM_SLOT slot;
 
     switch (stats->m_inventoryType) {
-        case 1:
+        case INVTYPE_HEAD:
             slot = static_cast<ITEM_SLOT>(0);
             break;
 
-        case 2:
-        case 11:
-        case 12:
-        case 28:
+        case INVTYPE_NECK:
+        case INVTYPE_FINGER:
+        case INVTYPE_TRINKET:
+        case INVTYPE_RELIC:
             return;
 
-        case 3:
+        case INVTYPE_SHOULDERS:
             slot = static_cast<ITEM_SLOT>(1);
             break;
 
-        case 4:
+        case INVTYPE_BODY:
             slot = static_cast<ITEM_SLOT>(2);
             break;
 
-        case 5:
-        case 20:
+        case INVTYPE_CHEST:
+        case INVTYPE_ROBE:
             slot = static_cast<ITEM_SLOT>(3);
             break;
 
-        case 6:
+        case INVTYPE_WAIST:
             slot = static_cast<ITEM_SLOT>(4);
             break;
 
-        case 7:
+        case INVTYPE_LEGS:
             slot = static_cast<ITEM_SLOT>(5);
             break;
 
-        case 8:
+        case INVTYPE_FEET:
             slot = static_cast<ITEM_SLOT>(6);
             break;
 
-        case 9:
+        case INVTYPE_WRISTS:
             slot = static_cast<ITEM_SLOT>(7);
             break;
 
-        case 10:
+        case INVTYPE_HANDS:
             slot = static_cast<ITEM_SLOT>(8);
             break;
 
-        case 16:
+        case INVTYPE_CLOAK:
             slot = static_cast<ITEM_SLOT>(10);
             break;
 
-        case 19: {
+        case INVTYPE_TABARD: {
             if (!this->m_component) {
                 return;
             }
@@ -353,7 +355,7 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
             ItemDisplayInfoRec display;
 
             if (g_itemDisplayInfoDB.GetRecord(stats->m_displayId, &display) && (display.m_flags & 0x1)) {
-                CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+                CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPE_PLAYER, __FILE__, __LINE__));
 
                 if (player) {
                     int32_t emblemStyle;
@@ -371,15 +373,15 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
             return;
         }
 
-        case 13:
-        case 14:
-        case 15:
-        case 17:
-        case 21:
-        case 22:
-        case 23:
-        case 25:
-        case 26: {
+        case INVTYPE_WEAPON:
+        case INVTYPE_SHIELD:
+        case INVTYPE_RANGED:
+        case INVTYPE_2HWEAPON:
+        case INVTYPE_WEAPONMAINHAND:
+        case INVTYPE_WEAPONOFFHAND:
+        case INVTYPE_HOLDABLE:
+        case INVTYPE_THROWN:
+        case INVTYPE_RANGEDRIGHT: {
             CGPlayer_C* player = nullptr;
 
             if (this->m_unitGuid == ClntObjMgrGetActivePlayer()) {
@@ -390,10 +392,10 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
 
             if (hand == -1) {
                 switch (stats->m_inventoryType) {
-                    case 13: {
+                    case INVTYPE_WEAPON: {
                         uint8_t mainType;
 
-                        if (!this->m_mainHand.m_classID || ((mainType = this->m_mainHand.m_inventoryType) != 13 && mainType != 21 && mainType != 17) || !player || !CGPlayer_C::CanDualWield()) {
+                        if (!this->m_mainHand.m_classID || ((mainType = this->m_mainHand.m_inventoryType) != INVTYPE_WEAPON && mainType != INVTYPE_WEAPONMAINHAND && mainType != INVTYPE_2HWEAPON) || !player || !CGPlayer_C::CanDualWield()) {
                             hand = 15;
                             goto mainHand;
                         }
@@ -403,8 +405,8 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
                         break;
                     }
 
-                    case 17:
-                    case 21: {
+                    case INVTYPE_2HWEAPON:
+                    case INVTYPE_WEAPONMAINHAND: {
                         if (!CGItem_C::CanGoInSlot(itemId, 16, 0)) {
                             hand = 15;
                             s_nextHand = 15;
@@ -416,17 +418,17 @@ void CGDressUpModelFrame::TryOnWithVisual(int32_t itemId, int32_t visual, int32_
                         break;
                     }
 
-                    case 25:
-                    case 26: {
+                    case INVTYPE_THROWN:
+                    case INVTYPE_RANGEDRIGHT: {
                         hand = 15;
                         s_nextHand = 15;
                         goto mainHand;
                     }
 
-                    case 14:
-                    case 15:
-                    case 22:
-                    case 23: {
+                    case INVTYPE_SHIELD:
+                    case INVTYPE_RANGED:
+                    case INVTYPE_WEAPONOFFHAND:
+                    case INVTYPE_HOLDABLE: {
                         hand = 16;
                         s_nextHand = 15;
                         goto offHand;
@@ -442,7 +444,7 @@ mainHand:
                 s_mainHandItemId = itemId;
 
                 if (this->m_offHand.m_classID && !HandItemsCompatible(stats->m_inventoryType, this->m_offHand.m_inventoryType, player && CGPlayer_C::CanDualWield())) {
-                    CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(this->m_offHand.m_sheatheType), this->m_offHand.m_inventoryType == 14);
+                    CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(16), static_cast<SHEATHE_TYPE>(this->m_offHand.m_sheatheType), this->m_offHand.m_inventoryType == INVTYPE_SHIELD);
                     s_offHandItemId = 0;
                 }
 
@@ -452,7 +454,7 @@ offHand:
                 s_offHandItemId = itemId;
 
                 if (this->m_mainHand.m_classID && !HandItemsCompatible(this->m_mainHand.m_inventoryType, stats->m_inventoryType, player && CGPlayer_C::CanDualWield())) {
-                    CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(this->m_mainHand.m_sheatheType), this->m_mainHand.m_inventoryType == 14);
+                    CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(15), static_cast<SHEATHE_TYPE>(this->m_mainHand.m_sheatheType), this->m_mainHand.m_inventoryType == INVTYPE_SHIELD);
                     s_mainHandItemId = 0;
                 }
 
@@ -460,7 +462,7 @@ offHand:
             }
 
             if (handItem->m_classID) {
-                CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(hand), static_cast<SHEATHE_TYPE>(handItem->m_sheatheType), handItem->m_inventoryType == 14);
+                CCharacterComponent::RemoveHandItem(this->m_model, static_cast<INVENTORY_SLOTS>(hand), static_cast<SHEATHE_TYPE>(handItem->m_sheatheType), handItem->m_inventoryType == INVTYPE_SHIELD);
             }
 
             handItem->m_classID = static_cast<uint8_t>(stats->m_class);
@@ -470,7 +472,7 @@ offHand:
             ItemDisplayInfoRec display;
 
             if (g_itemDisplayInfoDB.GetRecord(stats->m_displayId, &display)) {
-                CCharacterComponent::AddHandItem(this->m_model, &display, static_cast<INVENTORY_SLOTS>(hand), static_cast<SHEATHE_TYPE>(stats->m_sheatheType), false, stats->m_inventoryType == 14, stats->m_inventoryType == 26, visual);
+                CCharacterComponent::AddHandItem(this->m_model, &display, static_cast<INVENTORY_SLOTS>(hand), static_cast<SHEATHE_TYPE>(stats->m_sheatheType), false, stats->m_inventoryType == INVTYPE_SHIELD, stats->m_inventoryType == INVTYPE_RANGEDRIGHT, visual);
             }
 
             return;
@@ -510,20 +512,20 @@ void CGDressUpModelFrame::SetModel(CM2Model* model) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         this->m_component = CCharacterComponent::AllocComponent();
         model->m_refCount++;
         ComponentData data;
-        data.m_preferences.m_raceID = player->m_unit->m_unitFieldBytes0[0];
-        data.m_preferences.m_sexID = player->m_player->m_playerBytes3[0];
-        data.m_preferences.m_classId = player->m_unit->m_unitFieldBytes0[1];
-        data.m_preferences.m_skinID = player->m_player->m_playerBytes[0];
-        data.m_preferences.m_faceId = player->m_player->m_playerBytes[1];
-        data.m_preferences.m_hairStyleId = player->m_player->m_playerBytes[2];
-        data.m_preferences.m_hairColorId = player->m_player->m_playerBytes[3];
-        data.m_preferences.m_facialHairId = player->m_player->m_playerBytes2[0];
+        data.m_preferences.m_raceID = player->m_unit->m_raceID;
+        data.m_preferences.m_sexID = player->m_player->sex;
+        data.m_preferences.m_classId = player->m_unit->m_classID;
+        data.m_preferences.m_skinID = player->m_player->skinID;
+        data.m_preferences.m_faceId = player->m_player->faceID;
+        data.m_preferences.m_hairStyleId = player->m_player->hairStyleID;
+        data.m_preferences.m_hairColorId = player->m_player->hairColorID;
+        data.m_preferences.m_facialHairId = player->m_player->facialHairStyleID;
         data.m_model = model;
         data.m_flags ^= (data.m_flags ^ (static_cast<uint32_t>(player->m_obj->m_guid == ClntObjMgrGetActivePlayer()) << 1)) & 0x2;
         CCharacterComponent::ValidateComponentData(&data, COMPONENT_CONTEXT_2);
@@ -554,7 +556,7 @@ void CGDressUpModelFrame::SetModel(CM2Model* model) {
 
                     hand = 16;
                 } else {
-                    if (slot == 0 ? (player->m_player->m_playerFlags & 0x400) != 0 : slot == 14 ? (player->m_player->m_playerFlags & 0x800) != 0 : slot == 17) {
+                    if (slot == 0 ? (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_HELM) != 0 : slot == 14 ? (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_HIDE_CLOAK) != 0 : slot == 17) {
                         continue;
                     }
 
@@ -572,7 +574,7 @@ void CGDressUpModelFrame::SetModel(CM2Model* model) {
             }
         }
 
-        const CGUnitVirtualItem* mainHand = player->GetVirtualItem(0, true);
+        const CGUnitVirtualItem* mainHand = player->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, true);
 
         if (mainHand) {
             this->m_mainHand = *mainHand;
@@ -580,7 +582,7 @@ void CGDressUpModelFrame::SetModel(CM2Model* model) {
             memset(&this->m_mainHand, 0, sizeof(this->m_mainHand));
         }
 
-        const CGUnitVirtualItem* offHand = player->GetVirtualItem(1, true);
+        const CGUnitVirtualItem* offHand = player->GetVirtualItem(VIRTUAL_MONSTER_SLOT_OFFHAND, true);
 
         if (offHand) {
             this->m_offHand = *offHand;
@@ -622,7 +624,7 @@ void CGDressUpModelFrame::SetModel(CM2Model* model) {
     data.m_preferences.m_raceID = extra->m_displayRaceID;
     data.m_flags |= 0x1;
     data.m_preferences.m_skinID = extra->m_skinID;
-    data.m_preferences.m_classId = 1;
+    data.m_preferences.m_classId = CLASS_WARRIOR;
     data.m_preferences.m_hairStyleId = extra->m_hairStyleID;
     data.m_preferences.m_facialHairId = extra->m_facialHairID;
     data.m_model = model;

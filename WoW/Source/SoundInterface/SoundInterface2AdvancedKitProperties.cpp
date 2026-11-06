@@ -90,7 +90,7 @@ int32_t SI2AdvancedSound::Play() {
         properties.m_fadeOutTime = 0.01f;
         properties.m_group = this->m_volumeSliderCategory;
         properties.m_coneInsideAngle = this->m_insideAngle;
-        properties.m_loopMode = 2;
+        properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
         properties.m_coneOutsideAngle = this->m_outsideAngle;
         properties.m_maxAudibleBehavior = 1;
         properties.m_streaming = false;
@@ -104,7 +104,7 @@ int32_t SI2AdvancedSound::Play() {
     }
 
     properties.ResetToDefaults();
-    properties.m_loopMode = 1;
+    properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
     properties.m_maxAudibleBehavior = 0;
     properties.m_streaming = true;
     properties.m_software = 1;
@@ -740,7 +740,7 @@ int32_t SI2::AddAdvancedSound(SoundEntriesAdvancedRec* rec, int32_t soundKitId, 
     }
 
     sound->m_orientation = *orientation;
-    sound->unk_0008 = a7;
+    sound->unused_0008 = a7;
 
     sound->m_id = s_nextAdvancedId;
     sound->m_object->m_advancedId = s_nextAdvancedId;

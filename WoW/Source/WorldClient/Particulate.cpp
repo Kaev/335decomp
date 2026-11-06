@@ -1,4 +1,5 @@
 #include "Particulate.h"
+#include "Engine/Source/Tempest/Color.h"
 #include <cmath>
 #include "Engine/Source/Base/Handle.h"
 #include "Engine/Source/Base/Status.h"
@@ -17,6 +18,8 @@
 #include "WoW/Source/DB/Rec/LiquidTypeRec.h"
 #include "WoW/Source/WorldClient/FrameTime.h"
 #include "WoW/Source/WorldClient/World.h"
+
+static const float PTSIZE = 0.19921875f;
 
 // STATIC: 0x00A3F970
 static const int32_t s_texSlots[5][8] = {
@@ -37,29 +40,29 @@ static C3Vector s_corners[4] = {
 
 // STATIC: 0x00ADF838
 static C2Vector s_texCoords[25][4] = {
-    { C2Vector(0.0f, 0.0f), C2Vector(0.0f, 0.19921875f), C2Vector(0.19921875f, 0.0f), C2Vector(0.19921875f, 0.19921875f) },
-    { C2Vector(0.19921875f, 0.0f), C2Vector(0.19921875f, 0.19921875f), C2Vector(0.3984375f, 0.0f), C2Vector(0.3984375f, 0.19921875f) },
-    { C2Vector(0.3984375f, 0.0f), C2Vector(0.3984375f, 0.19921875f), C2Vector(0.59765625f, 0.0f), C2Vector(0.59765625f, 0.19921875f) },
-    { C2Vector(0.59765625f, 0.0f), C2Vector(0.59765625f, 0.19921875f), C2Vector(0.796875f, 0.0f), C2Vector(0.796875f, 0.19921875f) },
-    { C2Vector(0.0f, 0.19921875f), C2Vector(0.0f, 0.3984375f), C2Vector(0.19921875f, 0.19921875f), C2Vector(0.19921875f, 0.3984375f) },
-    { C2Vector(0.19921875f, 0.19921875f), C2Vector(0.19921875f, 0.3984375f), C2Vector(0.3984375f, 0.19921875f), C2Vector(0.3984375f, 0.3984375f) },
-    { C2Vector(0.3984375f, 0.19921875f), C2Vector(0.3984375f, 0.3984375f), C2Vector(0.59765625f, 0.19921875f), C2Vector(0.59765625f, 0.3984375f) },
-    { C2Vector(0.59765625f, 0.19921875f), C2Vector(0.59765625f, 0.3984375f), C2Vector(0.796875f, 0.19921875f), C2Vector(0.796875f, 0.3984375f) },
-    { C2Vector(0.0f, 0.3984375f), C2Vector(0.0f, 0.59765625f), C2Vector(0.19921875f, 0.3984375f), C2Vector(0.19921875f, 0.59765625f) },
-    { C2Vector(0.19921875f, 0.3984375f), C2Vector(0.19921875f, 0.59765625f), C2Vector(0.3984375f, 0.3984375f), C2Vector(0.3984375f, 0.59765625f) },
+    { C2Vector(0.0f, 0.0f), C2Vector(0.0f, PTSIZE), C2Vector(PTSIZE, 0.0f), C2Vector(PTSIZE, PTSIZE) },
+    { C2Vector(PTSIZE, 0.0f), C2Vector(PTSIZE, PTSIZE), C2Vector(0.3984375f, 0.0f), C2Vector(0.3984375f, PTSIZE) },
+    { C2Vector(0.3984375f, 0.0f), C2Vector(0.3984375f, PTSIZE), C2Vector(0.59765625f, 0.0f), C2Vector(0.59765625f, PTSIZE) },
+    { C2Vector(0.59765625f, 0.0f), C2Vector(0.59765625f, PTSIZE), C2Vector(0.796875f, 0.0f), C2Vector(0.796875f, PTSIZE) },
+    { C2Vector(0.0f, PTSIZE), C2Vector(0.0f, 0.3984375f), C2Vector(PTSIZE, PTSIZE), C2Vector(PTSIZE, 0.3984375f) },
+    { C2Vector(PTSIZE, PTSIZE), C2Vector(PTSIZE, 0.3984375f), C2Vector(0.3984375f, PTSIZE), C2Vector(0.3984375f, 0.3984375f) },
+    { C2Vector(0.3984375f, PTSIZE), C2Vector(0.3984375f, 0.3984375f), C2Vector(0.59765625f, PTSIZE), C2Vector(0.59765625f, 0.3984375f) },
+    { C2Vector(0.59765625f, PTSIZE), C2Vector(0.59765625f, 0.3984375f), C2Vector(0.796875f, PTSIZE), C2Vector(0.796875f, 0.3984375f) },
+    { C2Vector(0.0f, 0.3984375f), C2Vector(0.0f, 0.59765625f), C2Vector(PTSIZE, 0.3984375f), C2Vector(PTSIZE, 0.59765625f) },
+    { C2Vector(PTSIZE, 0.3984375f), C2Vector(PTSIZE, 0.59765625f), C2Vector(0.3984375f, 0.3984375f), C2Vector(0.3984375f, 0.59765625f) },
     { C2Vector(0.3984375f, 0.3984375f), C2Vector(0.3984375f, 0.59765625f), C2Vector(0.59765625f, 0.3984375f), C2Vector(0.59765625f, 0.59765625f) },
     { C2Vector(0.59765625f, 0.3984375f), C2Vector(0.59765625f, 0.59765625f), C2Vector(0.796875f, 0.3984375f), C2Vector(0.796875f, 0.59765625f) },
-    { C2Vector(0.796875f, 0.0f), C2Vector(0.796875f, 0.19921875f), C2Vector(0.99609375f, 0.0f), C2Vector(0.99609375f, 0.19921875f) },
-    { C2Vector(0.796875f, 0.19921875f), C2Vector(0.796875f, 0.3984375f), C2Vector(0.99609375f, 0.19921875f), C2Vector(0.99609375f, 0.3984375f) },
+    { C2Vector(0.796875f, 0.0f), C2Vector(0.796875f, PTSIZE), C2Vector(0.99609375f, 0.0f), C2Vector(0.99609375f, PTSIZE) },
+    { C2Vector(0.796875f, PTSIZE), C2Vector(0.796875f, 0.3984375f), C2Vector(0.99609375f, PTSIZE), C2Vector(0.99609375f, 0.3984375f) },
     { C2Vector(0.796875f, 0.3984375f), C2Vector(0.796875f, 0.59765625f), C2Vector(0.99609375f, 0.3984375f), C2Vector(0.99609375f, 0.59765625f) },
     { C2Vector(0.796875f, 0.59765625f), C2Vector(0.796875f, 0.796875f), C2Vector(0.99609375f, 0.59765625f), C2Vector(0.99609375f, 0.796875f) },
     { C2Vector(0.796875f, 0.796875f), C2Vector(0.796875f, 0.99609375f), C2Vector(0.99609375f, 0.796875f), C2Vector(0.99609375f, 0.99609375f) },
-    { C2Vector(0.0f, 0.59765625f), C2Vector(0.0f, 0.796875f), C2Vector(0.19921875f, 0.59765625f), C2Vector(0.19921875f, 0.796875f) },
-    { C2Vector(0.19921875f, 0.59765625f), C2Vector(0.19921875f, 0.796875f), C2Vector(0.3984375f, 0.59765625f), C2Vector(0.3984375f, 0.796875f) },
+    { C2Vector(0.0f, 0.59765625f), C2Vector(0.0f, 0.796875f), C2Vector(PTSIZE, 0.59765625f), C2Vector(PTSIZE, 0.796875f) },
+    { C2Vector(PTSIZE, 0.59765625f), C2Vector(PTSIZE, 0.796875f), C2Vector(0.3984375f, 0.59765625f), C2Vector(0.3984375f, 0.796875f) },
     { C2Vector(0.3984375f, 0.59765625f), C2Vector(0.3984375f, 0.796875f), C2Vector(0.59765625f, 0.59765625f), C2Vector(0.59765625f, 0.796875f) },
     { C2Vector(0.59765625f, 0.59765625f), C2Vector(0.59765625f, 0.796875f), C2Vector(0.796875f, 0.59765625f), C2Vector(0.796875f, 0.796875f) },
-    { C2Vector(0.0f, 0.796875f), C2Vector(0.0f, 0.99609375f), C2Vector(0.19921875f, 0.796875f), C2Vector(0.19921875f, 0.99609375f) },
-    { C2Vector(0.19921875f, 0.796875f), C2Vector(0.19921875f, 0.99609375f), C2Vector(0.3984375f, 0.796875f), C2Vector(0.3984375f, 0.99609375f) },
+    { C2Vector(0.0f, 0.796875f), C2Vector(0.0f, 0.99609375f), C2Vector(PTSIZE, 0.796875f), C2Vector(PTSIZE, 0.99609375f) },
+    { C2Vector(PTSIZE, 0.796875f), C2Vector(PTSIZE, 0.99609375f), C2Vector(0.3984375f, 0.796875f), C2Vector(0.3984375f, 0.99609375f) },
     { C2Vector(0.3984375f, 0.796875f), C2Vector(0.3984375f, 0.99609375f), C2Vector(0.59765625f, 0.796875f), C2Vector(0.59765625f, 0.99609375f) },
     { C2Vector(0.59765625f, 0.796875f), C2Vector(0.59765625f, 0.99609375f), C2Vector(0.796875f, 0.796875f), C2Vector(0.796875f, 0.99609375f) },
 };
@@ -119,22 +122,22 @@ void Particulate::InitMovement() {
     float phi = CRandom::sfloat_(g_rndSeed) * 3.1415927f;
     float sinTheta = sin(theta);
 
-    this->m_direction.y = sin(phi) * sinTheta;
-    this->m_direction.x = sinTheta * cos(phi);
-    this->m_direction.z = cos(theta) * 0.25f;
+    this->m_movement.m_dir.y = sin(phi) * sinTheta;
+    this->m_movement.m_dir.x = sinTheta * cos(phi);
+    this->m_movement.m_dir.z = cos(theta) * 0.25f;
 
-    if (this->m_direction.z < 0.0f) {
-        this->m_direction.z = -this->m_direction.z;
+    if (this->m_movement.m_dir.z < 0.0f) {
+        this->m_movement.m_dir.z = -this->m_movement.m_dir.z;
     }
 
-    float invLength = 1.0f / sqrt(this->m_direction.x * this->m_direction.x + this->m_direction.y * this->m_direction.y + this->m_direction.z * this->m_direction.z);
-    this->m_direction.x = this->m_direction.x * invLength;
-    this->m_direction.y = this->m_direction.y * invLength;
-    this->m_direction.z = this->m_direction.z * invLength;
+    float invLength = 1.0f / sqrt(this->m_movement.m_dir.x * this->m_movement.m_dir.x + this->m_movement.m_dir.y * this->m_movement.m_dir.y + this->m_movement.m_dir.z * this->m_movement.m_dir.z);
+    this->m_movement.m_dir.x = this->m_movement.m_dir.x * invLength;
+    this->m_movement.m_dir.y = this->m_movement.m_dir.y * invLength;
+    this->m_movement.m_dir.z = this->m_movement.m_dir.z * invLength;
 
-    this->m_timer = 0.0f;
-    this->m_speed = (CRandom::ufloat_(g_rndSeed) + 1.0f) * 0.0125f;
-    this->m_rotationSpeed = (CRandom::ufloat_(g_rndSeed) + 1.0f) * 0.005f;
+    this->m_movement.m_time = 0.0f;
+    this->m_movement.m_freq = (CRandom::ufloat_(g_rndSeed) + 1.0f) * 0.0125f;
+    this->m_movement.m_amplitude = (CRandom::ufloat_(g_rndSeed) + 1.0f) * 0.005f;
 }
 
 // VERIFY: d40a0168 manual
@@ -166,16 +169,16 @@ C3Vector Particulate::ComputeMovement(float elapsed) {
         return C3Vector(0.0f, 0.0f, 0.0f);
     }
 
-    this->m_timer = elapsed + this->m_timer;
-    float phase = this->m_timer * this->m_speed;
+    this->m_movement.m_time = elapsed + this->m_movement.m_time;
+    float phase = this->m_movement.m_time * this->m_movement.m_freq;
 
     if (phase > 0.5f) {
         this->InitMovement();
         phase = 0.0f;
     }
 
-    float amount = CMath::sin_(phase * 6.2831855f) * this->m_rotationSpeed;
-    return C3Vector(this->m_direction.x * amount, this->m_direction.y * amount, amount * this->m_direction.z);
+    float amount = CMath::sin_(phase * TWO_PI) * this->m_movement.m_amplitude;
+    return C3Vector(this->m_movement.m_dir.x * amount, this->m_movement.m_dir.y * amount, amount * this->m_movement.m_dir.z);
 }
 
 // VERIFY: 680e77ec manual
@@ -268,7 +271,7 @@ void Particulate::Render() {
                     vertices->p.x = s_corners[j].x * particle.m_size + viewX;
                     vertices->p.y = s_corners[j].y * particle.m_size + viewY;
                     vertices->p.z = depth;
-                    vertices->c = CImVector(0xFF, 0xFF, 0xFF, 0xFF);
+                    vertices->c = CImVector(COLOR_WHITE_BGRA);
                     vertices->tc = s_texCoords[texSlot][j];
                     vertices++;
                 }

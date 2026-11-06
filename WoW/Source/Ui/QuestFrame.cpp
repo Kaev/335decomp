@@ -1,4 +1,5 @@
 #include "QuestFrame.h"
+#include "WoW/Source/Object/QuestCache.h"
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
@@ -39,7 +40,7 @@ int32_t CGQuestInfo::m_rewardFactionList[10];
 int32_t CGQuestInfo::m_rewardFactionAmounts[10];
 
 // STATIC: 0x00C0D658
-int32_t CGQuestInfo::m_state;
+QUEST_STATE CGQuestInfo::m_state;
 
 // STATIC: 0x00C0D65C
 int32_t CGQuestInfo::m_currentQuest;
@@ -159,12 +160,12 @@ void CGQuestInfo::QuestGiverFinished(int32_t keepOpen, uint32_t questId, int32_t
         return;
     }
 
-    if (notify && ClntObjMgrObjectPtr(CGQuestInfo::m_npc, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (notify && ClntObjMgrObjectPtr(CGQuestInfo::m_npc, TYPE_PLAYER, __FILE__, __LINE__)) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(MSG_QUEST_PUSH_RESULT));
         msg.Put(CGQuestInfo::m_npcInform ? CGQuestInfo::m_npcInform.m_guid : CGQuestInfo::m_npc.m_guid);
         msg.Put(questId);
-        msg.Put(static_cast<uint8_t>(3));
+        msg.Put(static_cast<uint8_t>(CGPlayer_C::QUEST_PUSH_RESULT::QP_RESULT_UI_DECLINED));
         msg.Finalize();
         ClientServices::Send2(&msg);
     }
@@ -190,16 +191,16 @@ void CGQuestInfo::ClearState() {
     for (int32_t i = 0; i < 32; i++) {
         CGQuestInfo::m_availableQuests[i].m_questID = 0;
         CGQuestInfo::m_availableQuests[i].m_level = 0;
-        CGQuestInfo::m_availableQuests[i].unk_0008 = 0;
+        CGQuestInfo::m_availableQuests[i].m_flags = QUEST_TEMPLATE_FLAGS::QUEST_FLAG_NONE;
         CGQuestInfo::m_availableQuests[i].m_title[0] = 0;
-        CGQuestInfo::m_availableQuests[i].unk_020C = 0;
-        CGQuestInfo::m_availableQuests[i].unk_0210 = 0;
+        CGQuestInfo::m_availableQuests[i].m_turnIn = 0;
+        CGQuestInfo::m_availableQuests[i].m_repeatable = 0;
         CGQuestInfo::m_inProgressQuests[i].m_questID = 0;
         CGQuestInfo::m_inProgressQuests[i].m_level = 0;
-        CGQuestInfo::m_inProgressQuests[i].unk_0008 = 0;
+        CGQuestInfo::m_inProgressQuests[i].m_flags = QUEST_TEMPLATE_FLAGS::QUEST_FLAG_NONE;
         CGQuestInfo::m_inProgressQuests[i].m_title[0] = 0;
-        CGQuestInfo::m_inProgressQuests[i].unk_020C = 0;
-        CGQuestInfo::m_inProgressQuests[i].unk_0210 = 0;
+        CGQuestInfo::m_inProgressQuests[i].m_turnIn = 0;
+        CGQuestInfo::m_inProgressQuests[i].m_repeatable = 0;
     }
 
     CGQuestInfo::m_numQuests = 0;
@@ -212,7 +213,7 @@ void CGQuestInfo::ClearState() {
     CGQuestInfo::m_rewardText[0] = 0;
     CGQuestInfo::m_suggestedGroupNum = 0;
     CGQuestInfo::m_autoLaunched = 0;
-    CGQuestInfo::m_questFlags = 0;
+    CGQuestInfo::m_questFlags = QUEST_TEMPLATE_FLAGS::QUEST_FLAG_NONE;
 }
 
 // VERIFY: d07a48c9 auto
@@ -220,23 +221,23 @@ void CGQuestInfo::ClearState() {
 void CGQuestInfo::ClearQuestItems() {
     for (int32_t i = 0; i < 6; i++) {
         CGQuestInfo::m_questItems[i].m_reward.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_reward.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_reward.unk_0008 = 0;
+        CGQuestInfo::m_questItems[i].m_reward.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_reward.m_count = 0;
         CGQuestInfo::m_questItems[i].m_choice.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_choice.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_choice.unk_0008 = 0;
+        CGQuestInfo::m_questItems[i].m_choice.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_choice.m_count = 0;
         CGQuestInfo::m_questItems[i].m_required.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_required.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_required.unk_0008 = 0;
+        CGQuestInfo::m_questItems[i].m_required.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_required.m_count = 0;
     }
 }
 
 // VERIFY: 2ce3fb4d manual
 // OFFSET: 0x0058C5A0
-void CGQuestInfo::SetState(WOWGUID npc, WOWGUID inform, int32_t state, const char* text, int32_t questId, int32_t startCheat) {
-    CGObject_C* object = ClntObjMgrObjectPtr(npc, TYPEMASK_OBJECT, __FILE__, __LINE__);
+void CGQuestInfo::SetState(WOWGUID npc, WOWGUID inform, QUEST_STATE state, const char* text, int32_t questId, int32_t startCheat) {
+    CGObject_C* object = ClntObjMgrObjectPtr(npc, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (!object || !(object->m_obj->m_type & (TYPEMASK_ITEM | TYPEMASK_UNIT | TYPEMASK_GAMEOBJECT))) {
+    if (!object || !(object->m_obj->m_type & (TYPE_ITEM | TYPE_UNIT | TYPE_GAMEOBJECT))) {
         return;
     }
 
@@ -253,19 +254,19 @@ void CGQuestInfo::SetState(WOWGUID npc, WOWGUID inform, int32_t state, const cha
     }
 
     switch (state) {
-        case 0:
+        case QUEST_GREETING:
             SStrCopy(CGQuestInfo::m_greetingText, buffer, sizeof(CGQuestInfo::m_greetingText));
             break;
 
-        case 1:
+        case QUEST_OFFER:
             SStrCopy(CGQuestInfo::m_questText, buffer, sizeof(CGQuestInfo::m_questText));
             break;
 
-        case 2:
+        case QUEST_ACCEPTED:
             SStrCopy(CGQuestInfo::m_progressText, buffer, sizeof(CGQuestInfo::m_progressText));
             break;
 
-        case 3:
+        case QUEST_REWARD:
             SStrCopy(CGQuestInfo::m_rewardText, buffer, sizeof(CGQuestInfo::m_rewardText));
             break;
 
@@ -277,7 +278,7 @@ void CGQuestInfo::SetState(WOWGUID npc, WOWGUID inform, int32_t state, const cha
     CGQuestInfo::m_currentQuest = questId;
     CGQuestInfo::m_startQuestCheat = startCheat;
 
-    if (!(object->m_obj->m_type & TYPEMASK_GAMEOBJECT) || npc != CGGameUI::m_interactTarget) {
+    if (!(object->m_obj->m_type & TYPE_GAMEOBJECT) || npc != CGGameUI::m_interactTarget) {
         CGGameUI::SetInteractTarget(npc);
     }
 
@@ -309,28 +310,28 @@ void CGQuestInfo::AddReward(const char* title, const uint32_t* choiceItems, cons
 
     for (; i < numChoices; i++) {
         CGQuestInfo::m_questItems[i].m_choice.m_itemID = choiceItems[i];
-        CGQuestInfo::m_questItems[i].m_choice.unk_0004 = choiceDisplays[i];
-        CGQuestInfo::m_questItems[i].m_choice.unk_0008 = choiceCounts[i];
+        CGQuestInfo::m_questItems[i].m_choice.m_displayID = choiceDisplays[i];
+        CGQuestInfo::m_questItems[i].m_choice.m_count = choiceCounts[i];
     }
 
     for (; i < 6; i++) {
         CGQuestInfo::m_questItems[i].m_choice.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_choice.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_choice.unk_0008 = 1;
+        CGQuestInfo::m_questItems[i].m_choice.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_choice.m_count = 1;
     }
 
     i = 0;
 
     for (; i < numRewards; i++) {
         CGQuestInfo::m_questItems[i].m_reward.m_itemID = rewardItems[i];
-        CGQuestInfo::m_questItems[i].m_reward.unk_0004 = rewardDisplays[i];
-        CGQuestInfo::m_questItems[i].m_reward.unk_0008 = rewardCounts[i];
+        CGQuestInfo::m_questItems[i].m_reward.m_displayID = rewardDisplays[i];
+        CGQuestInfo::m_questItems[i].m_reward.m_count = rewardCounts[i];
     }
 
     for (; i < 6; i++) {
         CGQuestInfo::m_questItems[i].m_reward.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_reward.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_reward.unk_0008 = 1;
+        CGQuestInfo::m_questItems[i].m_reward.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_reward.m_count = 1;
     }
 
     if (title) {
@@ -347,7 +348,7 @@ void CGQuestInfo::AddReward(const char* title, const uint32_t* choiceItems, cons
         CGQuestInfo::m_requiredMoney = 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && static_cast<int32_t>(player->m_unit->m_unitFieldLevel) < static_cast<int32_t>(player->m_player->m_playerFieldMaxLevel)) {
         CGQuestInfo::m_rewardXP = xp;
@@ -380,7 +381,7 @@ void CGQuestInfo::AddReward(const char* title, const uint32_t* choiceItems, cons
     CGQuestInfo::m_suggestedGroupNum = suggestedGroupNum;
     CGQuestInfo::m_questFlags = questFlags;
 
-    if (CGQuestInfo::m_state == 1) {
+    if (CGQuestInfo::m_state == QUEST_OFFER) {
         FrameScript_SignalEvent(SCRIPT_EVENT_QUEST_DETAIL, nullptr);
     } else {
         FrameScript_SignalEvent(SCRIPT_EVENT_QUEST_COMPLETE, nullptr);
@@ -541,14 +542,14 @@ static void QuestItemStatsCallback(int32_t id, const WOWGUID& guid, void* param,
 void CGQuestInfo::AddQuest(int32_t questId, const char* title, int32_t level, int32_t flags, int32_t turnIn, int32_t repeatable) {
     CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_questID = questId;
     CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_level = level;
-    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].unk_0008 = flags;
+    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_flags = flags;
 
     if (title) {
         SStrCopy(CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_title, title, sizeof(CGQuestInfo::m_availableQuests[0].m_title));
     }
 
-    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].unk_020C = turnIn;
-    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].unk_0210 = repeatable;
+    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_turnIn = turnIn;
+    CGQuestInfo::m_availableQuests[CGQuestInfo::m_numQuests].m_repeatable = repeatable;
     CGQuestInfo::m_numQuests++;
 }
 
@@ -557,14 +558,14 @@ void CGQuestInfo::AddQuest(int32_t questId, const char* title, int32_t level, in
 void CGQuestInfo::AddQuestInProgress(int32_t questId, const char* title, int32_t level, int32_t flags, int32_t repeatable) {
     CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_questID = questId;
     CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_level = level;
-    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].unk_0008 = flags;
+    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_flags = flags;
 
     if (title) {
         SStrCopy(CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_title, title, sizeof(CGQuestInfo::m_inProgressQuests[0].m_title));
     }
 
-    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].unk_020C = 0;
-    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].unk_0210 = repeatable;
+    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_turnIn = 0;
+    CGQuestInfo::m_inProgressQuests[CGQuestInfo::m_numInProgress].m_repeatable = repeatable;
     CGQuestInfo::m_numInProgress++;
 }
 
@@ -581,14 +582,14 @@ void CGQuestInfo::AddItemRequest(const char* title, const uint32_t* itemIds, con
 
     for (; i < numItems; i++) {
         CGQuestInfo::m_questItems[i].m_required.m_itemID = itemIds[i];
-        CGQuestInfo::m_questItems[i].m_required.unk_0004 = itemDisplays[i];
-        CGQuestInfo::m_questItems[i].m_required.unk_0008 = itemCounts[i];
+        CGQuestInfo::m_questItems[i].m_required.m_displayID = itemDisplays[i];
+        CGQuestInfo::m_questItems[i].m_required.m_count = itemCounts[i];
     }
 
     for (; i < 6; i++) {
         CGQuestInfo::m_questItems[i].m_required.m_itemID = 0;
-        CGQuestInfo::m_questItems[i].m_required.unk_0004 = 0;
-        CGQuestInfo::m_questItems[i].m_required.unk_0008 = 1;
+        CGQuestInfo::m_questItems[i].m_required.m_displayID = 0;
+        CGQuestInfo::m_questItems[i].m_required.m_count = 1;
     }
 
     if (title) {
@@ -663,7 +664,7 @@ int32_t CGQuestInfo::IsCompletable() {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -676,7 +677,7 @@ int32_t CGQuestInfo::IsCompletable() {
             return 1;
         }
 
-        if (player->m_bag.GetItemTypeCount(itemId, 8) < CGQuestInfo::m_questItems[i].m_required.unk_0008) {
+        if (player->m_bag.GetItemTypeCount(itemId, 8) < CGQuestInfo::m_questItems[i].m_required.m_count) {
             return 0;
         }
     }
@@ -691,11 +692,11 @@ void CGQuestInfo::QueryQuest(uint32_t index) {
         return;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return;
     }
 
-    if (CGQuestInfo::m_availableQuests[index].unk_020C) {
+    if (CGQuestInfo::m_availableQuests[index].m_turnIn) {
         CGPlayer_C::CompleteQuest(CGQuestInfo::m_npc, CGQuestInfo::m_availableQuests[index].m_questID);
     } else {
         CGPlayer_C::QueryQuest(CGQuestInfo::m_npc, CGQuestInfo::m_availableQuests[index].m_questID);
@@ -711,11 +712,11 @@ void CGQuestInfo::CompleteQuest(uint32_t index) {
         return;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return;
     }
 
-    CGTutorial::TriggerTutorial(0x21);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUEST_COMPLETION);
     CGPlayer_C::CompleteQuest(CGQuestInfo::m_npc, CGQuestInfo::m_inProgressQuests[index].m_questID);
     CGQuestInfo::m_responseSent = 1;
 }
@@ -723,11 +724,11 @@ void CGQuestInfo::CompleteQuest(uint32_t index) {
 // VERIFY: 900e22ab manual
 // OFFSET: 0x0058CD20
 void CGQuestInfo::AcceptQuest() {
-    if (CGQuestInfo::m_state != 1) {
+    if (CGQuestInfo::m_state != QUEST_OFFER) {
         return;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__) || CGQuestInfo::m_responseSent) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__) || CGQuestInfo::m_responseSent) {
         return;
     }
 
@@ -757,13 +758,13 @@ void CGQuestInfo::DeclineQuest() {
         return;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(CGQuestInfo::m_npc, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(CGQuestInfo::m_npc, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return;
     }
 
-    if ((object->m_obj->m_type & TYPEMASK_UNIT) && (static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & 1) && ClntObjMgrGetActivePlayerObj()) {
+    if ((object->m_obj->m_type & TYPE_UNIT) && (static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_GOSSIP) && ClntObjMgrGetActivePlayerObj()) {
         CGPlayer_C::TalkToGossip(CGQuestInfo::m_npc);
         CGQuestInfo::m_responseSent = 1;
         return;
@@ -771,12 +772,12 @@ void CGQuestInfo::DeclineQuest() {
 
     uint32_t type = object->m_obj->m_type;
 
-    if ((type & (TYPEMASK_ITEM | TYPEMASK_PLAYER)) || CGQuestInfo::m_autoLaunched) {
+    if ((type & (TYPE_ITEM | TYPE_PLAYER)) || CGQuestInfo::m_autoLaunched) {
         CGQuestInfo::QuestGiverFinished(0, CGQuestInfo::m_currentQuest, 1);
         return;
     }
 
-    if (type & TYPEMASK_GAMEOBJECT) {
+    if (type & TYPE_GAMEOBJECT) {
         object->OnRightClick();
     } else {
         CDataStore msg;
@@ -792,15 +793,15 @@ void CGQuestInfo::DeclineQuest() {
 // VERIFY: 84d8d008 manual
 // OFFSET: 0x0058CF40
 void CGQuestInfo::GiveQuestItems() {
-    if (CGQuestInfo::m_state != 2 || CGQuestInfo::m_responseSent) {
+    if (CGQuestInfo::m_state != QUEST_ACCEPTED || CGQuestInfo::m_responseSent) {
         return;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return;
     }
 
-    CGTutorial::TriggerTutorial(0x21);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUEST_COMPLETION);
     CGPlayer_C::GiveQuestItems(CGQuestInfo::m_npc, CGQuestInfo::m_currentQuest);
     CGQuestInfo::m_responseSent = 1;
 }
@@ -808,11 +809,11 @@ void CGQuestInfo::GiveQuestItems() {
 // VERIFY: 840a6082 manual
 // OFFSET: 0x0058CFA0
 int32_t CGQuestInfo::GetReward(int32_t choice) {
-    if (CGQuestInfo::m_state != 3) {
+    if (CGQuestInfo::m_state != QUEST_REWARD) {
         return 1;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__) || CGQuestInfo::m_responseSent) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__) || CGQuestInfo::m_responseSent) {
         return 1;
     }
 
@@ -826,7 +827,7 @@ int32_t CGQuestInfo::GetReward(int32_t choice) {
         CGQuestInfo::m_lastChosenItem = CGQuestInfo::m_questItems[choice].m_choice.m_itemID;
     }
 
-    CGTutorial::TriggerTutorial(0x21);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUEST_COMPLETION);
     CGPlayer_C::GetQuestReward(CGQuestInfo::m_npc, CGQuestInfo::m_currentQuest, choice <= 0 ? 0 : choice);
     CGQuestInfo::m_responseSent = 1;
     return 1;
@@ -850,16 +851,16 @@ int32_t CGQuestInfo::QuestItemInfo(const char* type, uint32_t index, char* name,
 
     if (!SStrCmpI(type, "reward", STORM_MAX_STR)) {
         itemId = CGQuestInfo::m_questItems[index].m_reward.m_itemID;
-        displayId = CGQuestInfo::m_questItems[index].m_reward.unk_0004;
-        *count = CGQuestInfo::m_questItems[index].m_reward.unk_0008;
+        displayId = CGQuestInfo::m_questItems[index].m_reward.m_displayID;
+        *count = CGQuestInfo::m_questItems[index].m_reward.m_count;
     } else if (!SStrCmpI(type, "choice", STORM_MAX_STR)) {
         itemId = CGQuestInfo::m_questItems[index].m_choice.m_itemID;
-        displayId = CGQuestInfo::m_questItems[index].m_choice.unk_0004;
-        *count = CGQuestInfo::m_questItems[index].m_choice.unk_0008;
+        displayId = CGQuestInfo::m_questItems[index].m_choice.m_displayID;
+        *count = CGQuestInfo::m_questItems[index].m_choice.m_count;
     } else if (!SStrCmpI(type, "required", STORM_MAX_STR)) {
         itemId = CGQuestInfo::m_questItems[index].m_required.m_itemID;
-        displayId = CGQuestInfo::m_questItems[index].m_required.unk_0004;
-        *count = CGQuestInfo::m_questItems[index].m_required.unk_0008;
+        displayId = CGQuestInfo::m_questItems[index].m_required.m_displayID;
+        *count = CGQuestInfo::m_questItems[index].m_required.m_count;
     } else {
         return 0;
     }
@@ -871,11 +872,11 @@ int32_t CGQuestInfo::QuestItemInfo(const char* type, uint32_t index, char* name,
         *quality = stats->m_inventoryType ? stats->m_quality : -1;
     }
 
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
     SStrPrintf(s_questItemTexture, sizeof(s_questItemTexture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(displayId));
     SStrCopy(texture, s_questItemTexture, textureSize);
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     int32_t error;
 
     if (player && stats && !player->CanUseItem(stats, error)) {
@@ -890,13 +891,13 @@ int32_t CGQuestInfo::QuestItemInfo(const char* type, uint32_t index, char* name,
 void CGQuestInfo::EnterWorld() {
     CGQuestInfo::m_npc = WOWGUID{ 0 };
     CGQuestInfo::m_npcInform = WOWGUID{ 0 };
-    CGQuestInfo::m_state = 0;
+    CGQuestInfo::m_state = QUEST_GREETING;
     CGQuestInfo::m_currentQuest = 0;
     CGQuestInfo::m_canComplete = 0;
     CGQuestInfo::m_autoLaunched = 0;
     CGQuestInfo::m_requiredMoney = 0;
     CGQuestInfo::m_lastChosenItem = 0;
-    CGQuestInfo::m_questFlags = 0;
+    CGQuestInfo::m_questFlags = QUEST_TEMPLATE_FLAGS::QUEST_FLAG_NONE;
     CGQuestInfo::ClearState();
     CGQuestInfo::ClearQuestItems();
 }

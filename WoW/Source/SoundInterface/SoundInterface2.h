@@ -7,6 +7,7 @@
 #include "Engine/Source/SoundEngine/SoundEngine.h"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C3Vector.h"
+#include "WoW/Source/SoundInterface/Types.h"
 
 class CGUnit_C;
 class CGUnitVirtualItem;
@@ -15,6 +16,20 @@ class SoundEntriesAdvancedRec;
 class SE2SoundKitObject;
 class SE2SoundKitProperties;
 class VSOUNDKITDEF;
+
+// Native property overrides for the sound kit's suppressor-check flag.
+enum SE2_SUPPRESSOR_MODE : int32_t {
+    SE2_SUPPRESSOR_MODE_DEFAULT = 0,
+    SE2_SUPPRESSOR_MODE_IGNORE = 1,
+    SE2_SUPPRESSOR_MODE_HONOR = 2,
+};
+
+// Per-kit loop choice; the separate m_forceLoop override still takes precedence.
+enum SE2_LOOP_MODE : int32_t {
+    SE2_LOOP_MODE_DEFAULT = 0,
+    SE2_LOOP_MODE_LOOPING = 1,
+    SE2_LOOP_MODE_NONLOOPING = 2,
+};
 
 class SE2SoundKitProperties {
     public:
@@ -25,9 +40,9 @@ class SE2SoundKitProperties {
     /* 0010 */ float m_fadeInTime;
     /* 0014 */ float m_fadeOutTime;
     /* 0018 */ int32_t m_selectMode;
-    /* 001C */ int32_t m_loopMode;
+    /* 001C */ SE2_LOOP_MODE m_loopMode;
     /* 0020 */ int32_t m_priority;
-    /* 0024 */ int32_t m_suppressorMode;
+    /* 0024 */ SE2_SUPPRESSOR_MODE m_suppressorMode;
     /* 0028 */ uint32_t m_decodeBufferSize;
     /* 002C */ float m_maxDistance;
     /* 0030 */ int32_t m_maxAudibleBehavior;
@@ -54,7 +69,7 @@ class SE2SoundKitObject {
     /* 0000 */ TSLink<SE2SoundKitObject> m_link;
     /* 0008 */ SESound m_sound;
     /* 000C */ uint32_t m_advancedId;
-    /* 0010 */ uint32_t unk_0010;
+    /* 0010 */ uint32_t unused_0010;
 
     SE2SoundKitObject();
     ~SE2SoundKitObject();
@@ -66,7 +81,7 @@ class SI2SoundUserData : public SESoundUserData {
     /* 0008 */ int32_t m_soundKitId;
     /* 000C */ VSOUNDKITDEF* m_def;
     /* 0010 */ int32_t m_group;
-    /* 0014 */ uint32_t unk_0014;
+    /* 0014 */ uint32_t unused_0014;
     /* 0018 */ uint32_t m_advancedId;
 
     virtual ~SI2SoundUserData();
@@ -77,6 +92,45 @@ class SI2SoundUserData : public SESoundUserData {
 
 class SI2 {
     public:
+    // Shared music/ambience source selectors;NUM_SOURCE_SLOTS is an exclusive bound.
+    // Slot4 is unresolved;12/13/14 are delay/default/disabled,not table indices.
+    enum ZONE_SOUND_TYPE : int32_t {
+        SOURCE_AREA = 0,
+        SOURCE_WORLD_STATE = 1,
+        SOURCE_CHUNK_OVERRIDE = 2,
+        SOURCE_AI = 3,
+        SOURCE_UNKNOWN_4 = 4,
+        SOURCE_AREA_INTRO = 5,
+        SOURCE_WORLD_STATE_INTRO = 6,
+        SOURCE_CHUNK_INTRO = 7,
+        SOURCE_WEATHER = 8,
+        SOURCE_UNDERWATER = 9,
+        SOURCE_OVERRIDE = 10,
+        NUM_SOURCE_SLOTS = 11,
+        SOURCE_MUSIC_DELAY = 12,
+        SOURCE_NONE = 13,
+        SOURCE_DISABLED = 14,
+    };
+
+    enum CHAOS_MODE : int32_t {
+        MODE_IDLE = 0,
+        MODE_RANDOM_3D = 1,
+        MODE_STREAMED_AND_NORMAL_3D = 2,
+        MODE_PLAY_STOP_2D_3D = 3,
+        MODE_EXTRA_NULL_POSITION_PLAY_STOP = 4,
+        MODE_BURST_80_2D = 5,
+        MODE_BURST_80_3D = 6,
+        MODE_FILL_80_LOOPS_3D = 7,
+        MODE_ALERT_FILE = 8,
+        MODE_RESTART = 9,
+        MODE_RANDOM_PAIR_3D_AND_RESTART = 10,
+        MODE_RANDOM_2D = 11,
+        MODE_STREAMED_AND_NORMAL_2D = 12,
+        MODE_STREAMED_AND_NORMAL_2D_3D = 13,
+        MODE_REPEATED_KIT_3D_AND_RESTART = 14,
+        MODE_SHARED_OBJECT_SELECTED_KITS = 15,
+    };
+
     static const char s_channelGroupNames[18][32];
     static const int32_t s_channelGroupMaxSounds[18];
     static int32_t s_channelGroupNumSounds[18];
@@ -163,7 +217,7 @@ class SI2 {
     static int32_t PlayFoleySound(int32_t materialId, const C3Vector* position, int32_t self);
     static void PlayFootstepSound(int32_t footstepId, const C3Vector* position, int32_t terrainType, int32_t splash, int32_t loud, CGUnit_C* unit);
     static void PlayHitSound(const CGUnitVirtualItem* weapon, int32_t impactType, int32_t crit, const C3Vector* position, int32_t self);
-    static void PlayItemSound(int32_t type, int32_t displayId);
+    static void PlayItemSound(ITEMSOUNDTYPE type, int32_t displayId);
     static int32_t PlayMissedSound(bool oneHand, const C3Vector* position, int32_t self);
     static void PlayParrySound(const CGUnitVirtualItem* weapon, const CGUnitVirtualItem* defender, int32_t crit, const C3Vector* position, int32_t self);
     static int32_t PlaySheatheSound(const CGUnitVirtualItem* item, int32_t sheathe, const C3Vector* position, int32_t self);
@@ -174,7 +228,7 @@ class SI2 {
     static void DK_GetPlayerFilterName(CGUnit_C* unit, char* name, uint32_t size);
     static int32_t PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2SoundKitObject* object, SE2SoundKitProperties* properties, uint32_t advancedId, uint32_t* soundId, int32_t checkDistance, int32_t keepPlaying);
     static int32_t PlayUISound(int32_t soundKitId);
-    static int32_t PlayWeaponSwooshSound(int32_t type, int32_t crit, const C3Vector* position, int32_t quiet, int32_t self);
+    static int32_t PlayWeaponSwooshSound(WEAPONSWING_SOUNDTYPES type, int32_t crit, const C3Vector* position, int32_t quiet, int32_t self);
     static void RegisterCVars();
     static void RegisterDeviceChangeHandler();
     static void RegisterScriptFunctions();
@@ -252,6 +306,6 @@ class SI2 {
 };
 
 class CGItem_C;
-int32_t SndInterfacePlayItemSound(int32_t type, CGItem_C* item);
+int32_t SndInterfacePlayItemSound(ITEMSOUNDTYPE type, CGItem_C* item);
 
 #endif

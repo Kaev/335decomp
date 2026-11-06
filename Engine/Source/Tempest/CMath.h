@@ -5,6 +5,17 @@
 #include <cstddef>
 #include <cstdint>
 
+static const float PI = 3.1415927f;
+static const float HALF_PI = 1.5707964f;
+static const float TWO_PI = 6.2831855f;
+
+enum : uint32_t {
+    rexp = 0x3F800000, // Float exponent bias, encoded as the bits of 1.0f.
+    rmant = 0x7FFFFF, // Float stored fraction bits.
+    lrexp = 0x3FF00000, // Double exponent bias in its high word.
+    lrmant = 0xFFFFF, // Double stored fraction bits in its high word.
+};
+
 class CMath {
     public:
     static float cos_(float x);
@@ -30,6 +41,7 @@ class CMath {
 
 class CSoftFloat {
     public:
+    static constexpr int32_t EXPONENT_MASK = 0x7F800000;
     static CSoftFloat Ceil(const CSoftFloat& value);
     static uint32_t CountLeadingZeros(uint32_t value);
     static CSoftFloat Floor(const CSoftFloat& value);

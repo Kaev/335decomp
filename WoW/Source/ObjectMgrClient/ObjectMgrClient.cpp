@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <new>
 #include "ObjectMgrClient.h"
+#include "WoW/Source/DB/Rec/MapRec.h"
 #include "Engine/Source/Base/CDataStore.h"
 #include "Engine/Source/Base/ObjectAlloc.h"
 #include "Engine/Source/ConsoleBase/ConsoleCommand.h"
@@ -55,24 +56,24 @@ static const char* s_objNames[NUM_CLIENT_OBJECT_TYPES] = { "CGObject_C", "CGItem
 static const uint32_t s_objHeapSize[NUM_CLIENT_OBJECT_TYPES] = { 0, 512, 32, 64, 64, 64, 32, 32 };
 
 // STATIC: 0x00AC3D04
-static const uint32_t s_objDwordCount[NUM_CLIENT_OBJECT_TYPES] = { 0x6, 0x40, 0x8A, 0x94, 0x52E, 0x12, 0xC, 0x24 };
+static const uint32_t s_objDwordCount[NUM_CLIENT_OBJECT_TYPES] = { OBJECT_FIELDS::OBJECT_END, OBJECT_FIELDS::OBJECT_END + CGItemData::FIELD_ID::ITEM_END, OBJECT_FIELDS::OBJECT_END + CGItemData::FIELD_ID::ITEM_END + CGContainerData::FIELD_ID::CONTAINER_END, OBJECT_FIELDS::OBJECT_END + CGUnitData::FIELD_ID::UNIT_END, OBJECT_FIELDS::OBJECT_END + CGUnitData::FIELD_ID::UNIT_END + CGPlayerLocalData::FIELD_ID::PLAYER_END, OBJECT_FIELDS::OBJECT_END + CGGameObjectData::FIELD_ID::GAMEOBJECT_END, OBJECT_FIELDS::OBJECT_END + CGDynamicObjectData::FIELD_ID::DYNAMICOBJECT_END, OBJECT_FIELDS::OBJECT_END + CGCorpseData::FIELD_ID::CORPSE_END, };
 
 // STATIC: 0x00B6A160
 uint32_t s_objTotalSize[NUM_CLIENT_OBJECT_TYPES] = {
     sizeof(CGObject_C) + sizeof(CGObjectData) + CGObject::TotalFieldsSaved() * sizeof(uint32_t),
     sizeof(CGItem_C) + sizeof(CGObjectData) + sizeof(CGItemData) + CGItem::TotalFieldsSaved() * sizeof(uint32_t),
     sizeof(CGContainer_C) + sizeof(CGObjectData) + sizeof(CGItemData) + sizeof(CGContainerData) + CGContainer::TotalFieldsSaved() * sizeof(uint32_t),
-    sizeof(CGUnit_C) + sizeof(CGObjectData) + sizeof(CGUnitData) + CGUnit::TotalFields() * sizeof(uint32_t),
-    sizeof(CGPlayer_C) + sizeof(CGObjectData) + sizeof(CGUnitData) + sizeof(CGPlayerData) + CGPlayer::TotalRemoteFields() * sizeof(uint32_t),
+    sizeof(CGUnit_C) + sizeof(CGObjectData) + sizeof(CGUnitData) + CGUnit::TotalFieldsSaved() * sizeof(uint32_t),
+    sizeof(CGPlayer_C) + sizeof(CGObjectData) + sizeof(CGUnitData) + sizeof(CGPlayerData) + CGPlayer::TotalRemoteFieldsSaved() * sizeof(uint32_t),
     sizeof(CGGameObject_C) + sizeof(CGObjectData) + sizeof(CGGameObjectData) + CGGameObject::TotalFieldsSaved() * sizeof(uint32_t),
-    sizeof(CGDynamicObject_C) + sizeof(CGObjectData) + sizeof(CGDynamicObjectData) + CGDynamicObject::TotalFields() * sizeof(uint32_t),
+    sizeof(CGDynamicObject_C) + sizeof(CGObjectData) + sizeof(CGDynamicObjectData) + CGDynamicObject::TotalFieldsSaved() * sizeof(uint32_t),
     sizeof(CGCorpse_C) + sizeof(CGObjectData) + sizeof(CGCorpseData) + CGCorpse::TotalFieldsSaved() * sizeof(uint32_t),
 };
 
 // VERIFY: 9aded9c4 manual
 // OFFSET: 0x004D5850
 static CMirrorHandler* AssignMirrorHandler(TSList<CMirrorHandler, TSGetLink<CMirrorHandler> >* list, uint32_t fieldByteOffset, uint32_t mirrorByteOffset, uint32_t fieldByteSize, MIRRORHANDLERFUNC function, void* param, HANDLER_PRIORITY priority, int32_t alwaysFire) {
-    CMirrorHandler* handler = list->NewNode(2, 0, 0);
+    CMirrorHandler* handler = list->NewNode(TSLIST_LINK_BEFORE, 0, 0);
     handler->m_fieldByteOffset = fieldByteOffset;
     handler->m_mirrorByteOffset = mirrorByteOffset;
     handler->m_fieldByteSize = fieldByteSize;
@@ -144,7 +145,7 @@ static uint32_t TypeDescriptorToMirrorOffset(OBJECT_TYPE_ID typeId, uint32_t off
         }
 
         default: {
-            return (offset & 3) + 4 * CGObject::GetSavedIndexFromDataIndex(offset >> 2);
+            return (offset & 3) + 4 * CGObject::GetSavedIndexFromDataIndex(offset >> 2, (size + 3) >> 2, 0);
         }
     }
 }
@@ -210,7 +211,7 @@ WOWGUID ClntObjMgrGetActivePlayer() {
 
 // VERIFY: 60136c4f manual
 // OFFSET: 0x004D4DB0
-CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, TypeMask mask, const char* fileName, int32_t lineNumber) {
+CGObject_C* ClntObjMgrObjectPtr(WOWGUID guid, OBJECT_TYPE mask, const char* fileName, int32_t lineNumber) {
     ObjectMgr* mgr = s_curMgr;
 
     if (!mgr || !guid) {
@@ -340,8 +341,8 @@ void ClntObjMgrUnsetTypeMirrorHandler(OBJECT_TYPE_ID typeId, uint32_t fieldOffse
 // OFFSET: 0x004D3C40
 static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
     switch (object->m_obj->m_type) {
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER: {
+        case HEIR_TYPE_ITEM:
+        case HEIR_TYPE_CONTAINER: {
             if (typeId == ID_OBJECT) {
                 return ID_ITEM;
             }
@@ -353,8 +354,8 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER: {
+        case HEIR_TYPE_UNIT:
+        case HEIR_TYPE_PLAYER: {
             if (typeId == ID_OBJECT) {
                 return ID_UNIT;
             }
@@ -366,7 +367,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT: {
+        case HEIR_TYPE_GAMEOBJECT: {
             if (typeId == ID_OBJECT) {
                 return ID_GAMEOBJECT;
             }
@@ -374,7 +375,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT: {
+        case HEIR_TYPE_DYNAMICOBJECT: {
             if (typeId == ID_OBJECT) {
                 return ID_DYNAMICOBJECT;
             }
@@ -382,7 +383,7 @@ static OBJECT_TYPE_ID IncTypeId(CGObject_C* object, OBJECT_TYPE_ID typeId) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_CORPSE: {
             if (typeId == ID_OBJECT) {
                 return ID_CORPSE;
             }
@@ -459,35 +460,35 @@ static TSList<CMirrorHandler, TSGetLink<CMirrorHandler> >* GetObjectMirrorList(O
 // OFFSET: 0x004D3DF0
 static uint32_t GetNumDwordBlocks(uint32_t type, WOWGUID guid) {
     switch (type) {
-        case TYPEMASK_OBJECT: {
+        case HEIR_TYPE_OBJECT: {
             return 6;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM: {
+        case HEIR_TYPE_ITEM: {
             return 64;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER: {
+        case HEIR_TYPE_CONTAINER: {
             return 138;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT: {
+        case HEIR_TYPE_UNIT: {
             return 148;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER: {
+        case HEIR_TYPE_PLAYER: {
             return guid == ClntObjMgrGetActivePlayer() ? 1326 : 324;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT: {
+        case HEIR_TYPE_GAMEOBJECT: {
             return 18;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT: {
+        case HEIR_TYPE_DYNAMICOBJECT: {
             return 12;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_CORPSE: {
             return 36;
         }
 
@@ -593,14 +594,14 @@ static void DestroyRemovedObject(CGObject_C* object) {
     int32_t activePlayer = object->m_obj->m_guid == ClntObjMgrGetActivePlayer();
 
     switch (object->m_obj->m_type) {
-        case TYPEMASK_OBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM:
-        case TYPEMASK_OBJECT | TYPEMASK_ITEM | TYPEMASK_CONTAINER:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER:
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_DYNAMICOBJECT:
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE: {
+        case HEIR_TYPE_OBJECT:
+        case HEIR_TYPE_ITEM:
+        case HEIR_TYPE_CONTAINER:
+        case HEIR_TYPE_UNIT:
+        case HEIR_TYPE_PLAYER:
+        case HEIR_TYPE_GAMEOBJECT:
+        case HEIR_TYPE_DYNAMICOBJECT:
+        case HEIR_TYPE_CORPSE: {
             object->~CGObject_C();
             break;
         }
@@ -682,7 +683,7 @@ static uint32_t ObjDescriptorToMirrorOffset(OBJECT_TYPE_ID typeId, int32_t local
         }
     }
 
-    return (offset & 3) + 4 * CGObject::GetSavedIndexFromDataIndex(offset >> 2);
+    return (offset & 3) + 4 * CGObject::GetSavedIndexFromDataIndex(offset >> 2, (size + 3) >> 2, local);
 }
 
 // VERIFY: 839b7b55 manual
@@ -729,7 +730,7 @@ static void SetupObjectStorage(CGObject_C* object, OBJECT_TYPE_ID typeId, WOWGUI
 
             if (guid == ClntObjMgrGetActivePlayer()) {
                 size = sizeof(CGObjectData) + sizeof(CGUnitData) + sizeof(CGPlayerLocalData);
-                player->m_playerLocalMirrorLists = reinterpret_cast<TSList<void>*>(base + sizeof(CGPlayer_C) + size + CGPlayer::TotalFields() * sizeof(uint32_t));
+                player->m_playerLocalMirrorLists = reinterpret_cast<TSList<void>*>(base + sizeof(CGPlayer_C) + size + CGPlayer::TotalFieldsSaved() * sizeof(uint32_t));
             } else {
                 size = sizeof(CGObjectData) + sizeof(CGUnitData) + sizeof(CGPlayerData);
                 player->m_playerLocalMirrorLists = nullptr;
@@ -799,7 +800,7 @@ static void ExpireOldObjects(uint32_t expireTime, OBJECT_TYPE_ID typeId) {
 // OFFSET: 0x004D4930
 CGObject_C* ClntObjMgrAllocObject(OBJECT_TYPE_ID typeId, WOWGUID guid) {
     if (guid == ClntObjMgrGetActivePlayer()) {
-        return static_cast<CGObject_C*>(SMemAlloc(sizeof(CGPlayer_C) + s_objDwordCount[ID_PLAYER] * sizeof(uint32_t) + CGPlayer::TotalFields() * sizeof(uint32_t) + 1002 * sizeof(TSList<void>), __FILE__, __LINE__, 0));
+        return static_cast<CGObject_C*>(SMemAlloc(sizeof(CGPlayer_C) + s_objDwordCount[ID_PLAYER] * sizeof(uint32_t) + CGPlayer::TotalFieldsSaved() * sizeof(uint32_t) + 1002 * sizeof(TSList<void>), __FILE__, __LINE__, 0));
     }
 
     ExpireOldObjects(10000, typeId);
@@ -902,7 +903,7 @@ static int32_t LinkPendingNodes(TSExplicitList<CMirrorHandler, offsetof(CMirrorH
 
     for (CMirrorHandler* handler = list->Head(); handler; handler = handler->m_link.Next()) {
         uint32_t misalign = handler->m_fieldByteOffset & 3;
-        pending->LinkNode(handler, (handler->m_linkPositionSelector != 1) + 1, nullptr);
+        pending->LinkNode(handler, (handler->m_linkPositionSelector != HANDLER_PRIORITY_HIGH) + 1, nullptr);
         handler->m_count = (handler->m_fieldByteSize + misalign + 3) >> 2;
     }
 
@@ -1187,11 +1188,11 @@ static int32_t PostInitObject(uint32_t time, CDataStore* msg, bool reenable) {
         return 0;
     }
 
-    if ((object->m_modelFlags & 0x20000) && (object->m_obj->m_type & TYPEMASK_UNIT)) {
-        static_cast<CGUnit_C*>(object)->SetClientInitData(create, object->m_obj->m_guid == ClntObjMgrGetActivePlayer());
+    if ((object->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_POST_REENABLE_PENDING) && (object->m_obj->m_type & TYPE_UNIT)) {
+      static_cast<CGUnit_C*>(object)->SetClientInitData(create, object->m_obj->m_guid == ClntObjMgrGetActivePlayer());
     }
 
-    if (object->m_modelFlags & 0x40000) {
+    if (object->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_POST_INITED) {
         return CallMirrorHandlers(msg, true, guid);
     }
 
@@ -1335,7 +1336,7 @@ static int32_t CreateObject(CDataStore* msg, uint32_t time) {
         return 0;
     }
 
-    if (create.m_updateFlags & 0x1) {
+    if (create.m_updateFlags & OBJECT_UPDATE_FLAGS::UPDATEFLAG_SELF) {
         s_curMgr->m_playerGuid = guid;
     }
 
@@ -1566,7 +1567,7 @@ static void UpdateOutOfRangeObjects(CDataStore* msg) {
             continue;
         }
 
-        if (CGBattlefieldInfo::m_instanceType == 4) {
+        if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
             WOWGUID objectGuid = object->m_obj->m_guid;
             CGBattlefieldInfo::OnArenaUnitOutOfRange(objectGuid);
         }
@@ -1689,7 +1690,7 @@ int32_t Packet_SMSG_DESTROY_OBJECT(void* param, NETMESSAGE msgId, uint32_t time,
         return 1;
     }
 
-    if (death && (object->m_obj->m_type & TYPEMASK_UNIT) && static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth > 0) {
+    if (death && (object->m_obj->m_type & TYPE_UNIT) && static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth > 0) {
         static_cast<CGUnit_C*>(object)->OnDeath();
     }
 
@@ -1719,7 +1720,7 @@ void ClntObjMgrInitialize() {
 void ClntObjMgrInitializeStd(uint32_t mapId) {
     CGGameUI::SetLastInstanceTime(static_cast<int32_t>(time(nullptr)), CGGameUI::m_iCurrentMapID, mapId);
 
-    ObjectMgr* mgr = new (__FILE__, __LINE__) ObjectMgr(0);
+    ObjectMgr* mgr = new (__FILE__, __LINE__) ObjectMgr(PLAYER_NORMAL);
     g_clientConnection->m_objMgr = reinterpret_cast<ClntObjMgr*>(mgr);
     s_curMgr = mgr;
     mgr->m_realmConnection = g_clientConnection;
@@ -1738,7 +1739,7 @@ void ClntObjMgrUnlockObject(WOWGUID guid, const char* fileName, int32_t lineNumb
 
     object->SetObjectLocked(0);
 
-    if (object->IsObjectLocked() || !(object->m_modelFlags & 0x100000)) {
+    if (object->IsObjectLocked() || !(object->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_DISABLE_PENDING)) {
         return;
     }
 
@@ -1761,6 +1762,6 @@ CMirrorHandler::~CMirrorHandler() {
 // VERIFY: 7a5ce34e manual
 // OFFSET: 0x004038F0
 CGPlayer_C* ClntObjMgrGetActivePlayerObj() {
-    return static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    return static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 }
 

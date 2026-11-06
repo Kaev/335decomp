@@ -76,9 +76,14 @@ static int32_t Script_GetActionInfo(lua_State* L) {
     }
 
     int32_t slot = static_cast<int32_t>(lua_tonumber(L, 1));
+#if defined(WOWDECOMP_ARCH_64)
+    if (slot < 1 || static_cast<uint32_t>(slot) > CGActionBar::NUM_ACTION_SLOTS) {
+        return 0;
+    }
+#endif
     uint32_t action = CGActionBar::m_slotActions[slot - 1];
 
-    if (action && !(action & 0xF0000000)) {
+    if (action && !(action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG)) {
         int32_t petSpell = 0;
         int32_t spellId = CGActionBar::GetSpell(slot - 1, petSpell);
         SpellRec spell;
@@ -106,7 +111,7 @@ static int32_t Script_GetActionInfo(lua_State* L) {
         return 4;
     }
 
-    if (action && (action & 0xF0000000) == 0x10000000) {
+    if (action && (action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG) == CGActionBar::ACTION_TAG::ACTION_TAG_PET_ACTION) {
         int32_t spellId = CGActionBar::GetPetActionSpell(slot - 1);
         lua_pushstring(L, "spell");
         lua_pushnumber(L, GetSpellSlot(spellId, 1) + 1);
@@ -239,17 +244,23 @@ static int32_t Script_GetActionText(lua_State* L) {
     }
 
     int32_t slot = static_cast<int32_t>(lua_tonumber(L, 1));
+#if defined(WOWDECOMP_ARCH_64)
+    if (slot < 1 || static_cast<uint32_t>(slot) > CGActionBar::NUM_ACTION_SLOTS) {
+        lua_pushnil(L);
+        return 1;
+    }
+#endif
     uint32_t action = CGActionBar::m_slotActions[slot - 1];
 
     if (action) {
-        if ((action & 0xF0000000) == 0x40000000) {
-            MACRONODE* macro = CGUIMacros::GetMacroByID(action & 0xBFFFFFFF);
+        if ((action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG) == CGActionBar::ACTION_TAG::ACTION_TAG_MACRO) {
+            MACRONODE* macro = CGUIMacros::GetMacroByID(action & CGActionBar::ACTION_MASK::ACTION_MASK_MACRO_ID);
 
             if (macro) {
                 lua_pushstring(L, macro->m_name);
                 return 1;
             }
-        } else if ((action & 0xF0000000) == 0x20000000) {
+        } else if ((action & CGActionBar::ACTION_MASK::ACTION_MASK_TAG) == CGActionBar::ACTION_TAG::ACTION_TAG_EQUIPMENT_SET) {
             const EQUIPMENT_SET* set = CGEquipmentManager::GetSetByID(CGActionBar::GetEquipmentSetID(slot - 1));
 
             if (set) {
@@ -292,7 +303,7 @@ static int32_t Script_PlaceAction(lua_State* L) {
 
     int32_t slot = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
 
-    if (slot >= 120 && static_cast<uint32_t>(slot) < 132) {
+    if (slot >= 120 && static_cast<uint32_t>(slot) < CGActionBar::MULTICAST_ACTION_FIRST) {
         return 0;
     }
 
@@ -310,7 +321,7 @@ static int32_t Script_ChangeActionBarPage(lua_State* L) {
         return 0;
     }
 
-    if (!CGGameUI::CanPerformAction(14) || static_cast<uint32_t>(page) == CGActionBar::m_currentPage) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION) || static_cast<uint32_t>(page) == CGActionBar::m_currentPage) {
         return 0;
     }
 
@@ -328,7 +339,7 @@ static int32_t Script_GetActionCount(lua_State* L) {
     }
 
     uint32_t slot = static_cast<uint32_t>(lua_tonumber(L, 1)) - 1;
-    int32_t count = slot > 143 ? 0 : CGActionBar::m_slotItemCount[slot];
+    int32_t count = slot > (CGActionBar::NUM_ACTION_SLOTS - 1) ? 0 : CGActionBar::m_slotItemCount[slot];
     lua_pushnumber(L, count);
     return 1;
 }
@@ -337,10 +348,10 @@ static int32_t Script_GetActionCount(lua_State* L) {
 // OFFSET: 0x005A8790
 static int32_t Script_GetActionBarToggles(lua_State* L) {
     uint8_t toggles = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
-        toggles = player->m_player->m_playerFieldBytes[2];
+        toggles = player->m_player->m_actionBarToggles;
     }
 
     lua_checkstack(L, 4);
@@ -444,7 +455,7 @@ static int32_t Script_IsPossessBarVisible(lua_State* L) {
 
     SpellRec spell;
     g_spellDB.GetRecord(spellId, &spell);
-    lua_pushboolean(L, !SpellRec::HasAura(&spell, 236));
+    lua_pushboolean(L, !SpellRec::HasAura(&spell, SPELL_AURA_CONTROL_VEHICLE));
     return 1;
 }
 
@@ -557,7 +568,7 @@ static int32_t Script_GetActionAutocast(lua_State* L) {
         lua_pushnil(L);
     }
 
-    if (action && (action->m_data & 0x40000000)) {
+    if (action && (action->m_data & PetAction::AutocastFlags::AUTOCAST_ENABLED)) {
         lua_pushnumber(L, 1.0);
         return 2;
     }
@@ -586,13 +597,13 @@ static int32_t Script_SetMultiCastSpell(lua_State* L) {
         return 0;
     }
 
-    if (!CGGameUI::CanPerformAction(14)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION)) {
         return 0;
     }
 
     int32_t slot = lua_tointeger(L, 1) - 1;
 
-    if (slot < 132 || static_cast<uint32_t>(slot) >= 144) {
+    if (slot < CGActionBar::MULTICAST_ACTION_FIRST || static_cast<uint32_t>(slot) >= CGActionBar::NUM_ACTION_SLOTS) {
         return 0;
     }
 

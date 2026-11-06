@@ -27,37 +27,37 @@
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
 
 // STATIC: 0x00A14F70
-static const AuctionItemClass s_auctionClasses[12] = {
-    { 2, 1 },
-    { 4, 1 },
-    { 1, 1 },
-    { 0, 1 },
-    { 16, 1 },
-    { 7, 1 },
-    { 6, 1 },
-    { 11, 1 },
-    { 9, 1 },
-    { 3, 1 },
-    { 15, 1 },
-    { 12, 0 },
+static const AuctionItemClass s_auctionClasses[CGAuctionHouse::NUM_CLASS_FILTERS] = {
+    { ITEM_CLASS::ITEM_CLASS_WEAPON, 1 },
+    { ITEM_CLASS::ITEM_CLASS_ARMOR, 1 },
+    { ITEM_CLASS::ITEM_CLASS_CONTAINER, 1 },
+    { ITEM_CLASS::ITEM_CLASS_CONSUMABLE, 1 },
+    { ITEM_CLASS::ITEM_CLASS_GLYPH, 1 },
+    { ITEM_CLASS::ITEM_CLASS_TRADE_GOODS, 1 },
+    { ITEM_CLASS::ITEM_CLASS_PROJECTILE, 1 },
+    { ITEM_CLASS::ITEM_CLASS_QUIVER, 1 },
+    { ITEM_CLASS::ITEM_CLASS_RECIPE, 1 },
+    { ITEM_CLASS::ITEM_CLASS_GEM, 1 },
+    { ITEM_CLASS::ITEM_CLASS_MISCELLANEOUS, 1 },
+    { ITEM_CLASS::ITEM_CLASS_QUEST, 0 },
 };
 
 // STATIC: 0x00A14FD0
-static const AuctionInvType s_auctionInvTypes[14] = {
-    { 1, "INVTYPE_HEAD", 1, 0 },
-    { 2, "INVTYPE_NECK", 1, 1 },
-    { 3, "INVTYPE_SHOULDER", 0, 0 },
-    { 4, "INVTYPE_BODY", 1, 1 },
-    { 5, "INVTYPE_CHEST", 0, 0 },
-    { 6, "INVTYPE_WAIST", 0, 0 },
-    { 7, "INVTYPE_LEGS", 0, 0 },
-    { 8, "INVTYPE_FEET", 0, 0 },
-    { 9, "INVTYPE_WRIST", 0, 0 },
-    { 10, "INVTYPE_HAND", 0, 0 },
-    { 11, "INVTYPE_FINGER", 1, 1 },
-    { 12, "INVTYPE_TRINKET", 1, 1 },
-    { 16, "INVTYPE_CLOAK", 0, 1 },
-    { 23, "INVTYPE_HOLDABLE", 1, 1 },
+static const AuctionInvType s_auctionInvTypes[CGAuctionHouse::NUM_INVENTORY_FILTERS] = {
+    { INVTYPE_HEAD, "INVTYPE_HEAD", 1, 0 },
+    { INVTYPE_NECK, "INVTYPE_NECK", 1, 1 },
+    { INVTYPE_SHOULDERS, "INVTYPE_SHOULDER", 0, 0 },
+    { INVTYPE_BODY, "INVTYPE_BODY", 1, 1 },
+    { INVTYPE_CHEST, "INVTYPE_CHEST", 0, 0 },
+    { INVTYPE_WAIST, "INVTYPE_WAIST", 0, 0 },
+    { INVTYPE_LEGS, "INVTYPE_LEGS", 0, 0 },
+    { INVTYPE_FEET, "INVTYPE_FEET", 0, 0 },
+    { INVTYPE_WRISTS, "INVTYPE_WRIST", 0, 0 },
+    { INVTYPE_HANDS, "INVTYPE_HAND", 0, 0 },
+    { INVTYPE_FINGER, "INVTYPE_FINGER", 1, 1 },
+    { INVTYPE_TRINKET, "INVTYPE_TRINKET", 1, 1 },
+    { INVTYPE_CLOAK, "INVTYPE_CLOAK", 0, 1 },
+    { INVTYPE_HOLDABLE, "INVTYPE_HOLDABLE", 1, 1 },
 };
 
 // VERIFY: 95a282d9 auto
@@ -91,7 +91,7 @@ static int32_t Script_GetAuctionHouseDepositRate(lua_State* L) {
 static int32_t Script_GetAuctionItemClasses(lua_State* L) {
     int32_t count = 0;
 
-    for (uint32_t i = 0; i < 12; i++) {
+    for (uint32_t i = 0; i < CGAuctionHouse::NUM_CLASS_FILTERS; i++) {
         ItemClassRec* rec = g_itemClassDB.GetRecord(s_auctionClasses[i].m_classID);
 
         if (rec) {
@@ -113,7 +113,7 @@ static int32_t Script_GetAuctionItemSubClasses(lua_State* L) {
 
     uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 1)) - 1;
 
-    if (index >= 12 || !s_auctionClasses[index].m_hasSubClasses) {
+    if (index >= CGAuctionHouse::NUM_CLASS_FILTERS || !s_auctionClasses[index].m_hasSubClasses) {
         return 0;
     }
 
@@ -122,7 +122,7 @@ static int32_t Script_GetAuctionItemSubClasses(lua_State* L) {
     for (int32_t i = 0; i < g_itemSubClassDB.m_numRecords; i++) {
         ItemSubClassRec* rec = i < 0 || i >= g_itemSubClassDB.m_numRecords ? nullptr : &g_itemSubClassDB.m_records[i];
 
-        if (rec->m_classID == s_auctionClasses[index].m_classID && !(rec->m_displayFlags & 0x2)) {
+        if (rec->m_classID == s_auctionClasses[index].m_classID && !(rec->m_displayFlags & ITEM_SUBCLASS_DISPLAY_FLAG_HIDE_IN_AUCTION)) {
             lua_checkstack(L, 1);
             lua_pushstring(L, *rec->m_verboseName ? rec->m_verboseName : rec->m_displayName);
             count++;
@@ -143,7 +143,7 @@ static int32_t Script_GetAuctionInvTypes(lua_State* L) {
     uint32_t classIndex = static_cast<uint32_t>(lua_tonumber(L, 1)) - 1;
     int32_t subClass = static_cast<int32_t>(lua_tonumber(L, 2)) - 1;
 
-    if (classIndex >= 12 || !s_auctionClasses[classIndex].m_hasSubClasses) {
+    if (classIndex >= CGAuctionHouse::NUM_CLASS_FILTERS || !s_auctionClasses[classIndex].m_hasSubClasses) {
         return 0;
     }
 
@@ -152,12 +152,12 @@ static int32_t Script_GetAuctionInvTypes(lua_State* L) {
     for (int32_t i = 0; i < g_itemSubClassDB.m_numRecords; i++) {
         ItemSubClassRec* rec = i < 0 || i >= g_itemSubClassDB.m_numRecords ? nullptr : &g_itemSubClassDB.m_records[i];
 
-        if (rec->m_classID != s_auctionClasses[classIndex].m_classID || (rec->m_displayFlags & 0x2)) {
+        if (rec->m_classID != s_auctionClasses[classIndex].m_classID || (rec->m_displayFlags & ITEM_SUBCLASS_DISPLAY_FLAG_HIDE_IN_AUCTION)) {
             continue;
         }
 
         if (!remaining) {
-            if (!(rec->m_flags & 0x200)) {
+            if (!(rec->m_flags & ITEM_SUBCLASS_FLAG_AUCTION_INVENTORY_FILTER)) {
                 return 0;
             }
 
@@ -167,14 +167,14 @@ static int32_t Script_GetAuctionInvTypes(lua_State* L) {
         remaining--;
     }
 
-    lua_checkstack(L, 28);
+    lua_checkstack(L, 2 * CGAuctionHouse::NUM_INVENTORY_FILTERS);
 
-    for (uint32_t i = 0; i < 14; i++) {
+    for (uint32_t i = 0; i < CGAuctionHouse::NUM_INVENTORY_FILTERS; i++) {
         lua_pushstring(L, s_auctionInvTypes[i].m_token);
 
-        if (s_auctionClasses[classIndex].m_classID == 4) {
+        if (s_auctionClasses[classIndex].m_classID == ITEM_CLASS::ITEM_CLASS_ARMOR) {
             if (subClass) {
-                if ((subClass != 1 || s_auctionInvTypes[i].m_invType != 16) && s_auctionInvTypes[i].unk_0028) {
+                if ((subClass != 1 || s_auctionInvTypes[i].m_invType != INVTYPE_CLOAK) && s_auctionInvTypes[i].unk_0028) {
                     lua_pushnil(L);
                     continue;
                 }
@@ -187,7 +187,7 @@ static int32_t Script_GetAuctionInvTypes(lua_State* L) {
         lua_pushnumber(L, 1.0);
     }
 
-    return 28;
+    return 2 * CGAuctionHouse::NUM_INVENTORY_FILTERS;
 }
 
 // VERIFY: a694c251 auto
@@ -222,7 +222,7 @@ static int32_t Script_CancelAuction(lua_State* L) {
         return 0;
     }
 
-    if (!CGGameUI::CanPerformAction(8)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_AUCTION)) {
         return 0;
     }
 
@@ -291,10 +291,10 @@ static int32_t Script_GetNumAuctionItems(lua_State* L) {
 }
 
 // STATIC: 0x00A15238
-static const uint32_t s_timeLeftThresholds[3] = { 1800000, 7200000, 43200000 };
+static const uint32_t s_timeLeftThresholds[CGAuctionHouse::NUM_TIME_LEFT_THRESHOLDS] = { 1800000, 7200000, 43200000 };
 
 // STATIC: 0x00A15248
-static const uint32_t AUCTION_RUN_TIMES[3] = { 720, 1440, 2880 };
+static const CGAuctionHouse::RUN_TIME AUCTION_RUN_TIMES[CGAuctionHouse::RUN_TIME::NUM_RUN_TIMES] = { CGAuctionHouse::RUN_TIME::RUN_TIME_SHORT, CGAuctionHouse::RUN_TIME::RUN_TIME_DEFAULT, CGAuctionHouse::RUN_TIME::RUN_TIME_LONG };
 
 // VERIFY: ae094fc9 manual
 // OFFSET: 0x0059AB90
@@ -304,7 +304,7 @@ static int32_t Script_IsAuctionSortReversed(lua_State* L) {
         return 0;
     }
 
-    int32_t column = 1;
+    AuctionSortCriteria::COLUMN column = AuctionSortCriteria::COLUMN::QUALITY;
     const char* type = lua_tolstring(L, 1, nullptr);
     const char* sort = lua_tolstring(L, 2, nullptr);
 
@@ -326,8 +326,8 @@ static int32_t Script_IsAuctionSortReversed(lua_State* L) {
         return 2;
     }
 
-    for (uint32_t i = 0; i < 12; i++) {
-        AuctionSortCriteria* entry = i < 12 ? &criteria[i] : nullptr;
+    for (uint32_t i = 0; i < CGAuctionHouse::MAX_SORT_CRITERIA; i++) {
+        AuctionSortCriteria* entry = i < CGAuctionHouse::MAX_SORT_CRITERIA ? &criteria[i] : nullptr;
 
         if (entry->m_valid && entry->m_column == column) {
             if (entry->m_reverse) {
@@ -359,7 +359,7 @@ static int32_t Script_GetAuctionSort(lua_State* L) {
     AuctionSortCriteria* criteria;
 
     if (!SStrCmpI(type, "owner", STORM_MAX_STR)) {
-        criteria = index < 12 ? &CGAuctionHouse::m_ownedSortCriteria[index] : nullptr;
+        criteria = index < CGAuctionHouse::MAX_SORT_CRITERIA ? &CGAuctionHouse::m_ownedSortCriteria[index] : nullptr;
     } else if (!SStrCmpI(type, "bidder", STORM_MAX_STR)) {
         criteria = CGAuctionHouse::GetBidSortCriteria(index);
     } else if (!SStrCmpI(type, "list", STORM_MAX_STR)) {
@@ -414,7 +414,7 @@ static int32_t Script_SortAuctionSetSort(lua_State* L) {
         return 0;
     }
 
-    int32_t column = 1;
+    AuctionSortCriteria::COLUMN column = AuctionSortCriteria::COLUMN::QUALITY;
     const char* type = lua_tolstring(L, 1, nullptr);
     const char* sort = lua_tolstring(L, 2, nullptr);
     bool reverse = lua_type(L, 3) == LUA_TBOOLEAN && lua_toboolean(L, 3);
@@ -449,7 +449,7 @@ static int32_t Script_CancelSell(lua_State* L) {
 static int32_t Script_QueryAuctionItems(lua_State* L) {
     WOWGUID auctioneer = CGAuctionHouse::m_auctioneer;
 
-    if (!auctioneer || !CGAuctionHouse::CanSendQuery(0)) {
+    if (!auctioneer || !CGAuctionHouse::CanSendQuery(CGAuctionHouse::LIST_TYPE::BROWSE_LIST)) {
         return 0;
     }
 
@@ -465,12 +465,12 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
         maxLevel = static_cast<uint8_t>(lua_tonumber(L, 3));
     }
 
-    int32_t invType = -1;
+    int32_t invType = INVTYPE_INVALID;
 
     if (lua_isnumber(L, 4)) {
         uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 4)) - 1;
 
-        if (index < 14) {
+        if (index < CGAuctionHouse::NUM_INVENTORY_FILTERS) {
             invType = s_auctionInvTypes[index].m_invType;
         }
     }
@@ -480,7 +480,7 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
     if (lua_isnumber(L, 5)) {
         uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 5)) - 1;
 
-        if (index < 12) {
+        if (index < CGAuctionHouse::NUM_CLASS_FILTERS) {
             classID = s_auctionClasses[index].m_classID;
         }
     }
@@ -493,7 +493,7 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
         for (int32_t i = 0; i < g_itemSubClassDB.m_numRecords; i++) {
             ItemSubClassRec* rec = i < 0 || i >= g_itemSubClassDB.m_numRecords ? nullptr : &g_itemSubClassDB.m_records[i];
 
-            if (rec->m_classID == classID && !(rec->m_displayFlags & 0x2)) {
+            if (rec->m_classID == classID && !(rec->m_displayFlags & ITEM_SUBCLASS_DISPLAY_FLAG_HIDE_IN_AUCTION)) {
                 if (!remaining) {
                     subClassID = rec->m_subClassID;
                     break;
@@ -507,7 +507,7 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
     int32_t page = 0;
 
     if (lua_isnumber(L, 7)) {
-        page = 50 * static_cast<int32_t>(lua_tonumber(L, 7));
+        page = CGAuctionHouse::ITEMS_PER_PAGE * static_cast<int32_t>(lua_tonumber(L, 7));
     }
 
     uint8_t usable = 0;
@@ -524,7 +524,7 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
 
     bool getAll = lua_type(L, 10) == LUA_TBOOLEAN && lua_toboolean(L, 10);
 
-    if (getAll && (CGAuctionHouse::m_queryPending[0] > 0 || (CGAuctionHouse::m_lastGetAllTime && static_cast<int32_t>(OsGetAsyncTimeMs() - CGAuctionHouse::m_lastGetAllTime - 900000) < 0) || !CGAuctionHouse::CanSendQuery(0))) {
+    if (getAll && (CGAuctionHouse::m_queryPending[CGAuctionHouse::LIST_TYPE::BROWSE_LIST] > 0 || (CGAuctionHouse::m_lastGetAllTime && static_cast<int32_t>(OsGetAsyncTimeMs() - CGAuctionHouse::m_lastGetAllTime - CGAuctionHouse::GET_ALL_QUERY_COOLDOWN_MS) < 0) || !CGAuctionHouse::CanSendQuery(CGAuctionHouse::LIST_TYPE::BROWSE_LIST))) {
         return 0;
     }
 
@@ -546,8 +546,8 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
     uint32_t countPos = msg.m_size;
     msg.Put(static_cast<uint8_t>(0));
 
-    for (uint32_t i = 0; i < 12; i++) {
-        AuctionSortCriteria* criteria = i < 12 ? &CGAuctionHouse::m_listSortCriteria[i] : nullptr;
+    for (uint32_t i = 0; i < CGAuctionHouse::MAX_SORT_CRITERIA; i++) {
+        AuctionSortCriteria* criteria = i < CGAuctionHouse::MAX_SORT_CRITERIA ? &CGAuctionHouse::m_listSortCriteria[i] : nullptr;
 
         if (criteria && criteria->m_valid) {
             msg.Put(static_cast<uint8_t>(criteria->m_column));
@@ -560,11 +560,11 @@ static int32_t Script_QueryAuctionItems(lua_State* L) {
     msg.Finalize();
     ClientServices::Send2(&msg);
 
-    if (++CGAuctionHouse::m_queryPending[0] < 0) {
-        CGAuctionHouse::m_queryPending[0] = 0;
+    if (++CGAuctionHouse::m_queryPending[CGAuctionHouse::LIST_TYPE::BROWSE_LIST] < 0) {
+        CGAuctionHouse::m_queryPending[CGAuctionHouse::LIST_TYPE::BROWSE_LIST] = 0;
     }
 
-    CGAuctionHouse::m_lastQueryTime[0] = OsGetAsyncTimeMs();
+    CGAuctionHouse::m_lastQueryTime[CGAuctionHouse::LIST_TYPE::BROWSE_LIST] = OsGetAsyncTimeMs();
 
     if (getAll) {
         CGAuctionHouse::m_lastGetAllTime = OsGetAsyncTimeMs();
@@ -617,7 +617,7 @@ static int32_t Script_GetAuctionItemLink(lua_State* L) {
 // VERIFY: d702b148 auto
 // OFFSET: 0x0059C740
 static int32_t Script_CanSendAuctionQuery(lua_State* L) {
-    int32_t type = 0;
+    CGAuctionHouse::LIST_TYPE type = CGAuctionHouse::LIST_TYPE::BROWSE_LIST;
 
     if (lua_isstring(L, 1)) {
         CGAuctionHouse::TableNameToType(lua_tolstring(L, 1, nullptr), &type);
@@ -629,7 +629,7 @@ static int32_t Script_CanSendAuctionQuery(lua_State* L) {
         lua_pushnil(L);
     }
 
-    if (type >= 3 || CGAuctionHouse::m_queryPending[type] > 0 || (CGAuctionHouse::m_lastGetAllTime && static_cast<int32_t>(OsGetAsyncTimeMs() - CGAuctionHouse::m_lastGetAllTime - 900000) < 0) || !CGAuctionHouse::CanSendQuery(type)) {
+    if (type >= CGAuctionHouse::LIST_TYPE::NUM_LIST_TYPES || CGAuctionHouse::m_queryPending[type] > 0 || (CGAuctionHouse::m_lastGetAllTime && static_cast<int32_t>(OsGetAsyncTimeMs() - CGAuctionHouse::m_lastGetAllTime - CGAuctionHouse::GET_ALL_QUERY_COOLDOWN_MS) < 0) || !CGAuctionHouse::CanSendQuery(type)) {
         lua_pushnil(L);
     } else {
         lua_pushnumber(L, 1.0);
@@ -718,13 +718,13 @@ static int32_t Script_CalculateAuctionDeposit(lua_State* L) {
     CGItem_C* item;
     ItemStats_C* stats;
 
-    if (!rec || !(sellItem = CGAuctionHouse::m_sellItem) || !(item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPEMASK_ITEM, __FILE__, __LINE__))) || !(stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, sellItem, AuctionSellItemQueryCallback, nullptr, false))) {
+    if (!rec || !(sellItem = CGAuctionHouse::m_sellItem) || !(item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPE_ITEM, __FILE__, __LINE__))) || !(stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, sellItem, AuctionSellItemQueryCallback, nullptr, false))) {
         lua_pushnumber(L, 0.0);
         return 1;
     }
 
     uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 1) - 1.0);
-    uint32_t runTime = index >= 3 ? 1440 : AUCTION_RUN_TIMES[index];
+    CGAuctionHouse::RUN_TIME runTime = index >= CGAuctionHouse::RUN_TIME::NUM_RUN_TIMES ? CGAuctionHouse::RUN_TIME::RUN_TIME_DEFAULT : AUCTION_RUN_TIMES[index];
     int32_t count;
 
     if (lua_isnumber(L, 2)) {
@@ -745,7 +745,7 @@ static int32_t Script_ClickAuctionSellItemButton(lua_State* L) {
     uint32_t slot;
     CGGameUI::GetCursorItem(item, container, slot);
 
-    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (object && !CGAuctionHouse::IsSellItemValid(object, 1)) {
         return 0;
@@ -771,7 +771,7 @@ static int32_t Script_ClickAuctionSellItemButton(lua_State* L) {
 // VERIFY: a837f6c9 manual
 // OFFSET: 0x0059D4F0
 static int32_t Script_GetOwnerAuctionItems(lua_State* L) {
-    if (CGAuctionHouse::m_auctioneer && CGAuctionHouse::m_canGetOwnerList && CGAuctionHouse::CanSendQuery(2)) {
+    if (CGAuctionHouse::m_auctioneer && CGAuctionHouse::m_canGetOwnerList && CGAuctionHouse::CanSendQuery(CGAuctionHouse::LIST_TYPE::OWNER_LIST)) {
         CGAuctionHouse::GetOwnerList();
     }
 
@@ -781,11 +781,11 @@ static int32_t Script_GetOwnerAuctionItems(lua_State* L) {
 // VERIFY: 34540ddd manual
 // OFFSET: 0x0059D540
 static int32_t Script_GetBidderAuctionItems(lua_State* L) {
-    if (CGAuctionHouse::m_auctioneer && CGAuctionHouse::m_canGetBidderList && CGAuctionHouse::CanSendQuery(1)) {
+    if (CGAuctionHouse::m_auctioneer && CGAuctionHouse::m_canGetBidderList && CGAuctionHouse::CanSendQuery(CGAuctionHouse::LIST_TYPE::BIDDER_LIST)) {
         int32_t page = 0;
 
         if (lua_isnumber(L, 1)) {
-            page = 50 * static_cast<int32_t>(lua_tonumber(L, 1));
+            page = CGAuctionHouse::ITEMS_PER_PAGE * static_cast<int32_t>(lua_tonumber(L, 1));
         }
 
         BidderListItems(page);
@@ -843,14 +843,14 @@ static int32_t Script_GetAuctionItemInfo(lua_State* L) {
         lua_pushnil(L);
         lua_pushnil(L);
         lua_pushnumber(L, 0.0);
-        return 13;
+        return CGAuctionHouse::NUM_ITEM_INFO_RESULTS;
     }
 
     char name[256];
     CGItem_C::BuildItemName(name, sizeof(name), auction->m_itemID, auction->m_randomPropertyID);
     lua_pushstring(L, name);
 
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
     char texture[260];
     SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(stats->m_displayId));
     lua_pushstring(L, texture);
@@ -897,7 +897,7 @@ static int32_t Script_GetAuctionItemInfo(lua_State* L) {
     }
 
     lua_pushnumber(L, auction->m_sold);
-    return 13;
+    return CGAuctionHouse::NUM_ITEM_INFO_RESULTS;
 }
 
 // VERIFY: e2337546 manual
@@ -908,7 +908,7 @@ static int32_t Script_PlaceAuctionBid(lua_State* L) {
         return 0;
     }
 
-    if (!CGGameUI::CanPerformAction(8)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_AUCTION)) {
         return 0;
     }
 
@@ -956,7 +956,7 @@ static int32_t Script_PlaceAuctionBid(lua_State* L) {
         return 0;
     }
 
-    if (bid > 2000000000 && bid > auction->m_bid + auction->m_minIncrement) {
+    if (bid > CGAuctionHouse::HIGH_BID_THRESHOLD && bid > auction->m_bid + auction->m_minIncrement) {
         return 0;
     }
 
@@ -997,7 +997,7 @@ static int32_t Script_SortAuctionItems(lua_State* L) {
         return 0;
     }
 
-    int32_t column = 1;
+    AuctionSortCriteria::COLUMN column = AuctionSortCriteria::COLUMN::QUALITY;
     const char* type = lua_tolstring(L, 1, nullptr);
     const char* sort = lua_tolstring(L, 2, nullptr);
 
@@ -1030,7 +1030,7 @@ static int32_t Script_GetAuctionSellItemInfo(lua_State* L) {
     CGItem_C* item;
     ItemStats_C* stats;
 
-    if (!sellItem || !(item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPEMASK_ITEM, __FILE__, __LINE__))) || !(stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, sellItem, AuctionSellItemQueryCallback, nullptr, false))) {
+    if (!sellItem || !(item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPE_ITEM, __FILE__, __LINE__))) || !(stats = g_itemDBCache.GetRecord(item->m_obj->m_entryID, sellItem, AuctionSellItemQueryCallback, nullptr, false))) {
         lua_pushnil(L);
         lua_pushnil(L);
         lua_pushnumber(L, 1.0);
@@ -1040,14 +1040,14 @@ static int32_t Script_GetAuctionSellItemInfo(lua_State* L) {
         lua_pushnumber(L, 0.0);
         lua_pushnumber(L, 0.0);
         lua_pushnumber(L, 0.0);
-        return 9;
+        return CGAuctionHouse::NUM_SELL_ITEM_INFO_RESULTS;
     }
 
     char name[256];
     item->GetFullItemName(name, sizeof(name));
     lua_pushstring(L, name);
 
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
     char texture[260];
     SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(stats->m_displayId));
     lua_pushstring(L, texture);
@@ -1068,7 +1068,7 @@ static int32_t Script_GetAuctionSellItemInfo(lua_State* L) {
     lua_pushnumber(L, stats->m_sellPrice);
     lua_pushnumber(L, stats->m_stackable);
     lua_pushnumber(L, FindSellableItems(item->m_obj->m_entryID));
-    return 9;
+    return CGAuctionHouse::NUM_SELL_ITEM_INFO_RESULTS;
 }
 
 // VERIFY: 6bd4bdb4 auto
@@ -1086,7 +1086,7 @@ static int32_t Script_StartAuction(lua_State* L) {
         return 0;
     }
 
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGAuctionHouse::m_sellItem, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return 0;
@@ -1117,7 +1117,7 @@ static int32_t Script_StartAuction(lua_State* L) {
     }
 
     uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 3) - 1.0);
-    uint32_t runTime = index >= 3 ? 1440 : AUCTION_RUN_TIMES[index];
+    CGAuctionHouse::RUN_TIME runTime = index >= CGAuctionHouse::RUN_TIME::NUM_RUN_TIMES ? CGAuctionHouse::RUN_TIME::RUN_TIME_DEFAULT : AUCTION_RUN_TIMES[index];
     uint32_t stackSize = 0;
 
     if (lua_isnumber(L, 4)) {
@@ -1206,18 +1206,19 @@ static int32_t Script_GetAuctionItemTimeLeft(lua_State* L) {
     uint32_t now = OsGetAsyncTimeMs();
 
     if (static_cast<int32_t>(now - auction->m_expireTime) < 0) {
-        if (auction->m_sold == 0) {
+        if (auction->m_sold == AuctionItemInfo::SALE_STATE::UNSOLD) {
             uint32_t timeLeft = auction->m_expireTime - now;
 
-            for (uint32_t i = 0; i < 3; i++) {
+            for (uint32_t i = 0; i < CGAuctionHouse::NUM_TIME_LEFT_THRESHOLDS; i++) {
                 if (timeLeft < s_timeLeftThresholds[i]) {
-                    lua_pushnumber(L, i + 1);
+                    CGAuctionHouse::TIME_LEFT_CATEGORY category = static_cast<CGAuctionHouse::TIME_LEFT_CATEGORY>(i + 1);
+                    lua_pushnumber(L, category);
                     return 1;
                 }
             }
 
-            lua_pushnumber(L, 4.0);
-        } else if (auction->m_sold == 1) {
+            lua_pushnumber(L, CGAuctionHouse::TIME_LEFT_CATEGORY::TIME_LEFT_VERY_LONG);
+        } else if (auction->m_sold == AuctionItemInfo::SALE_STATE::SOLD) {
             lua_pushnumber(L, (auction->m_expireTime - now) / 1000);
         }
 
@@ -1226,7 +1227,7 @@ static int32_t Script_GetAuctionItemTimeLeft(lua_State* L) {
 
     lua_pushnumber(L, 1.0);
 
-    if (auction->m_sold == 1 || now - auction->m_expireTime > 10000) {
+    if (auction->m_sold == AuctionItemInfo::SALE_STATE::SOLD || now - auction->m_expireTime > CGAuctionHouse::EXPIRY_GRACE_MS) {
         CGAuctionHouse::AuctionItemExpired(auction->m_auctionID);
     }
 

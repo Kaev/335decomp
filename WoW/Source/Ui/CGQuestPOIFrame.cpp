@@ -25,6 +25,7 @@
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/Ui/QuestLog.h"
 #include "WoW/Source/Ui/WorldMap.h"
+#include "Engine/Source/ShaderEffect/Types.h"
 
 // STATIC: 0x00ACF17C
 const char* CGQuestPOIFrame::s_objectTypeName = "QuestPOIFrame";
@@ -223,12 +224,12 @@ void CGQuestPOIFrame::UpdateMouseOverPOI(float x, float y) {
     for (uint32_t i = 0; i < 4; i++) {
         QuestPOIRenderGroup* group = &this->m_groups[i];
 
-        if (!group->m_info || !group->m_info->unk_0028) {
+        if (!group->m_info || !group->m_info->m_visible) {
             continue;
         }
 
         for (uint32_t j = 0; j < group->m_renderData.Count(); j++) {
-            int32_t mask = group->m_info->unk_002C;
+            int32_t mask = group->m_info->m_objectiveMask;
 
             if (mask == -1) {
                 continue;
@@ -236,7 +237,7 @@ void CGQuestPOIFrame::UpdateMouseOverPOI(float x, float y) {
 
             QuestPOIRenderData* data = &group->m_renderData.m_data[j];
 
-            if (!((1 << data->m_blob->unk_001C) & mask) || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->unk_0020, area->m_mapID)) {
+            if (!((1 << data->m_blob->m_objectiveIndex) & mask) || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->m_mapId, area->m_mapID)) {
                 continue;
             }
 
@@ -244,7 +245,7 @@ void CGQuestPOIFrame::UpdateMouseOverPOI(float x, float y) {
                 continue;
             }
 
-            if (!NTempest::Intersect(point, data->m_fillVerts.m_data, data->m_fillVerts.Count() - 1, C3Vector::AXIS_Z)) {
+            if (!NTempest::Intersect(point, data->m_fillVerts.m_data, data->m_fillVerts.Count() - 1, C3Vector::C3AXIS_Z)) {
                 continue;
             }
 
@@ -271,7 +272,7 @@ void CGQuestPOIFrame::UpdateMouseOverPOI(float x, float y) {
 // OFFSET: 0x0058E310
 void CGQuestPOIFrame::MergeBlobs(uint32_t index) {
     QuestPOIRenderGroup* group = &this->m_groups[index];
-    int32_t mask = group->m_info->unk_002C;
+    int32_t mask = group->m_info->m_objectiveMask;
 
     if (mask == -1) {
         return;
@@ -280,14 +281,14 @@ void CGQuestPOIFrame::MergeBlobs(uint32_t index) {
     for (uint32_t i = 0; i < group->m_renderData.Count(); i++) {
         QuestPOIRenderData* first = &group->m_renderData.m_data[i];
 
-        if (!first->m_valid || !((1 << first->m_blob->unk_001C) & mask)) {
+        if (!first->m_valid || !((1 << first->m_blob->m_objectiveIndex) & mask)) {
             continue;
         }
 
         for (uint32_t j = i + 1; j < group->m_renderData.Count(); j++) {
             QuestPOIRenderData* second = &group->m_renderData.m_data[j];
 
-            if (!second->m_valid || !((1 << second->m_blob->unk_001C) & mask)) {
+            if (!second->m_valid || !((1 << second->m_blob->m_objectiveIndex) & mask)) {
                 continue;
             }
 
@@ -311,7 +312,7 @@ void CGQuestPOIFrame::MergeBlobs(uint32_t index) {
             uint32_t inside = 0;
 
             for (uint32_t k = 0; k < smaller->m_fillVerts.Count() - 1; k++) {
-                if (NTempest::Intersect(smaller->m_fillVerts.m_data[k], larger->m_fillVerts.m_data, larger->m_fillVerts.Count() - 1, C3Vector::AXIS_Z)) {
+                if (NTempest::Intersect(smaller->m_fillVerts.m_data[k], larger->m_fillVerts.m_data, larger->m_fillVerts.Count() - 1, C3Vector::C3AXIS_Z)) {
                     inside++;
                 }
             }
@@ -376,14 +377,14 @@ void CGQuestPOIFrame::BuildBlobOutline(QuestPOIBlob* blob, TSGrowableArray<Quest
     C3Spline_CatmullRom spline;
     C3Vector controls[15];
     uint32_t count = blob->m_points.Count();
-    controls[0] = C3Vector(static_cast<float>(blob->m_points.m_data[count - 1].m_x), static_cast<float>(blob->m_points.m_data[count - 1].m_y), 0.0f);
+    controls[0] = C3Vector(static_cast<float>(blob->m_points.m_data[count - 1].m_position.x), static_cast<float>(blob->m_points.m_data[count - 1].m_position.y), 0.0f);
 
     for (uint32_t i = 0; i < count; i++) {
-        controls[i + 1] = C3Vector(static_cast<float>(blob->m_points.m_data[i].m_x), static_cast<float>(blob->m_points.m_data[i].m_y), 0.0f);
+        controls[i + 1] = C3Vector(static_cast<float>(blob->m_points.m_data[i].m_position.x), static_cast<float>(blob->m_points.m_data[i].m_position.y), 0.0f);
     }
 
-    controls[count + 1] = C3Vector(static_cast<float>(blob->m_points.m_data[0].m_x), static_cast<float>(blob->m_points.m_data[0].m_y), 0.0f);
-    controls[count + 2] = C3Vector(static_cast<float>(blob->m_points.m_data[1].m_x), static_cast<float>(blob->m_points.m_data[1].m_y), 0.0f);
+    controls[count + 1] = C3Vector(static_cast<float>(blob->m_points.m_data[0].m_position.x), static_cast<float>(blob->m_points.m_data[0].m_position.y), 0.0f);
+    controls[count + 2] = C3Vector(static_cast<float>(blob->m_points.m_data[1].m_position.x), static_cast<float>(blob->m_points.m_data[1].m_position.y), 0.0f);
     spline.SetPoints(controls, count + 3);
 
     float t = 0.01f;
@@ -396,8 +397,8 @@ void CGQuestPOIFrame::BuildBlobOutline(QuestPOIBlob* blob, TSGrowableArray<Quest
         QuestPOIPoint* point = points->New();
 
         if (point) {
-            point->m_x = x;
-            point->m_y = y;
+            point->m_position.x = x;
+            point->m_position.y = y;
         }
 
         t = 1.0f / this->m_numSplinePoints + t;
@@ -436,12 +437,12 @@ void CGQuestPOIFrame::BuildBlobRenderData(QuestPOIRenderData* data, QuestPOIBlob
     data->m_objectives[1] = 0;
     data->m_objectives[2] = 0;
     data->m_objectives[3] = 0;
-    data->m_objectives[0] = blob->unk_001C;
+    data->m_objectives[0] = blob->m_objectiveIndex;
     data->m_numObjectives = 1;
     bool failed = false;
 
     for (uint32_t i = 0; i < count; i++) {
-        C3Vector position(static_cast<float>(points.m_data[i].m_x), static_cast<float>(points.m_data[i].m_y), 0.0f);
+        C3Vector position(static_cast<float>(points.m_data[i].m_position.x), static_cast<float>(points.m_data[i].m_position.y), 0.0f);
         float x;
         float y;
         bool outland = false;
@@ -690,8 +691,8 @@ void CGQuestPOIFrame::Render() {
     }
 
     g_theGxDevicePtr->RsPush();
-    GxRsSet(GxRs_ColorOp0, 0);
-    GxRsSet(GxRs_AlphaOp0, 0);
+    GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
     GxRsSet(GxRs_ColorWrite, 15);
     GxRsSet(GxRs_DepthWrite, 0);
     GxRsSet(GxRs_Lighting, 0);
@@ -721,13 +722,13 @@ void CGQuestPOIFrame::Render() {
         for (uint32_t j = 0; j < group->m_renderData.Count(); j++) {
             QuestPOIRenderData* data = &group->m_renderData.m_data[j];
 
-            if (!data->m_blob || !data->m_valid || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->unk_0020, area->m_mapID)) {
+            if (!data->m_blob || !data->m_valid || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->m_mapId, area->m_mapID)) {
                 continue;
             }
 
-            int32_t mask = group->m_info->unk_002C;
+            int32_t mask = group->m_info->m_objectiveMask;
 
-            if ((mask == -1 || ((1 << data->m_blob->unk_001C) & mask)) && (s_highlightIndex == -1 || s_highlightIndex == static_cast<int32_t>(j))) {
+            if ((mask == -1 || ((1 << data->m_blob->m_objectiveIndex) & mask)) && (s_highlightIndex == -1 || s_highlightIndex == static_cast<int32_t>(j))) {
                 GxPrimLockVertexPtrs(data->m_fillVerts.Count(), data->m_fillVerts.m_data, sizeof(C3Vector), nullptr, 0, nullptr, 0, nullptr, 0, data->m_fillTexCoords.m_data, sizeof(C2Vector), nullptr, 0);
                 GxDrawLockedElements(GxPrim_Triangles, data->m_fillIndices.Count(), data->m_fillIndices.m_data);
                 GxPrimUnlockVertexPtrs();
@@ -748,13 +749,13 @@ void CGQuestPOIFrame::Render() {
         for (uint32_t j = 0; j < group->m_renderData.Count(); j++) {
             QuestPOIRenderData* data = &group->m_renderData.m_data[j];
 
-            if (!data->m_blob || !data->m_valid || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->unk_0020, area->m_mapID)) {
+            if (!data->m_blob || !data->m_valid || !CGQuestLog::IsPOIOnCurrentMap(&data->m_blob->m_centerX, data->m_blob->m_mapId, area->m_mapID)) {
                 continue;
             }
 
-            int32_t mask = group->m_info->unk_002C;
+            int32_t mask = group->m_info->m_objectiveMask;
 
-            if ((mask == -1 || ((1 << data->m_blob->unk_001C) & mask)) && (s_highlightIndex == -1 || s_highlightIndex == static_cast<int32_t>(j))) {
+            if ((mask == -1 || ((1 << data->m_blob->m_objectiveIndex) & mask)) && (s_highlightIndex == -1 || s_highlightIndex == static_cast<int32_t>(j))) {
                 GxPrimLockVertexPtrs(data->m_borderVerts.Count(), data->m_borderVerts.m_data, sizeof(C3Vector), nullptr, 0, nullptr, 0, nullptr, 0, data->m_borderTexCoords.m_data, sizeof(C2Vector), nullptr, 0);
                 GxDrawLockedElements(GxPrim_TriangleStrip, data->m_borderIndices.Count(), data->m_borderIndices.m_data);
                 GxPrimUnlockVertexPtrs();

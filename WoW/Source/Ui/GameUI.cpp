@@ -1,4 +1,6 @@
 #include "GameUI.h"
+#include "Engine/Source/Tempest/Color.h"
+#include "WoW/Common/Types.h"
 #include "WoW/Source/DB/Rec/FileDataRec.h"
 #include "WoW/Source/DB/Rec/MovieFileDataRec.h"
 #include "WoW/Source/DB/Rec/MovieRec.h"
@@ -49,6 +51,7 @@
 #include "WoW/Source/Glue/CGlueMgr.h"
 #include "WoW/Source/Glue/CWOWClientStatus.h"
 #include "WoW/Source/LoadingScreen.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
 #include "WoW/Source/Net/Types.h"
 #include "WoW/Source/Object/ItemStats.h"
@@ -68,6 +71,7 @@
 #include "WoW/Source/Ui/ActionBarFrame.h"
 #include "WoW/Source/Ui/AddOns.h"
 #include "WoW/Source/Ui/ArenaTeamInfo.h"
+#include "WoW/Source/Ui/BugReport.h"
 #include "WoW/Source/Ui/AuctionHouse.h"
 #include "WoW/Source/Ui/BarberShop.h"
 #include "WoW/Source/Ui/BattlefieldInfo.h"
@@ -172,8 +176,19 @@
 #include "WoW/Source/DB/Rec/CreatureFamilyRec.h"
 #include "WoW/Source/DB/Rec/CreatureTypeRec.h"
 
+namespace {
+// User inactivity thresholds in milliseconds; signed to match idleTime arithmetic.
+const int32_t AUTO_SIT_IDLE_TIME = 300000;
+const int32_t AUTO_LOGOUT_IDLE_TIME = 1800000;
+}
+
+static const float MAX_CAMERA_SHIFT_SQUARED = 900.0f;
+
+static const float TARGET_NEAREST_FRONT_MAX_DISTANCE_SQUARED = 1681.0f;
+static const float TARGET_NEAREST_BACK_MAX_DISTANCE_SQUARED = 100.0f;
+
 // STATIC: 0x00ACC3F8
-CImVector s_deadSelectionColor = CImVector(0x7F, 0x7F, 0x7F, 0xFF);
+CImVector s_deadSelectionColor = CImVector(COLOR_GRAY_127_BGRA);
 
 // STATIC: 0x00AC804C
 const char* g_macroTaint = "";
@@ -183,736 +198,736 @@ static const char* s_readOnlyCVars[6] = { "realmList", "realmName", "decorateAcc
 
 // STATIC: 0x00AC8AF0
 static UIErrorInfo s_errorInfo[ERR_MAX_VALUE] = {
-    { "ERR_INV_FULL", 2, "NONE", 0, 0 },
-    { "ERR_BANK_FULL", 2, "NONE", 68, 0 },
-    { "ERR_CANT_EQUIP_LEVEL_I", 2, "NONE", 2, 0 },
-    { "ERR_CANT_EQUIP_SKILL", 2, "NONE", 41, 0 },
-    { "ERR_CANT_EQUIP_EVER", 2, "NONE", 3, 0 },
-    { "ERR_CANT_EQUIP_RANK", 2, "NONE", 68, 0 },
-    { "ERR_CANT_EQUIP_RATING", 2, "NONE", 68, 0 },
-    { "ERR_CANT_EQUIP_REPUTATION", 2, "NONE", 68, 0 },
-    { "ERR_PROFICIENCY_NEEDED", 2, "NONE", 48, 0 },
-    { "ERR_WRONG_SLOT", 2, "NONE", 27, 0 },
-    { "ERR_CANT_EQUIP_NEED_TALENT", 2, "NONE", 41, 0 },
-    { "ERR_BAG_FULL", 2, "NONE", 29, 0 },
-    { "ERR_INTERNAL_BAG_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_DESTROY_NONEMPTY_BAG", 2, "NONE", 68, 0 },
-    { "ERR_BAG_IN_BAG", 2, "NONE", 26, 0 },
-    { "ERR_TOO_MANY_SPECIAL_BAGS", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_EQUIPPED_BAG", 2, "NONE", 68, 0 },
-    { "ERR_AMMO_ONLY", 2, "NONE", 28, 0 },
-    { "ERR_NO_SLOT_AVAILABLE", 2, "NONE", 68, 0 },
-    { "ERR_WRONG_BAG_TYPE", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_MAX_COUNT", 2, "NONE", 30, 0 },
-    { "ERR_NOT_EQUIPPABLE", 2, "NONE", 44, 0 },
-    { "ERR_CANT_STACK", 2, "NONE", 68, 0 },
-    { "ERR_CANT_SWAP", 2, "NONE", 68, 0 },
-    { "ERR_SLOT_EMPTY", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_NOT_FOUND", 2, "NONE", 68, 0 },
-    { "ERR_TOO_FEW_TO_SPLIT", 2, "NONE", 68, 0 },
-    { "ERR_SPLIT_FAILED", 2, "NONE", 68, 0 },
-    { "ERR_NOT_A_BAG", 2, "NONE", 25, 0 },
-    { "ERR_NOT_OWNER", 2, "NONE", 68, 0 },
-    { "ERR_ONLY_ONE_QUIVER", 2, "NONE", 68, 0 },
-    { "ERR_NO_BANK_SLOT", 2, "NONE", 68, 0 },
-    { "ERR_NO_BANK_HERE", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_LOCKED", 2, "NONE", 61, 0 },
-    { "ERR_2HANDED_EQUIPPED", 2, "NONE", 42, 0 },
-    { "ERR_VENDOR_NOT_INTERESTED", 2, "NONE", 68, 0 },
-    { "ERR_VENDOR_HATES_YOU", 2, "NONE", 68, 0 },
-    { "ERR_VENDOR_SOLD_OUT", 2, "NONE", 68, 0 },
-    { "ERR_VENDOR_TOO_FAR", 2, "NONE", 68, 0 },
-    { "ERR_VENDOR_DOESNT_BUY", 2, "NONE", 68, 0 },
-    { "ERR_NOT_ENOUGH_MONEY", 2, "NONE", 40, 0 },
-    { "ERR_RECEIVE_ITEM_S", 0, "ITEMGENERICSOUND", 68, 0 },
-    { "ERR_DROP_BOUND_ITEM", 2, "NONE", 4, 0 },
-    { "ERR_TRADE_BOUND_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_TRADE_QUEST_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_TRADE_TEMP_ENCHANT_BOUND", 2, "NONE", 59, 0 },
-    { "ERR_TRADE_GROUND_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_BAG", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_S", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_COOLDOWN", 2, "NONE", 5, 0 },
-    { "ERR_POTION_COOLDOWN", 2, "NONE", 47, 0 },
-    { "ERR_FOOD_COOLDOWN", 2, "NONE", 7, 0 },
-    { "ERR_SPELL_COOLDOWN", 2, "NONE", 12, 0 },
-    { "ERR_ABILITY_COOLDOWN", 2, "NONE", 50, 0 },
-    { "ERR_SPELL_ALREADY_KNOWN_S", 2, "NONE", 13, 0 },
-    { "ERR_PET_SPELL_ALREADY_KNOWN_S", 2, "NONE", 68, 0 },
-    { "ERR_PROFICIENCY_GAINED_S", 0, "NONE", 68, 26 },
-    { "ERR_SKILL_GAINED_S", 0, "NONE", 68, 26 },
-    { "ERR_SKILL_UP_SI", 0, "NONE", 68, 26 },
-    { "ERR_LEARN_SPELL_S", 0, "NONE", 68, 0 },
-    { "ERR_LEARN_ABILITY_S", 0, "NONE", 68, 0 },
-    { "ERR_LEARN_RECIPE_S", 0, "NONE", 68, 0 },
-    { "ERR_LEARN_COMPANION_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITE_PLAYER_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITE_SELF", 2, "NONE", 68, 0 },
-    { "ERR_INVITED_TO_GROUP_SS", 0, "NONE", 68, 0 },
-    { "ERR_INVITED_ALREADY_IN_GROUP_SS", 0, "NONE", 20, 0 },
-    { "ERR_ALREADY_IN_GROUP_S", 0, "NONE", 20, 0 },
-    { "ERR_PLAYER_BUSY_S", 0, "NONE", 68, 0 },
-    { "ERR_NEW_LEADER_S", 0, "NONE", 68, 0 },
-    { "ERR_NEW_LEADER_YOU", 0, "NONE", 68, 0 },
-    { "ERR_NEW_GUIDE_S", 0, "NONE", 68, 0 },
-    { "ERR_NEW_GUIDE_YOU", 0, "NONE", 68, 0 },
-    { "ERR_LEFT_GROUP_S", 0, "NONE", 68, 0 },
-    { "ERR_LEFT_GROUP_YOU", 0, "NONE", 68, 0 },
-    { "ERR_GROUP_DISBANDED", 0, "NONE", 68, 0 },
-    { "ERR_DECLINE_GROUP_S", 0, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_JOINED_GROUP_S", 0, "NONE", 68, 0 },
-    { "ERR_UNINVITE_YOU", 0, "NONE", 68, 0 },
-    { "ERR_BAD_PLAYER_NAME_S", 0, "NONE", 68, 0 },
-    { "ERR_NOT_IN_GROUP", 0, "NONE", 68, 0 },
-    { "ERR_TARGET_NOT_IN_GROUP_S", 0, "NONE", 68, 0 },
-    { "ERR_TARGET_NOT_IN_INSTANCE_S", 0, "NONE", 68, 0 },
-    { "ERR_GROUP_FULL", 0, "NONE", 8, 0 },
-    { "ERR_NOT_LEADER", 0, "NONE", 68, 0 },
-    { "ERR_PLAYER_DIED_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_CREATE_S", 0, "LEVELUP", 68, 0 },
-    { "ERR_GUILD_INVITE_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITED_TO_GUILD_SSS", 0, "LEVELUP", 68, 0 },
-    { "ERR_ALREADY_IN_GUILD_S", 0, "NONE", 68, 0 },
-    { "ERR_ALREADY_INVITED_TO_GUILD_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITED_TO_GUILD", 0, "NONE", 68, 0 },
-    { "ERR_ALREADY_IN_GUILD", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_ACCEPT", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_DECLINE_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_PERMISSIONS", 0, "NONE", 62, 0 },
-    { "ERR_GUILD_JOIN_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_FOUNDER_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_PROMOTE_SSS", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_DEMOTE_SSS", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_QUIT_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEAVE_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_REMOVE_SS", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_REMOVE_SELF", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_DISBAND_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_DISBAND_SELF", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEADER_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEADER_SELF", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_PLAYER_NOT_FOUND_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_PLAYER_NOT_IN_GUILD_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_PLAYER_NOT_IN_GUILD", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_CANT_PROMOTE_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_CANT_DEMOTE_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_NOT_IN_A_GUILD", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_INTERNAL", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEADER_IS_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEADER_CHANGED_SS", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_DISBANDED", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_NOT_ALLIED", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_LEADER_LEAVE", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_RANKS_LOCKED", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_RANK_IN_USE", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_RANK_TOO_HIGH_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_RANK_TOO_LOW_S", 0, "NONE", 68, 0 },
-    { "ERR_GUILD_NAME_EXISTS_S", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_WITHDRAW_LIMIT", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_NOT_ENOUGH_MONEY", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_CONJURED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_EQUIPPED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_BOUND_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_QUEST_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_WRAPPED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_GUILD_BANK_FULL", 2, "NONE", 68, 0 },
-    { "ERR_NO_GUILD_CHARTER", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_RANGE", 2, "NONE", 10, 0 },
-    { "ERR_PLAYER_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_CLIENT_LOCKED_OUT", 2, "NONE", 68, 0 },
-    { "ERR_KILLED_BY_S", 0, "NONE", 68, 0 },
-    { "ERR_LOOT_LOCKED", 2, "NONE", 33, 0 },
-    { "ERR_LOOT_TOO_FAR", 2, "NONE", 35, 0 },
-    { "ERR_LOOT_DIDNT_KILL", 2, "NONE", 31, 0 },
-    { "ERR_LOOT_BAD_FACING", 2, "NONE", 32, 0 },
-    { "ERR_LOOT_NOTSTANDING", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_STUNNED", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_NO_UI", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_WHILE_INVULNERABLE", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_ACCEPTED_S", 0, "QUESTADDED", 68, 0 },
-    { "ERR_QUEST_COMPLETE_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_FAILED_S", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_BAG_FULL_S", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_MAX_COUNT_S", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_LOW_LEVEL", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_MISSING_ITEMS", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_WRONG_RACE", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_NOT_ENOUGH_MONEY", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_FAILED_EXPANSION", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_ONLY_ONE_TIMED", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_NEED_PREREQS", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_ALREADY_ON", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_ALREADY_DONE", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_ALREADY_DONE_DAILY", 0, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_REWARD_EXP_I", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_REWARD_ITEM_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_REWARD_ITEM_MULT_IS", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_REWARD_MONEY_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_MUST_CHOOSE", 2, "igQuestFailed", 68, 0 },
-    { "ERR_QUEST_LOG_FULL", 2, "igQuestFailed", 68, 0 },
-    { "ERR_COMBAT_DAMAGE_SSI", 0, "NONE", 68, 0 },
-    { "ERR_INSPECT_S", 0, "NONE", 68, 0 },
-    { "ERR_CANT_USE_ITEM", 2, "NONE", 51, 0 },
-    { "ERR_CANT_USE_ITEM_IN_ARENA", 2, "NONE", 51, 0 },
-    { "ERR_MUST_EQUIP_ITEM", 2, "NONE", 49, 0 },
-    { "ERR_PASSIVE_ABILITY", 2, "NONE", 68, 0 },
-    { "ERR_2HSKILLNOTFOUND", 2, "NONE", 43, 0 },
-    { "ERR_NO_ATTACK_TARGET", 2, "NONE", 38, 0 },
-    { "ERR_INVALID_ATTACK_TARGET", 2, "NONE", 11, 0 },
-    { "ERR_ATTACK_STUNNED", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_PACIFIED", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_MOUNTED", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_FLEEING", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_CONFUSED", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_CHARMED", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_PREVENTED_BY_MECHANIC_S", 2, "NONE", 68, 0 },
-    { "ERR_ATTACK_CHANNEL", 2, "NONE", 68, 0 },
-    { "ERR_TAXISAMENODE", 2, "NONE", 68, 0 },
-    { "ERR_TAXINOSUCHPATH", 1, "NONE", 68, 0 },
-    { "ERR_TAXIUNSPECIFIEDSERVERERROR", 2, "NONE", 68, 0 },
-    { "ERR_TAXINOTENOUGHMONEY", 1, "NONE", 54, 0 },
-    { "ERR_TAXITOOFARAWAY", 1, "NONE", 68, 0 },
-    { "ERR_TAXINOVENDORNEARBY", 1, "NONE", 68, 0 },
-    { "ERR_TAXINOTVISITED", 1, "NONE", 68, 0 },
-    { "ERR_TAXIPLAYERBUSY", 2, "NONE", 68, 0 },
-    { "ERR_TAXIPLAYERALREADYMOUNTED", 2, "NONE", 68, 0 },
-    { "ERR_TAXIPLAYERSHAPESHIFTED", 2, "NONE", 68, 0 },
-    { "ERR_TAXIPLAYERMOVING", 1, "NONE", 68, 0 },
-    { "ERR_TAXINOPATHS", 2, "NONE", 68, 0 },
-    { "ERR_TAXINOTSTANDING", 1, "NONE", 68, 0 },
-    { "ERR_NO_REPLY_TARGET", 0, "NONE", 68, 0 },
-    { "ERR_GENERIC_NO_TARGET", 2, "NONE", 45, 0 },
-    { "ERR_INITIATE_TRADE_S", 0, "NONE", 68, 0 },
-    { "ERR_TRADE_REQUEST_S", 0, "LEVELUP", 68, 0 },
-    { "ERR_TRADE_BLOCKED_S", 0, "NONE", 68, 0 },
-    { "ERR_TRADE_TARGET_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_TOO_FAR", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_CANCELLED", 1, "NONE", 68, 0 },
-    { "ERR_TRADE_COMPLETE", 1, "NONE", 68, 0 },
-    { "ERR_TRADE_BAG_FULL", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_TARGET_BAG_FULL", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_MAX_COUNT_EXCEEDED", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_TARGET_MAX_COUNT_EXCEEDED", 2, "NONE", 68, 0 },
-    { "ERR_ALREADY_TRADING", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_INVALIDMOUNTEE", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_TOOFARAWAY", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_ALREADYMOUNTED", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_NOTMOUNTABLE", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_NOTYOURPET", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_OTHER", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_LOOTING", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_RACECANTMOUNT", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_SHAPESHIFTED", 2, "NONE", 68, 0 },
-    { "ERR_DISMOUNT_NOPET", 2, "NONE", 68, 0 },
-    { "ERR_DISMOUNT_NOTMOUNTED", 2, "NONE", 68, 0 },
-    { "ERR_DISMOUNT_NOTYOURPET", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_TOTEMS", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_REAGENTS", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_REAGENTS_GENERIC", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_EQUIPPED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_EQUIPPED_ITEM_CLASS_S", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S", 2, "NONE", 68, 0 },
-    { "ERR_BADATTACKFACING", 2, "NONE", 68, 0 },
-    { "ERR_BADATTACKPOS", 2, "NONE", 68, 0 },
-    { "ERR_CHEST_IN_USE", 2, "NONE", 52, 0 },
-    { "ERR_USE_CANT_OPEN", 2, "NONE", 68, 0 },
-    { "ERR_USE_LOCKED", 2, "NONE", 61, 0 },
-    { "ERR_DOOR_LOCKED", 2, "NONE", 61, 0 },
-    { "ERR_BUTTON_LOCKED", 2, "NONE", 61, 0 },
-    { "ERR_USE_LOCKED_WITH_ITEM_S", 2, "NONE", 68, 0 },
-    { "ERR_USE_LOCKED_WITH_SPELL_S", 2, "NONE", 68, 0 },
-    { "ERR_USE_LOCKED_WITH_SPELL_KNOWN_SI", 2, "NONE", 68, 0 },
-    { "ERR_USE_TOO_FAR", 2, "NONE", 57, 0 },
-    { "ERR_USE_BAD_ANGLE", 2, "NONE", 68, 0 },
-    { "ERR_USE_OBJECT_MOVING", 2, "NONE", 68, 0 },
-    { "ERR_USE_SPELL_FOCUS", 1, "NONE", 68, 0 },
-    { "ERR_USE_DESTROYED", 2, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_FREEFORALL", 0, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_ROUNDROBIN", 0, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_MASTER", 0, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_GROUP", 0, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_NBG", 0, "NONE", 68, 0 },
-    { "ERR_SET_LOOT_THRESHOLD_S", 0, "NONE", 68, 0 },
-    { "ERR_NEW_LOOT_MASTER_S", 0, "NONE", 68, 0 },
-    { "ERR_SPECIFY_MASTER_LOOTER", 2, "NONE", 68, 0 },
-    { "ERR_TAME_FAILED", 2, "NONE", 68, 0 },
-    { "ERR_CHAT_WHILE_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_CHAT_WRONG_FACTION", 0, "NONE", 68, 0 },
-    { "ERR_CHAT_PLAYER_NOT_FOUND_S", 0, "NONE", 68, 0 },
-    { "ERR_NEWTAXIPATH", 1, "TaxiNodeDiscovered", 68, 0 },
-    { "ERR_NO_PET", 2, "NONE", 68, 0 },
-    { "ERR_NOTYOURPET", 2, "NONE", 68, 0 },
-    { "ERR_PET_NOT_RENAMEABLE", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_OBJECTIVE_COMPLETE_S", 1, "NONE", 68, 0 },
-    { "ERR_QUEST_UNKNOWN_COMPLETE", 1, "NONE", 68, 0 },
-    { "ERR_QUEST_ADD_KILL_SII", 1, "NONE", 68, 0 },
-    { "ERR_QUEST_ADD_FOUND_SII", 1, "NONE", 68, 0 },
-    { "ERR_QUEST_ADD_ITEM_SII", 1, "NONE", 68, 0 },
-    { "ERR_QUEST_ADD_PLAYER_KILL_SII", 1, "NONE", 68, 0 },
-    { "ERR_CANNOTCREATEDIRECTORY", 2, "NONE", 68, 0 },
-    { "ERR_CANNOTCREATEFILE", 2, "NONE", 68, 0 },
-    { "ERR_PLAYER_WRONG_FACTION", 2, "NONE", 68, 0 },
-    { "ERR_BANKSLOT_FAILED_TOO_MANY", 2, "NONE", 68, 0 },
-    { "ERR_BANKSLOT_INSUFFICIENT_FUNDS", 2, "NONE", 22, 0 },
-    { "ERR_BANKSLOT_NOTBANKER", 2, "NONE", 68, 0 },
-    { "ERR_FRIEND_DB_ERROR", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_LIST_FULL", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_ADDED_S", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_ONLINE_SS", 0, "FRIENDJOINGAME", 68, 0 },
-    { "ERR_FRIEND_OFFLINE_S", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_NOT_FOUND", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_WRONG_FACTION", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_ERROR", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_ALREADY_S", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_SELF", 0, "NONE", 68, 0 },
-    { "ERR_FRIEND_DELETED", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_FULL", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_SELF", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_NOT_FOUND", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_ALREADY_S", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_ADDED_S", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_AMBIGUOUS", 0, "NONE", 68, 0 },
-    { "ERR_IGNORE_DELETED", 0, "NONE", 68, 0 },
-    { "ERR_ONLY_ONE_BOLT", 2, "NONE", 68, 0 },
-    { "ERR_ONLY_ONE_AMMO", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_EQUIPPED_SPECIFIC_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_WRONG_BAG_TYPE_SUBCLASS", 2, "NONE", 28, 0 },
-    { "ERR_CANT_WRAP_STACKABLE", 2, "NONE", 68, 0 },
-    { "ERR_CANT_WRAP_EQUIPPED", 2, "NONE", 68, 0 },
-    { "ERR_CANT_WRAP_WRAPPED", 2, "NONE", 68, 0 },
-    { "ERR_CANT_WRAP_BOUND", 2, "NONE", 68, 0 },
-    { "ERR_CANT_WRAP_UNIQUE", 2, "NONE", 68, 0 },
-    { "ERR_CANT_WRAP_BAGS", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_MANA", 2, "NONE", 15, 0 },
-    { "ERR_OUT_OF_RAGE", 2, "NONE", 63, 0 },
-    { "ERR_OUT_OF_FOCUS", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_ENERGY", 2, "NONE", 64, 0 },
-    { "ERR_OUT_OF_HEALTH", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_RUNES", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_RUNIC_POWER", 2, "NONE", 68, 0 },
-    { "ERR_OUT_OF_POWER_DISPLAY", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_GONE", 2, "NONE", 68, 0 },
-    { "ERR_MOUNT_FORCEDDISMOUNT", 2, "NONE", 68, 0 },
-    { "ERR_AUTOFOLLOW_TOO_FAR", 2, "NONE", 68, 0 },
-    { "ERR_UNIT_NOT_FOUND", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_FOLLOW_TARGET", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_INSPECT_TARGET", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_SUCCESS", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_INVALID_TABARD_COLORS", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_NOGUILD", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_NOTGUILDMASTER", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_NOTENOUGHMONEY", 2, "NONE", 40, 0 },
-    { "ERR_GUILDEMBLEM_INVALIDVENDOR", 2, "NONE", 68, 0 },
-    { "ERR_EMBLEMERROR_NOTABARDGEOSET", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_OUT_OF_RANGE", 2, "NONE", 46, 0 },
-    { "ERR_COMMAND_NEEDS_TARGET", 0, "NONE", 68, 0 },
-    { "ERR_NOAMMO_S", 2, "NONE", 1, 0 },
-    { "ERR_TOOBUSYTOFOLLOW", 2, "NONE", 68, 0 },
-    { "ERR_DUEL_REQUESTED", 0, "LEVELUP", 68, 0 },
-    { "ERR_DUEL_CANCELLED", 1, "NONE", 68, 0 },
-    { "ERR_DEATHBINDALREADYBOUND", 2, "NONE", 68, 0 },
-    { "ERR_DEATHBIND_SUCCESS_S", 0, "NONE", 68, 0 },
-    { "ERR_NOEMOTEWHILERUNNING", 2, "NONE", 68, 0 },
-    { "ERR_ZONE_EXPLORED", 1, "NONE", 68, 0 },
-    { "ERR_ZONE_EXPLORED_XP", 0, "NONE", 68, 0 },
-    { "ERR_INVALID_ITEM_TARGET", 2, "NONE", 51, 0 },
-    { "ERR_IGNORING_YOU_S", 0, "NONE", 68, 0 },
-    { "ERR_FISH_NOT_HOOKED", 1, "NONE", 68, 0 },
-    { "ERR_FISH_ESCAPED", 1, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_NOTUNSHEATHED", 1, "NONE", 68, 0 },
-    { "ERR_PETITION_OFFERED_S", 0, "NONE", 68, 0 },
-    { "ERR_PETITION_SIGNED", 0, "igPlayerInviteAccept", 68, 0 },
-    { "ERR_PETITION_SIGNED_S", 0, "igPlayerInviteAccept", 68, 0 },
-    { "ERR_PETITION_DECLINED_S", 0, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_ALREADY_SIGNED", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_RESTRICTED_ACCOUNT", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_ALREADY_SIGNED_OTHER", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_IN_GUILD", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_CREATOR", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_NOT_ENOUGH_SIGNATURES", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_NOT_SAME_SERVER", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_PETITION_FULL", 2, "igPlayerInviteDecline", 68, 0 },
-    { "ERR_SPELL_UNLEARNED_S", 0, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_ROOTED", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_AFFECTING_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_OUT_OF_RANGE", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_NOT_BEHIND", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_TARGETS_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_DEAD", 2, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_NOPATH", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_CANT_BE_DESTROYED", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_ALREADY_EXISTS", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_CREATE_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_UPDATE_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_DB_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_NO_TEXT", 2, "NONE", 68, 0 },
-    { "ERR_TICKET_TEXT_TOO_LONG", 2, "NONE", 68, 0 },
-    { "ERR_OBJECT_IS_BUSY", 2, "NONE", 68, 0 },
-    { "ERR_EXHAUSTION_WELLRESTED", 0, "NONE", 68, 0 },
-    { "ERR_EXHAUSTION_RESTED", 0, "NONE", 68, 0 },
-    { "ERR_EXHAUSTION_NORMAL", 0, "NONE", 68, 0 },
-    { "ERR_EXHAUSTION_TIRED", 0, "NONE", 68, 0 },
-    { "ERR_EXHAUSTION_EXHAUSTED", 0, "NONE", 68, 0 },
-    { "ERR_NO_ITEMS_WHILE_SHAPESHIFTED", 2, "NONE", 68, 0 },
-    { "ERR_CANT_INTERACT_SHAPESHIFTED", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_QUEST_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_MAIL_BOUND_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_MAIL_CONJURED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_BAG", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_TO_SELF", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_TARGET_NOT_FOUND", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_DATABASE_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_WRAPPED_COD", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_SENT", 1, "NONE", 68, 0 },
-    { "ERR_NOT_HAPPY_ENOUGH", 2, "NONE", 68, 0 },
-    { "ERR_USE_CANT_IMMUNE", 2, "NONE", 68, 0 },
-    { "ERR_CANT_BE_DISENCHANTED", 2, "NONE", 68, 0 },
-    { "ERR_CANT_USE_DISARMED", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_QUEST_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_AUCTION_BOUND_ITEM", 2, "NONE", 59, 0 },
-    { "ERR_AUCTION_CONJURED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_LIMITED_DURATION_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_WRAPPED_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_LOOT_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_BAG", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_DATABASE_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_BID_OWN", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_BID_INCREMENT", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_HIGHER_BID", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_MIN_BID", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_REPAIR_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_USED_CHARGES", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_STARTED", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_REMOVED", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_OUTBID_S", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_WON_S", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_SOLD_S", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_EXPIRED_S", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_AUCTION_BID_PLACED", 0, "NONE", 68, 0 },
-    { "ERR_LOGOUT_FAILED", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_SUCCESS_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_INVALID_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_ACCEPTED_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_DECLINED_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_BUSY_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_LOG_FULL_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_ONQUEST_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_ALREADY_DONE_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_NOT_DAILY_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_TIMER_EXPIRED_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_NOT_IN_PARTY_S", 0, "NONE", 68, 0 },
-    { "ERR_QUEST_PUSH_DIFFERENT_SERVER_DAILY_S", 0, "NONE", 68, 0 },
-    { "ERR_RAID_GROUP_LOWLEVEL", 2, "NONE", 68, 0 },
-    { "ERR_RAID_GROUP_ONLY", 2, "NONE", 68, 0 },
-    { "ERR_RAID_GROUP_FULL", 2, "NONE", 68, 0 },
-    { "ERR_RAID_GROUP_REQUIREMENTS_UNMATCH", 2, "NONE", 68, 0 },
-    { "ERR_CORPSE_IS_NOT_IN_INSTANCE", 2, "NONE", 68, 0 },
-    { "ERR_PVP_KILL_HONORABLE", 1, "NONE", 68, 0 },
-    { "ERR_PVP_KILL_DISHONORABLE", 1, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_HEALTH", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_MANA", 2, "NONE", 68, 0 },
-    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_POWER_S", 2, "NONE", 68, 0 },
-    { "ERR_AUTOLOOT_MONEY_S", 0, "NONE", 68, 0 },
-    { "ERR_GENERIC_STUNNED", 2, "NONE", 68, 0 },
-    { "ERR_TARGET_STUNNED", 2, "NONE", 68, 0 },
-    { "ERR_MUST_REPAIR_DURABILITY", 2, "NONE", 68, 0 },
-    { "ERR_RAID_YOU_JOINED", 0, "NONE", 68, 0 },
-    { "ERR_RAID_YOU_LEFT", 0, "NONE", 68, 0 },
-    { "ERR_RAID_MEMBER_ADDED_S", 0, "NONE", 68, 0 },
-    { "ERR_RAID_MEMBER_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_CLICK_ON_ITEM_TO_FEED", 2, "NONE", 68, 0 },
-    { "ERR_TOO_MANY_CHAT_CHANNELS", 0, "NONE", 68, 0 },
-    { "ERR_LOOT_ROLL_PENDING", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_PLAYER_NOT_FOUND", 2, "NONE", 68, 0 },
-    { "ERR_NOT_IN_RAID", 0, "NONE", 68, 0 },
-    { "ERR_LOGGING_OUT", 2, "NONE", 68, 0 },
-    { "ERR_TARGET_LOGGING_OUT", 2, "NONE", 68, 0 },
-    { "ERR_NOT_WHILE_MOUNTED", 2, "NONE", 68, 0 },
-    { "ERR_NOT_WHILE_SHAPESHIFTED", 2, "NONE", 68, 0 },
-    { "ERR_NOT_IN_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_NOT_WHILE_DISARMED", 2, "NONE", 68, 0 },
-    { "ERR_PET_BROKEN", 2, "NONE", 68, 0 },
-    { "ERR_TALENT_WIPE_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_FEIGN_DEATH_RESISTED", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_IN_QUEUE_S", 0, "PVPENTERQUEUE", 68, 0 },
-    { "ERR_MEETING_STONE_LEFT_QUEUE_S", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_OTHER_MEMBER_LEFT", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_PARTY_KICKED_FROM_QUEUE", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_MEMBER_STILL_IN_QUEUE", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_SUCCESS", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_IN_PROGRESS", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_MEMBER_ADDED_S", 0, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_GROUP_FULL", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_NOT_LEADER", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_INVALID_LEVEL", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_TARGET_NOT_IN_PARTY", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_TARGET_INVALID_LEVEL", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_MUST_BE_LEADER", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_NO_RAID_GROUP", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_NEED_PARTY", 2, "NONE", 68, 0 },
-    { "ERR_MEETING_STONE_NOT_FOUND", 2, "NONE", 68, 0 },
-    { "ERR_GUILDEMBLEM_SAME", 2, "NONE", 68, 0 },
-    { "ERR_EQUIP_TRADE_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_PVP_TOGGLE_ON", 1, "NONE", 68, 0 },
-    { "ERR_PVP_TOGGLE_OFF", 1, "NONE", 68, 0 },
-    { "ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS", 1, "NONE", 68, 0 },
-    { "ERR_GROUP_JOIN_BATTLEGROUND_S", 1, "NONE", 68, 0 },
-    { "ERR_GROUP_JOIN_BATTLEGROUND_FAIL", 2, "NONE", 68, 0 },
-    { "ERR_GROUP_JOIN_BATTLEGROUND_TOO_MANY", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_TOO_MANY_QUEUES", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_TEAM_LEFT_QUEUE", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_PROMOTION_CODE", 2, "NONE", 68, 0 },
-    { "ERR_BG_PLAYER_JOINED_SS", 0, "NONE", 68, 0 },
-    { "ERR_BG_PLAYER_LEFT_S", 0, "NONE", 68, 0 },
-    { "ERR_RESTRICTED_ACCOUNT", 2, "NONE", 68, 0 },
-    { "ERR_PLAY_TIME_EXCEEDED", 2, "NONE", 68, 0 },
-    { "ERR_APPROACHING_PARTIAL_PLAY_TIME", 0, "NONE", 68, 0 },
-    { "ERR_APPROACHING_PARTIAL_PLAY_TIME_2", 0, "NONE", 68, 0 },
-    { "ERR_APPROACHING_NO_PLAY_TIME", 0, "NONE", 68, 0 },
-    { "ERR_APPROACHING_NO_PLAY_TIME_2", 0, "NONE", 68, 0 },
-    { "ERR_UNHEALTHY_TIME", 0, "NONE", 68, 0 },
-    { "ERR_CHAT_RESTRICTED", 0, "NONE", 68, 0 },
-    { "ERR_CHAT_THROTTLED", 0, "NONE", 68, 0 },
-    { "ERR_MAIL_REACHED_CAP", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_RAID_TARGET", 2, "NONE", 68, 0 },
-    { "ERR_RAID_LEADER_READY_CHECK_START_S", 0, "NONE", 68, 0 },
-    { "ERR_READY_CHECK_IN_PROGRESS", 2, "NONE", 68, 0 },
-    { "ERR_READY_CHECK_THROTTLED", 2, "NONE", 68, 0 },
-    { "ERR_DUNGEON_DIFFICULTY_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_DUNGEON_DIFFICULTY_CHANGED_S", 0, "NONE", 68, 0 },
-    { "ERR_TRADE_WRONG_REALM", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_NOT_ON_TAPLIST", 2, "NONE", 68, 0 },
-    { "ERR_CHAT_PLAYER_AMBIGUOUS_S", 0, "NONE", 68, 0 },
-    { "ERR_LOOT_CANT_LOOT_THAT_NOW", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_MASTER_INV_FULL", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_MASTER_UNIQUE_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_LOOT_MASTER_OTHER", 2, "NONE", 68, 0 },
-    { "ERR_FILTERING_YOU_S", 0, "NONE", 68, 0 },
-    { "ERR_USE_PREVENTED_BY_MECHANIC_S", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_UNIQUE_EQUIPPABLE", 2, "NONE", 68, 0 },
-    { "ERR_LFG_LEADER_IS_LFM_S", 2, "NONE", 68, 0 },
-    { "ERR_LFG_PENDING", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_NO_TEAM_II", 2, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_CREATE_S", 0, "LEVELUP", 68, 0 },
-    { "ERR_ARENA_TEAM_INVITE_SS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_QUIT_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_FOUNDER_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_INTERNAL", 0, "NONE", 68, 0 },
-    { "ERR_ALREADY_IN_ARENA_TEAM", 0, "NONE", 68, 0 },
-    { "ERR_ALREADY_IN_ARENA_TEAM_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITED_TO_ARENA_TEAM", 0, "LEVELUP", 68, 0 },
-    { "ERR_ALREADY_INVITED_TO_ARENA_TEAM_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_NAME_INVALID", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_NAME_EXISTS_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_LEADER_LEAVE_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_PERMISSIONS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM_SS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_PLAYER_NOT_FOUND_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_NOT_ALLIED", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_JOIN_SS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_YOU_JOIN_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_LEAVE_SS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_LEADER_IS_SS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_LEADER_CHANGED_SSS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_REMOVE_SSS", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_DISBANDED_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_TARGET_TOO_LOW_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_TARGET_TOO_HIGH_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_TOO_MANY_MEMBERS_S", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_LEVEL_TOO_LOW_I", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_NOT_FOUND", 0, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAMS_LOCKED", 0, "NONE", 68, 0 },
-    { "ERR_NO_ARENA_CHARTER", 2, "NONE", 68, 0 },
-    { "ERR_CANT_SPEAK_LANGAGE", 0, "NONE", 68, 0 },
-    { "ERR_VENDOR_MISSING_TURNINS", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_NOT_IN_TEAM", 2, "NONE", 68, 0 },
-    { "ERR_NOT_IN_BATTLEGROUND", 0, "NONE", 68, 0 },
-    { "ERR_NOT_ENOUGH_HONOR_POINTS", 2, "NONE", 68, 0 },
-    { "ERR_NOT_ENOUGH_ARENA_POINTS", 2, "NONE", 68, 0 },
-    { "ERR_SOCKETING_REQUIRES_META_GEM", 2, "NONE", 68, 0 },
-    { "ERR_SOCKETING_META_GEM_ONLY_IN_METASLOT", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_MAX_COUNT_SOCKETED", 2, "NONE", 68, 0 },
-    { "ERR_SYSTEM_DISABLED", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_FAILED_TOO_MANY_DAILY_QUESTS_I", 0, "igQuestFailed", 68, 0 },
-    { "ERR_ITEM_MAX_COUNT_EQUIPPED_SOCKETED", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_UNIQUE_EQUIPPABLE_SOCKETED", 2, "NONE", 68, 0 },
-    { "ERR_USER_SQUELCHED", 0, "NONE", 68, 0 },
-    { "ERR_TOO_MUCH_GOLD", 2, "NONE", 68, 0 },
-    { "ERR_NOT_BARBER_SITTING", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_FAILED_CAIS", 0, "igQuestFailed", 68, 0 },
-    { "ERR_INVITE_RESTRICTED", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_FULL", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_SELF", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_NOT_FOUND", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_ALREADY_S", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_ADDED_S", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_AMBIGUOUS", 0, "NONE", 68, 0 },
-    { "ERR_VOICE_IGNORE_DELETED", 0, "NONE", 68, 0 },
-    { "ERR_UNKNOWN_MACRO_OPTION_S", 0, "NONE", 68, 0 },
-    { "ERR_NOT_DURING_ARENA_MATCH", 2, "NONE", 68, 0 },
-    { "ERR_PLAYER_SILENCED", 0, "NONE", 68, 0 },
-    { "ERR_PLAYER_UNSILENCED", 0, "NONE", 68, 0 },
-    { "ERR_COMSAT_DISCONNECT", 0, "NONE", 68, 0 },
-    { "ERR_COMSAT_RECONNECT_ATTEMPT", 0, "NONE", 68, 0 },
-    { "ERR_COMSAT_CONNECT_FAIL", 0, "NONE", 68, 0 },
-    { "ERR_DANCE_CREATE_DUPLICATE", 0, "NONE", 68, 0 },
-    { "ERR_DANCE_SAVE_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_DANCE_DELETE_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_MAIL_INVALID_ATTACHMENT_SLOT", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_TOO_MANY_ATTACHMENTS", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_INVALID_ATTACHMENT", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_ATTACHMENT_EXPIRED", 2, "NONE", 68, 0 },
-    { "ERR_VOICE_CHAT_PARENTAL_DISABLE_ALL", 2, "NONE", 68, 0 },
-    { "ERR_VOICE_CHAT_PARENTAL_DISABLE_MIC", 2, "NONE", 68, 0 },
-    { "ERR_PROFANE_CHAT_NAME", 2, "NONE", 68, 0 },
-    { "ERR_PLAYER_SILENCED_ECHO", 0, "NONE", 68, 0 },
-    { "ERR_PLAYER_UNSILENCED_ECHO", 0, "NONE", 68, 0 },
-    { "ERR_VOICESESSION_FULL", 0, "NONE", 68, 0 },
-    { "ERR_LOOT_CANT_LOOT_THAT", 2, "NONE", 68, 0 },
-    { "ERR_ARENA_EXPIRED_CAIS", 2, "NONE", 68, 0 },
-    { "ERR_GROUP_ACTION_THROTTLED", 0, "NONE", 68, 0 },
-    { "ERR_ALREADY_PICKPOCKETED", 2, "NONE", 68, 0 },
-    { "ERR_NAME_INVALID", 2, "NONE", 68, 0 },
-    { "ERR_NAME_NO_NAME", 2, "NONE", 68, 0 },
-    { "ERR_NAME_TOO_SHORT", 2, "NONE", 68, 0 },
-    { "ERR_NAME_TOO_LONG", 2, "NONE", 68, 0 },
-    { "ERR_NAME_MIXED_LANGUAGES", 2, "NONE", 68, 0 },
-    { "ERR_NAME_PROFANE", 2, "NONE", 68, 0 },
-    { "ERR_NAME_RESERVED", 2, "NONE", 68, 0 },
-    { "ERR_NAME_THREE_CONSECUTIVE", 2, "NONE", 68, 0 },
-    { "ERR_NAME_INVALID_SPACE", 2, "NONE", 68, 0 },
-    { "ERR_NAME_CONSECUTIVE_SPACES", 2, "NONE", 68, 0 },
-    { "ERR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS", 2, "NONE", 68, 0 },
-    { "ERR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END", 2, "NONE", 68, 0 },
-    { "ERR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_NOT_REFERRED_BY", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_TARGET_TOO_HIGH", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_INSUFFICIENT_GRANTABLE_LEVELS", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_TOO_FAR", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_DIFFERENT_FACTION", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_NOT_NOW", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_SUMMON_LEVEL_MAX_I", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_SUMMON_COOLDOWN", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S", 2, "NONE", 68, 0 },
-    { "ERR_REFER_A_FRIEND_INSUF_EXPAN_LVL", 2, "NONE", 68, 0 },
-    { "ERR_NOT_SAME_ACCOUNT", 2, "NONE", 59, 0 },
-    { "ERR_BAD_ON_USE_ENCHANT", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_SELF", 2, "NONE", 68, 0 },
-    { "ERR_TOO_MANY_SOCKETS", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS", 2, "NONE", 68, 0 },
-    { "ERR_TRADE_TARGET_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_MAX_LIMIT_CATEGORY_SOCKETED_EXCEEDED_IS", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_MAX_LIMIT_CATEGORY_EQUIPPED_EXCEEDED_IS", 2, "NONE", 68, 0 },
-    { "ERR_SHAPESHIFT_FORM_CANNOT_EQUIP", 2, "NONE", 68, 0 },
-    { "ERR_ITEM_INVENTORY_FULL_SATCHEL", 2, "NONE", 68, 0 },
-    { "ERR_SCALING_STAT_ITEM_LEVEL_EXCEEDED", 2, "NONE", 68, 0 },
-    { "ERR_PURCHASE_LEVEL_TOO_LOW", 2, "NONE", 68, 0 },
-    { "ERR_GROUP_SWAP_FAILED", 2, "NONE", 68, 0 },
-    { "ERR_INVITE_IN_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_GLYPH_SLOT", 2, "NONE", 68, 0 },
-    { "ERR_GENERIC_NO_VALID_TARGETS", 2, "NONE", 45, 0 },
-    { "ERR_CALENDAR_EVENT_ALERT_S", 0, "NONE", 68, 0 },
-    { "ERR_PET_LEARN_SPELL_S", 0, "NONE", 68, 0 },
-    { "ERR_PET_LEARN_ABILITY_S", 0, "NONE", 68, 0 },
-    { "ERR_PET_SPELL_UNLEARNED_S", 0, "NONE", 68, 0 },
-    { "ERR_INVITE_UNKNOWN_REALM", 2, "NONE", 68, 0 },
-    { "ERR_INVITE_NO_PARTY_SERVER", 2, "NONE", 68, 0 },
-    { "ERR_INVITE_PARTY_BUSY", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_TARGET_AMBIGUOUS", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_INVITE_RAID_LOCKED", 0, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_LIMIT", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_COOLDOWN_S", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_NOT_ELIGIBLE_S", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_IN_PROGRESS", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_TOO_FEW_PLAYERS", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_VOTE_SUCCEEDED", 0, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_VOTE_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_IN_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_DUNGEON_COMPLETE", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_BOOT_LOOT_ROLLS", 2, "NONE", 68, 0 },
-    { "ERR_PARTY_LFG_TELEPORT_IN_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_RAID_DISALLOWED_BY_LEVEL", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_INFO_THROTTLED", 0, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_ALREADY_IN", 2, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_CHANGE_FAILED_QUEUED", 2, "NONE", 68, 0 },
-    { "ERR_NOT_WHILE_FALLING", 2, "NONE", 68, 0 },
-    { "ERR_NOT_WHILE_FATIGUED", 2, "NONE", 68, 0 },
-    { "ERR_MAX_SOCKETS", 2, "NONE", 68, 0 },
-    { "ERR_MULTI_CAST_ACTION_TOTEM_S", 2, "NONE", 68, 0 },
-    { "ERR_REMOVE_FROM_PVP_QUEUE_GRANT_LEVEL", 2, "NONE", 68, 0 },
-    { "ERR_REMOVE_FROM_PVP_QUEUE_XP_GAIN", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_JOIN_XP_GAIN", 2, "NONE", 68, 0 },
-    { "ERR_RAID_DIFFICULTY_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_RAID_DIFFICULTY_CHANGED_S", 0, "NONE", 68, 0 },
-    { "ERR_RAID_LOCKOUT_CHANGED_S", 0, "NONE", 68, 0 },
-    { "ERR_PLAYER_DIFFICULTY_CHANGED_S", 0, "NONE", 68, 0 },
-    { "ERR_GMRESPONSE_DB_ERROR", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_JOIN_RANGE_INDEX", 2, "NONE", 68, 0 },
-    { "ERR_REMOVE_FROM_PVP_QUEUE_FACTION_CHANGE", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_JOIN_FAILED", 2, "NONE", 68, 0 },
-    { "ERR_BATTLEGROUND_JOIN_TIMED_OUT", 2, "NONE", 68, 0 },
-    { "ERR_MAIL_LIMITED_DURATION_ITEM", 2, "NONE", 68, 0 },
-    { "ERR_YELL_RESTRICTED", 0, "NONE", 68, 0 },
-    { "ERR_LFG_ROLE_CHECK_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_LFG_ROLE_CHECK_FAILED_TIMEOUT", 0, "NONE", 68, 0 },
-    { "ERR_LFG_ROLE_CHECK_FAILED_NOT_VIABLE", 0, "NONE", 68, 0 },
-    { "ERR_LFG_GROUP_FULL", 0, "NONE", 68, 0 },
-    { "ERR_LFG_NO_LFG_OBJECT", 0, "NONE", 68, 0 },
-    { "ERR_LFG_NO_SLOTS_PLAYER", 0, "NONE", 68, 0 },
-    { "ERR_LFG_NO_SLOTS_PARTY", 0, "NONE", 68, 0 },
-    { "ERR_LFG_MISMATCHED_SLOTS", 0, "NONE", 68, 0 },
-    { "ERR_LFG_PARTY_PLAYERS_FROM_DIFFERENT_REALMS", 0, "NONE", 68, 0 },
-    { "ERR_LFG_MEMBERS_NOT_PRESENT", 0, "NONE", 68, 0 },
-    { "ERR_LFG_GET_INFO_TIMEOUT", 0, "NONE", 68, 0 },
-    { "ERR_LFG_INVALID_SLOT", 0, "NONE", 68, 0 },
-    { "ERR_LFG_DESERTER_PLAYER", 0, "NONE", 68, 0 },
-    { "ERR_LFG_DESERTER_PARTY", 0, "NONE", 68, 0 },
-    { "ERR_LFG_RANDOM_COOLDOWN_PLAYER", 0, "NONE", 68, 0 },
-    { "ERR_LFG_RANDOM_COOLDOWN_PARTY", 0, "NONE", 68, 0 },
-    { "ERR_LFG_TOO_MANY_MEMBERS", 0, "NONE", 68, 0 },
-    { "ERR_LFG_PROPOSAL_FAILED", 0, "NONE", 68, 0 },
-    { "ERR_LFG_PROPOSAL_DECLINED_SELF", 0, "NONE", 68, 0 },
-    { "ERR_LFG_PROPOSAL_DECLINED_PARTY", 0, "NONE", 68, 0 },
-    { "ERR_LFG_NO_SLOTS_SELECTED", 2, "NONE", 68, 0 },
-    { "ERR_LFG_NO_ROLES_SELECTED", 2, "NONE", 68, 0 },
-    { "ERR_LFG_ROLE_CHECK_INITIATED", 0, "NONE", 68, 0 },
-    { "ERR_LFG_PLAYER_DECLINED_ROLE_CHECK", 0, "NONE", 68, 0 },
-    { "ERR_LFG_JOINED_QUEUE", 0, "NONE", 68, 0 },
-    { "ERR_LFG_JOINED_LIST", 0, "NONE", 68, 0 },
-    { "ERR_LFG_LEFT_QUEUE", 0, "NONE", 68, 0 },
-    { "ERR_LFG_LEFT_LIST", 0, "NONE", 68, 0 },
-    { "ERR_LFG_ROLE_CHECK_ABORTED", 0, "NONE", 68, 0 },
-    { "ERR_LFG_CANT_USE_BATTLEGROUND", 2, "NONE", 68, 0 },
-    { "ERR_LFG_CANT_USE_DUNGEONS", 2, "NONE", 68, 0 },
-    { "ERR_INVALID_TELEPORT_LOCATION", 2, "NONE", 68, 0 },
-    { "ERR_CURRENCY_FULL", 2, "NONE", 0, 0 },
-    { "ERR_TOO_FAR_TO_INTERACT", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_COOLDOWN_S", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_WORLDSTATE", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_ENCOUNTER", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_COMBAT", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_PLAYER_BUSY", 2, "NONE", 68, 0 },
-    { "ERR_DIFFICULTY_CHANGE_ALREADY_STARTED", 2, "NONE", 68, 0 },
-    { "ERR_ARENA_TEAM_PARTY_SIZE", 2, "NONE", 68, 0 },
-    { "ERR_QUEST_FORCE_REMOVED_S", 0, "NONE", 68, 0 },
-    { "ERR_IN_RANDOM_BG", 2, "NONE", 68, 0 },
-    { "ERR_IN_NON_RANDOM_BG", 2, "NONE", 68, 0 },
-    { "ERR_AUCTION_ENOUGH_ITEMS", 2, "NONE", 68, 0 },
-    { "ERR_BN_FRIEND_SELF", 2, "NONE", 68, 0 },
-    { "ERR_BN_FRIEND_ALREADY", 2, "NONE", 68, 0 },
-    { "ERR_BN_FRIEND_BLOCKED", 2, "NONE", 68, 0 },
-    { "ERR_BN_FRIEND_REQUEST_SENT", 1, "NONE", 68, 0 },
-    { "ERR_BN_BROADCAST_THROTTLE", 1, "NONE", 68, 0 },
+    { "ERR_INV_FULL", ERRORTEXT_UIERROR, "NONE", VUI_INVENTORYFULL, 0 },
+    { "ERR_BANK_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_EQUIP_LEVEL_I", ERRORTEXT_UIERROR, "NONE", VUI_NOEQUIP_LEVEL, 0 },
+    { "ERR_CANT_EQUIP_SKILL", ERRORTEXT_UIERROR, "NONE", VUI_NOEQUIP_SKILL, 0 },
+    { "ERR_CANT_EQUIP_EVER", ERRORTEXT_UIERROR, "NONE", VUI_NOEQUIP_EVER, 0 },
+    { "ERR_CANT_EQUIP_RANK", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_EQUIP_RATING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_EQUIP_REPUTATION", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PROFICIENCY_NEEDED", ERRORTEXT_UIERROR, "NONE", VUI_PROFICIENCYNEEDED, 0 },
+    { "ERR_WRONG_SLOT", ERRORTEXT_UIERROR, "NONE", VUI_WRONGSLOT, 0 },
+    { "ERR_CANT_EQUIP_NEED_TALENT", ERRORTEXT_UIERROR, "NONE", VUI_NOEQUIP_SKILL, 0 },
+    { "ERR_BAG_FULL", ERRORTEXT_UIERROR, "NONE", VUI_BAGFULL, 0 },
+    { "ERR_INTERNAL_BAG_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DESTROY_NONEMPTY_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BAG_IN_BAG", ERRORTEXT_UIERROR, "NONE", VUI_CANTPUTBAG, 0 },
+    { "ERR_TOO_MANY_SPECIAL_BAGS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_EQUIPPED_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AMMO_ONLY", ERRORTEXT_UIERROR, "NONE", VUI_AMMOONLYINBAG, 0 },
+    { "ERR_NO_SLOT_AVAILABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_WRONG_BAG_TYPE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_COUNT", ERRORTEXT_UIERROR, "NONE", VUI_ITEMMAXCOUNT, 0 },
+    { "ERR_NOT_EQUIPPABLE", ERRORTEXT_UIERROR, "NONE", VUI_NOTEQUIPPABLE, 0 },
+    { "ERR_CANT_STACK", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_SWAP", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SLOT_EMPTY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_NOT_FOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TOO_FEW_TO_SPLIT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPLIT_FAILED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_A_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NOTABAG, 0 },
+    { "ERR_NOT_OWNER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ONLY_ONE_QUIVER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_BANK_SLOT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_BANK_HERE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_LOCKED", ERRORTEXT_UIERROR, "NONE", VUI_ITEMLOCKED, 0 },
+    { "ERR_2HANDED_EQUIPPED", ERRORTEXT_UIERROR, "NONE", VUI_CANTEQUIP_2HEQUIPPED, 0 },
+    { "ERR_VENDOR_NOT_INTERESTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VENDOR_HATES_YOU", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VENDOR_SOLD_OUT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VENDOR_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VENDOR_DOESNT_BUY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_ENOUGH_MONEY", ERRORTEXT_UIERROR, "NONE", VUI_NOTENOUGHMONEY, 0 },
+    { "ERR_RECEIVE_ITEM_S", ERRORTEXT_CHAT, "ITEMGENERICSOUND", VUI_NONE, 0 },
+    { "ERR_DROP_BOUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_BOUND_NODROP, 0 },
+    { "ERR_TRADE_BOUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_TRADE_QUEST_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_TRADE_TEMP_ENCHANT_BOUND", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_TRADE_GROUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_ITEMCOOLING, 0 },
+    { "ERR_POTION_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_POTIONCOOLING, 0 },
+    { "ERR_FOOD_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_CANTEATMORE, 0 },
+    { "ERR_SPELL_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_SPELLCOOLING, 0 },
+    { "ERR_ABILITY_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_ABILITYCOOLING, 0 },
+    { "ERR_SPELL_ALREADY_KNOWN_S", ERRORTEXT_UIERROR, "NONE", VUI_SPELL_ALREADY_KNOWN, 0 },
+    { "ERR_PET_SPELL_ALREADY_KNOWN_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PROFICIENCY_GAINED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 26 },
+    { "ERR_SKILL_GAINED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 26 },
+    { "ERR_SKILL_UP_SI", ERRORTEXT_CHAT, "NONE", VUI_NONE, 26 },
+    { "ERR_LEARN_SPELL_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LEARN_ABILITY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LEARN_RECIPE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LEARN_COMPANION_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_PLAYER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_SELF", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITED_TO_GROUP_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITED_ALREADY_IN_GROUP_SS", ERRORTEXT_CHAT, "NONE", VUI_ALREADYINGROUP, 0 },
+    { "ERR_ALREADY_IN_GROUP_S", ERRORTEXT_CHAT, "NONE", VUI_ALREADYINGROUP, 0 },
+    { "ERR_PLAYER_BUSY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEW_LEADER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEW_LEADER_YOU", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEW_GUIDE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEW_GUIDE_YOU", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LEFT_GROUP_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LEFT_GROUP_YOU", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_DISBANDED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_DECLINE_GROUP_S", ERRORTEXT_CHAT, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_JOINED_GROUP_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_UNINVITE_YOU", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_BAD_PLAYER_NAME_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_IN_GROUP", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TARGET_NOT_IN_GROUP_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TARGET_NOT_IN_INSTANCE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_FULL", ERRORTEXT_CHAT, "NONE", VUI_CANTINVITE, 0 },
+    { "ERR_NOT_LEADER", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_DIED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_CREATE_S", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_GUILD_INVITE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITED_TO_GUILD_SSS", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_ALREADY_IN_GUILD_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_INVITED_TO_GUILD_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITED_TO_GUILD", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_IN_GUILD", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_ACCEPT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_DECLINE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_PERMISSIONS", ERRORTEXT_CHAT, "NONE", VUI_GUILDPERMISSIONS, 0 },
+    { "ERR_GUILD_JOIN_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_FOUNDER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_PROMOTE_SSS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_DEMOTE_SSS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_QUIT_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEAVE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_REMOVE_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_REMOVE_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_DISBAND_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_DISBAND_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEADER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEADER_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_PLAYER_NOT_FOUND_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_PLAYER_NOT_IN_GUILD_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_PLAYER_NOT_IN_GUILD", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_CANT_PROMOTE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_CANT_DEMOTE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_NOT_IN_A_GUILD", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_INTERNAL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEADER_IS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEADER_CHANGED_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_DISBANDED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_NOT_ALLIED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_LEADER_LEAVE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_RANKS_LOCKED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_RANK_IN_USE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_RANK_TOO_HIGH_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_RANK_TOO_LOW_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_NAME_EXISTS_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_WITHDRAW_LIMIT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_NOT_ENOUGH_MONEY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_CONJURED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_EQUIPPED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_BOUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_QUEST_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_WRAPPED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILD_BANK_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_GUILD_CHARTER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_RANGE", ERRORTEXT_UIERROR, "NONE", VUI_TARGETTOOFAR, 0 },
+    { "ERR_PLAYER_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CLIENT_LOCKED_OUT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_KILLED_BY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_LOCKED", ERRORTEXT_UIERROR, "NONE", VUI_CANTLOOT_LOCKED, 0 },
+    { "ERR_LOOT_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_CANTLOOT_TOOFAR, 0 },
+    { "ERR_LOOT_DIDNT_KILL", ERRORTEXT_UIERROR, "NONE", VUI_CANTLOOT_DIDNTKILL, 0 },
+    { "ERR_LOOT_BAD_FACING", ERRORTEXT_UIERROR, "NONE", VUI_CANTLOOT_WRONGFACING, 0 },
+    { "ERR_LOOT_NOTSTANDING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_STUNNED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_NO_UI", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_WHILE_INVULNERABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_ACCEPTED_S", ERRORTEXT_CHAT, "QUESTADDED", VUI_NONE, 0 },
+    { "ERR_QUEST_COMPLETE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_S", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_BAG_FULL_S", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_MAX_COUNT_S", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_LOW_LEVEL", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_MISSING_ITEMS", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_WRONG_RACE", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_NOT_ENOUGH_MONEY", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_EXPANSION", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_ONLY_ONE_TIMED", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_NEED_PREREQS", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_ALREADY_ON", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_ALREADY_DONE", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_ALREADY_DONE_DAILY", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_REWARD_EXP_I", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_REWARD_ITEM_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_REWARD_ITEM_MULT_IS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_REWARD_MONEY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_MUST_CHOOSE", ERRORTEXT_UIERROR, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_QUEST_LOG_FULL", ERRORTEXT_UIERROR, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_COMBAT_DAMAGE_SSI", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INSPECT_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_USE_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTUSEITEM, 0 },
+    { "ERR_CANT_USE_ITEM_IN_ARENA", ERRORTEXT_UIERROR, "NONE", VUI_CANTUSEITEM, 0 },
+    { "ERR_MUST_EQUIP_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_MUSTEQUIPPITEM, 0 },
+    { "ERR_PASSIVE_ABILITY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_2HSKILLNOTFOUND", ERRORTEXT_UIERROR, "NONE", VUI_CANTEQUIP2H_NOSKILL, 0 },
+    { "ERR_NO_ATTACK_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_CANTATTACK_NOTARGET, 0 },
+    { "ERR_INVALID_ATTACK_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_INVALIDTARGET, 0 },
+    { "ERR_ATTACK_STUNNED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_PACIFIED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_MOUNTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_FLEEING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_CONFUSED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_CHARMED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_PREVENTED_BY_MECHANIC_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ATTACK_CHANNEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXISAMENODE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOSUCHPATH", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXIUNSPECIFIEDSERVERERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOTENOUGHMONEY", ERRORTEXT_UIINFO, "NONE", VUI_CANTTAXI_NOMONEY, 0 },
+    { "ERR_TAXITOOFARAWAY", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOVENDORNEARBY", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOTVISITED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXIPLAYERBUSY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXIPLAYERALREADYMOUNTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXIPLAYERSHAPESHIFTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXIPLAYERMOVING", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOPATHS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAXINOTSTANDING", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_REPLY_TARGET", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GENERIC_NO_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_GENERICNOTARGET, 0 },
+    { "ERR_INITIATE_TRADE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_REQUEST_S", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_TRADE_BLOCKED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_TARGET_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_CANCELLED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_COMPLETE", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_BAG_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_TARGET_BAG_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_MAX_COUNT_EXCEEDED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_TARGET_MAX_COUNT_EXCEEDED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_TRADING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_INVALIDMOUNTEE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_TOOFARAWAY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_ALREADYMOUNTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_NOTMOUNTABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_NOTYOURPET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_OTHER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_LOOTING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_RACECANTMOUNT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_SHAPESHIFTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DISMOUNT_NOPET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DISMOUNT_NOTMOUNTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DISMOUNT_NOTYOURPET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_TOTEMS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_REAGENTS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_REAGENTS_GENERIC", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_EQUIPPED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_EQUIPPED_ITEM_CLASS_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BADATTACKFACING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BADATTACKPOS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CHEST_IN_USE", ERRORTEXT_UIERROR, "NONE", VUI_CHESTINUSE, 0 },
+    { "ERR_USE_CANT_OPEN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_LOCKED", ERRORTEXT_UIERROR, "NONE", VUI_ITEMLOCKED, 0 },
+    { "ERR_DOOR_LOCKED", ERRORTEXT_UIERROR, "NONE", VUI_ITEMLOCKED, 0 },
+    { "ERR_BUTTON_LOCKED", ERRORTEXT_UIERROR, "NONE", VUI_ITEMLOCKED, 0 },
+    { "ERR_USE_LOCKED_WITH_ITEM_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_LOCKED_WITH_SPELL_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_LOCKED_WITH_SPELL_KNOWN_SI", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_CANTUSETOOFAR, 0 },
+    { "ERR_USE_BAD_ANGLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_OBJECT_MOVING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_SPELL_FOCUS", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_DESTROYED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_FREEFORALL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_ROUNDROBIN", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_MASTER", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_GROUP", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_NBG", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SET_LOOT_THRESHOLD_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEW_LOOT_MASTER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_SPECIFY_MASTER_LOOTER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TAME_FAILED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_WHILE_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_WRONG_FACTION", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_PLAYER_NOT_FOUND_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NEWTAXIPATH", ERRORTEXT_UIINFO, "TaxiNodeDiscovered", VUI_NONE, 0 },
+    { "ERR_NO_PET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOTYOURPET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_NOT_RENAMEABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_OBJECTIVE_COMPLETE_S", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_UNKNOWN_COMPLETE", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_ADD_KILL_SII", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_ADD_FOUND_SII", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_ADD_ITEM_SII", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_ADD_PLAYER_KILL_SII", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_CANNOTCREATEDIRECTORY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANNOTCREATEFILE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_WRONG_FACTION", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BANKSLOT_FAILED_TOO_MANY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BANKSLOT_INSUFFICIENT_FUNDS", ERRORTEXT_UIERROR, "NONE", VUI_CANTAFFORDBANKSLOT, 0 },
+    { "ERR_BANKSLOT_NOTBANKER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_DB_ERROR", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_LIST_FULL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_ADDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_ONLINE_SS", ERRORTEXT_CHAT, "FRIENDJOINGAME", VUI_NONE, 0 },
+    { "ERR_FRIEND_OFFLINE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_NOT_FOUND", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_WRONG_FACTION", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_ERROR", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_ALREADY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FRIEND_DELETED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_FULL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_NOT_FOUND", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_ALREADY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_ADDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_AMBIGUOUS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IGNORE_DELETED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ONLY_ONE_BOLT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ONLY_ONE_AMMO", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_EQUIPPED_SPECIFIC_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_WRONG_BAG_TYPE_SUBCLASS", ERRORTEXT_UIERROR, "NONE", VUI_AMMOONLYINBAG, 0 },
+    { "ERR_CANT_WRAP_STACKABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_WRAP_EQUIPPED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_WRAP_WRAPPED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_WRAP_BOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_WRAP_UNIQUE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_WRAP_BAGS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_MANA", ERRORTEXT_UIERROR, "NONE", VUI_NOMANA, 0 },
+    { "ERR_OUT_OF_RAGE", ERRORTEXT_UIERROR, "NONE", VUI_NORAGE, 0 },
+    { "ERR_OUT_OF_FOCUS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_ENERGY", ERRORTEXT_UIERROR, "NONE", VUI_NOENERGY, 0 },
+    { "ERR_OUT_OF_HEALTH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_RUNES", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_RUNIC_POWER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OUT_OF_POWER_DISPLAY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_GONE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MOUNT_FORCEDDISMOUNT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUTOFOLLOW_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_UNIT_NOT_FOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_FOLLOW_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_INSPECT_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_SUCCESS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_INVALID_TABARD_COLORS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_NOGUILD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_NOTGUILDMASTER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_NOTENOUGHMONEY", ERRORTEXT_UIERROR, "NONE", VUI_NOTENOUGHMONEY, 0 },
+    { "ERR_GUILDEMBLEM_INVALIDVENDOR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_EMBLEMERROR_NOTABARDGEOSET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_OUT_OF_RANGE", ERRORTEXT_UIERROR, "NONE", VUI_CANTCAST_OUTOFRANGE, 0 },
+    { "ERR_COMMAND_NEEDS_TARGET", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NOAMMO_S", ERRORTEXT_UIERROR, "NONE", VUI_OUTOFAMMO, 0 },
+    { "ERR_TOOBUSYTOFOLLOW", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DUEL_REQUESTED", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_DUEL_CANCELLED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_DEATHBINDALREADYBOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DEATHBIND_SUCCESS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NOEMOTEWHILERUNNING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ZONE_EXPLORED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_ZONE_EXPLORED_XP", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_ITEM_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_CANTUSEITEM, 0 },
+    { "ERR_IGNORING_YOU_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_FISH_NOT_HOOKED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_FISH_ESCAPED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_NOTUNSHEATHED", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_PETITION_OFFERED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PETITION_SIGNED", ERRORTEXT_CHAT, "igPlayerInviteAccept", VUI_NONE, 0 },
+    { "ERR_PETITION_SIGNED_S", ERRORTEXT_CHAT, "igPlayerInviteAccept", VUI_NONE, 0 },
+    { "ERR_PETITION_DECLINED_S", ERRORTEXT_CHAT, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_ALREADY_SIGNED", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_RESTRICTED_ACCOUNT", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_ALREADY_SIGNED_OTHER", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_IN_GUILD", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_CREATOR", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_NOT_ENOUGH_SIGNATURES", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_NOT_SAME_SERVER", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_PETITION_FULL", ERRORTEXT_UIERROR, "igPlayerInviteDecline", VUI_NONE, 0 },
+    { "ERR_SPELL_UNLEARNED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_ROOTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_AFFECTING_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_OUT_OF_RANGE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_NOT_BEHIND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_TARGETS_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_DEAD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_NOPATH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_CANT_BE_DESTROYED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_ALREADY_EXISTS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_CREATE_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_UPDATE_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_DB_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_NO_TEXT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TICKET_TEXT_TOO_LONG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_OBJECT_IS_BUSY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_EXHAUSTION_WELLRESTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_EXHAUSTION_RESTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_EXHAUSTION_NORMAL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_EXHAUSTION_TIRED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_EXHAUSTION_EXHAUSTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_ITEMS_WHILE_SHAPESHIFTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_INTERACT_SHAPESHIFTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_QUEST_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_MAIL_BOUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_MAIL_CONJURED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_TO_SELF", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_TARGET_NOT_FOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_DATABASE_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_WRAPPED_COD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_SENT", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_HAPPY_ENOUGH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_CANT_IMMUNE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_BE_DISENCHANTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_USE_DISARMED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_QUEST_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_AUCTION_BOUND_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_AUCTION_CONJURED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_LIMITED_DURATION_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_WRAPPED_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_LOOT_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_BAG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_DATABASE_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_BID_OWN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_BID_INCREMENT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_HIGHER_BID", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_MIN_BID", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_REPAIR_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_USED_CHARGES", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_STARTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_REMOVED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_OUTBID_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_WON_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_SOLD_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_EXPIRED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_BID_PLACED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOGOUT_FAILED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_SUCCESS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_INVALID_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_ACCEPTED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_DECLINED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_BUSY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_LOG_FULL_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_ONQUEST_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_ALREADY_DONE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_NOT_DAILY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_TIMER_EXPIRED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_NOT_IN_PARTY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_PUSH_DIFFERENT_SERVER_DAILY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_GROUP_LOWLEVEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_GROUP_ONLY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_GROUP_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_GROUP_REQUIREMENTS_UNMATCH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CORPSE_IS_NOT_IN_INSTANCE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PVP_KILL_HONORABLE", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_PVP_KILL_DISHONORABLE", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_HEALTH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_MANA", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SPELL_FAILED_ALREADY_AT_FULL_POWER_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUTOLOOT_MONEY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GENERIC_STUNNED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TARGET_STUNNED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MUST_REPAIR_DURABILITY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_YOU_JOINED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_YOU_LEFT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_MEMBER_ADDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_MEMBER_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_CLICK_ON_ITEM_TO_FEED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TOO_MANY_CHAT_CHANNELS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_ROLL_PENDING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_PLAYER_NOT_FOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_IN_RAID", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOGGING_OUT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TARGET_LOGGING_OUT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_WHILE_MOUNTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_WHILE_SHAPESHIFTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_IN_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_WHILE_DISARMED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_BROKEN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TALENT_WIPE_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_FEIGN_DEATH_RESISTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_IN_QUEUE_S", ERRORTEXT_CHAT, "PVPENTERQUEUE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_LEFT_QUEUE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_OTHER_MEMBER_LEFT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_PARTY_KICKED_FROM_QUEUE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_MEMBER_STILL_IN_QUEUE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_SUCCESS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_IN_PROGRESS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_MEMBER_ADDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_GROUP_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_NOT_LEADER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_INVALID_LEVEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_TARGET_NOT_IN_PARTY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_TARGET_INVALID_LEVEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_MUST_BE_LEADER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_NO_RAID_GROUP", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_NEED_PARTY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MEETING_STONE_NOT_FOUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GUILDEMBLEM_SAME", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_EQUIP_TRADE_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PVP_TOGGLE_ON", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_PVP_TOGGLE_OFF", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_JOIN_BATTLEGROUND_S", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_JOIN_BATTLEGROUND_FAIL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_JOIN_BATTLEGROUND_TOO_MANY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_TOO_MANY_QUEUES", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_TEAM_LEFT_QUEUE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_PROMOTION_CODE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BG_PLAYER_JOINED_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_BG_PLAYER_LEFT_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RESTRICTED_ACCOUNT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAY_TIME_EXCEEDED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_APPROACHING_PARTIAL_PLAY_TIME", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_APPROACHING_PARTIAL_PLAY_TIME_2", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_APPROACHING_NO_PLAY_TIME", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_APPROACHING_NO_PLAY_TIME_2", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_UNHEALTHY_TIME", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_RESTRICTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_THROTTLED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_REACHED_CAP", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_RAID_TARGET", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_LEADER_READY_CHECK_START_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_READY_CHECK_IN_PROGRESS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_READY_CHECK_THROTTLED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DUNGEON_DIFFICULTY_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_DUNGEON_DIFFICULTY_CHANGED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_WRONG_REALM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_NOT_ON_TAPLIST", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CHAT_PLAYER_AMBIGUOUS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_CANT_LOOT_THAT_NOW", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_MASTER_INV_FULL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_MASTER_UNIQUE_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_MASTER_OTHER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_FILTERING_YOU_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_USE_PREVENTED_BY_MECHANIC_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_UNIQUE_EQUIPPABLE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_LEADER_IS_LFM_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PENDING", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_NO_TEAM_II", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_CREATE_S", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_INVITE_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_QUIT_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_FOUNDER_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_INTERNAL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_IN_ARENA_TEAM", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_IN_ARENA_TEAM_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITED_TO_ARENA_TEAM", ERRORTEXT_CHAT, "LEVELUP", VUI_NONE, 0 },
+    { "ERR_ALREADY_INVITED_TO_ARENA_TEAM_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_NAME_INVALID", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_NAME_EXISTS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_LEADER_LEAVE_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_PERMISSIONS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_PLAYER_NOT_FOUND_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_NOT_ALLIED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_JOIN_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_YOU_JOIN_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_LEAVE_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_LEADER_IS_SS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_LEADER_CHANGED_SSS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_REMOVE_SSS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_DISBANDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_TARGET_TOO_LOW_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_TARGET_TOO_HIGH_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_TOO_MANY_MEMBERS_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_LEVEL_TOO_LOW_I", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_NOT_FOUND", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAMS_LOCKED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NO_ARENA_CHARTER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CANT_SPEAK_LANGAGE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VENDOR_MISSING_TURNINS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_NOT_IN_TEAM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_IN_BATTLEGROUND", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_ENOUGH_HONOR_POINTS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_ENOUGH_ARENA_POINTS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SOCKETING_REQUIRES_META_GEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SOCKETING_META_GEM_ONLY_IN_METASLOT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_COUNT_SOCKETED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SYSTEM_DISABLED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_TOO_MANY_DAILY_QUESTS_I", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_COUNT_EQUIPPED_SOCKETED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_UNIQUE_EQUIPPABLE_SOCKETED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_USER_SQUELCHED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_TOO_MUCH_GOLD", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_BARBER_SITTING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_FAILED_CAIS", ERRORTEXT_CHAT, "igQuestFailed", VUI_NONE, 0 },
+    { "ERR_INVITE_RESTRICTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_FULL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_NOT_FOUND", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_ALREADY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_ADDED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_AMBIGUOUS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_IGNORE_DELETED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_UNKNOWN_MACRO_OPTION_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_DURING_ARENA_MATCH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_SILENCED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_UNSILENCED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_COMSAT_DISCONNECT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_COMSAT_RECONNECT_ATTEMPT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_COMSAT_CONNECT_FAIL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_DANCE_CREATE_DUPLICATE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_DANCE_SAVE_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_DANCE_DELETE_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_INVALID_ATTACHMENT_SLOT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_TOO_MANY_ATTACHMENTS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_INVALID_ATTACHMENT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_ATTACHMENT_EXPIRED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_CHAT_PARENTAL_DISABLE_ALL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICE_CHAT_PARENTAL_DISABLE_MIC", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PROFANE_CHAT_NAME", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_SILENCED_ECHO", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_UNSILENCED_ECHO", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_VOICESESSION_FULL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LOOT_CANT_LOOT_THAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_EXPIRED_CAIS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_ACTION_THROTTLED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_ALREADY_PICKPOCKETED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_INVALID", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_NO_NAME", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_TOO_SHORT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_TOO_LONG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_MIXED_LANGUAGES", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_PROFANE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_RESERVED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_THREE_CONSECUTIVE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_INVALID_SPACE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_CONSECUTIVE_SPACES", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_NOT_REFERRED_BY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_TARGET_TOO_HIGH", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_INSUFFICIENT_GRANTABLE_LEVELS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_TOO_FAR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_DIFFERENT_FACTION", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_NOT_NOW", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_SUMMON_LEVEL_MAX_I", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_SUMMON_COOLDOWN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REFER_A_FRIEND_INSUF_EXPAN_LVL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_SAME_ACCOUNT", ERRORTEXT_UIERROR, "NONE", VUI_CANTTRADE_SOULBOUND, 0 },
+    { "ERR_BAD_ON_USE_ENCHANT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_SELF", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TOO_MANY_SOCKETS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_TRADE_TARGET_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_LIMIT_CATEGORY_SOCKETED_EXCEEDED_IS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_MAX_LIMIT_CATEGORY_EQUIPPED_EXCEEDED_IS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SHAPESHIFT_FORM_CANNOT_EQUIP", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ITEM_INVENTORY_FULL_SATCHEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_SCALING_STAT_ITEM_LEVEL_EXCEEDED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PURCHASE_LEVEL_TOO_LOW", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GROUP_SWAP_FAILED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_IN_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_GLYPH_SLOT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_GENERIC_NO_VALID_TARGETS", ERRORTEXT_UIERROR, "NONE", VUI_GENERICNOTARGET, 0 },
+    { "ERR_CALENDAR_EVENT_ALERT_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_LEARN_SPELL_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_LEARN_ABILITY_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PET_SPELL_UNLEARNED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_UNKNOWN_REALM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_NO_PARTY_SERVER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVITE_PARTY_BUSY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_TARGET_AMBIGUOUS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_INVITE_RAID_LOCKED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_LIMIT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_COOLDOWN_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_NOT_ELIGIBLE_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_IN_PROGRESS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_TOO_FEW_PLAYERS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_VOTE_SUCCEEDED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_VOTE_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_IN_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_DUNGEON_COMPLETE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_BOOT_LOOT_ROLLS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_PARTY_LFG_TELEPORT_IN_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_DISALLOWED_BY_LEVEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_INFO_THROTTLED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_ALREADY_IN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_CHANGE_FAILED_QUEUED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_WHILE_FALLING", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_NOT_WHILE_FATIGUED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAX_SOCKETS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MULTI_CAST_ACTION_TOTEM_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REMOVE_FROM_PVP_QUEUE_GRANT_LEVEL", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REMOVE_FROM_PVP_QUEUE_XP_GAIN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_JOIN_XP_GAIN", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_DIFFICULTY_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_DIFFICULTY_CHANGED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_RAID_LOCKOUT_CHANGED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_PLAYER_DIFFICULTY_CHANGED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_GMRESPONSE_DB_ERROR", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_JOIN_RANGE_INDEX", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_REMOVE_FROM_PVP_QUEUE_FACTION_CHANGE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_JOIN_FAILED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BATTLEGROUND_JOIN_TIMED_OUT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_MAIL_LIMITED_DURATION_ITEM", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_YELL_RESTRICTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_ROLE_CHECK_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_ROLE_CHECK_FAILED_TIMEOUT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_ROLE_CHECK_FAILED_NOT_VIABLE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_GROUP_FULL", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_NO_LFG_OBJECT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_NO_SLOTS_PLAYER", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_NO_SLOTS_PARTY", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_MISMATCHED_SLOTS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PARTY_PLAYERS_FROM_DIFFERENT_REALMS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_MEMBERS_NOT_PRESENT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_GET_INFO_TIMEOUT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_INVALID_SLOT", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_DESERTER_PLAYER", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_DESERTER_PARTY", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_RANDOM_COOLDOWN_PLAYER", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_RANDOM_COOLDOWN_PARTY", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_TOO_MANY_MEMBERS", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PROPOSAL_FAILED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PROPOSAL_DECLINED_SELF", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PROPOSAL_DECLINED_PARTY", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_NO_SLOTS_SELECTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_NO_ROLES_SELECTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_ROLE_CHECK_INITIATED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_PLAYER_DECLINED_ROLE_CHECK", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_JOINED_QUEUE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_JOINED_LIST", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_LEFT_QUEUE", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_LEFT_LIST", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_ROLE_CHECK_ABORTED", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_CANT_USE_BATTLEGROUND", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_LFG_CANT_USE_DUNGEONS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_INVALID_TELEPORT_LOCATION", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_CURRENCY_FULL", ERRORTEXT_UIERROR, "NONE", VUI_INVENTORYFULL, 0 },
+    { "ERR_TOO_FAR_TO_INTERACT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_COOLDOWN_S", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_WORLDSTATE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_ENCOUNTER", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_COMBAT", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_PLAYER_BUSY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_DIFFICULTY_CHANGE_ALREADY_STARTED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_ARENA_TEAM_PARTY_SIZE", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_QUEST_FORCE_REMOVED_S", ERRORTEXT_CHAT, "NONE", VUI_NONE, 0 },
+    { "ERR_IN_RANDOM_BG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_IN_NON_RANDOM_BG", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_AUCTION_ENOUGH_ITEMS", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BN_FRIEND_SELF", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BN_FRIEND_ALREADY", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BN_FRIEND_BLOCKED", ERRORTEXT_UIERROR, "NONE", VUI_NONE, 0 },
+    { "ERR_BN_FRIEND_REQUEST_SENT", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
+    { "ERR_BN_BROADCAST_THROTTLE", ERRORTEXT_UIINFO, "NONE", VUI_NONE, 0 },
 };
 
 // STATIC: 0x00AC80A0
@@ -955,7 +970,7 @@ int32_t CGGameUI::m_hasControl;
 char CGGameUI::m_lastErrorMessage[3000];
 
 // STATIC: 0x00BD0748
-int32_t CGGameUI::m_cursorItemType;
+UICURSORTYPE CGGameUI::m_cursorItemType;
 
 // STATIC: 0x00BD074C
 int32_t CGGameUI::m_cursorHasAction;
@@ -1147,13 +1162,13 @@ int32_t CGGameUI::m_threatWarningEnabled;
 uint16_t CGGameUI::m_accountDataGeneration;
 
 // STATIC: 0x00BD08CC
-int32_t CGGameUI::unk_BD08CC;
+int32_t CGGameUI::unused_BD08CC;
 
 // STATIC: 0x00BD0B00
 TotemInfo CGGameUI::m_totems[4];
 
 // STATIC: 0x00BD0B80
-MirrorTimerInfo CGGameUI::m_mirrorTimerInfo[3];
+MirrorTimerInfo CGGameUI::m_mirrorTimerInfo[NUM_UNIT_MIRROR_TIMERS];
 
 // STATIC: 0x00BD080C
 int32_t CGGameUI::m_areaID;
@@ -1309,7 +1324,7 @@ WOWGUID CGGameUI::GetRaidMemberPet(uint32_t index) {
         return WOWGUID();
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(member->m_guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(member->m_guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!unit) {
         return member->m_stats.m_pet.m_guid;
@@ -1378,21 +1393,21 @@ int32_t CGGameUI::CanResetInstance() {
 
     MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
 
-    if (map && (map->m_instanceType == 1 || map->m_instanceType == 2)) {
+    if (map && (map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PARTY_DUNGEON || map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_RAID_DUNGEON)) {
         uint32_t difficulty = CGGameUI::GetCurrentDungeonDifficulty();
 
-        if (difficulty > 3 || !GetMapResetTime(map->m_id, difficulty)) {
+        if (difficulty > MAX_MAP_DIFFICULTY_ID || !GetMapResetTime(map->m_id, difficulty)) {
             return 0;
         }
     }
 
-    if (!g_mapDB.GetRecord(CGGameUI::m_iMapID) || (map->m_instanceType != 1 && map->m_instanceType != 2)) {
+    if (!g_mapDB.GetRecord(CGGameUI::m_iMapID) || (map->m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PARTY_DUNGEON && map->m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_RAID_DUNGEON)) {
         return 0;
     }
 
     uint32_t difficulty = CGGameUI::GetCurrentDungeonDifficulty();
 
-    if ((difficulty > 3 || !GetMapResetTime(map->m_id, difficulty)) && time(nullptr) - CGGameUI::m_uiLastInstanceTime <= 90000) {
+    if ((difficulty > MAX_MAP_DIFFICULTY_ID || !GetMapResetTime(map->m_id, difficulty)) && time(nullptr) - CGGameUI::m_uiLastInstanceTime <= 90000) {
         return 1;
     }
 
@@ -1408,10 +1423,10 @@ void CGGameUI::SetLastInstanceTime(uint32_t time, int32_t mapId, int32_t current
 
     MapRec* map = g_mapDB.GetRecord(mapId);
 
-    if (map && (map->m_instanceType == 1 || map->m_instanceType == 2)) {
+    if (map && (map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PARTY_DUNGEON || map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_RAID_DUNGEON)) {
         uint32_t difficulty = CGGameUI::GetCurrentDungeonDifficulty();
 
-        if (difficulty > 3 || !GetMapResetTime(map->m_id, difficulty)) {
+        if (difficulty > MAX_MAP_DIFFICULTY_ID || !GetMapResetTime(map->m_id, difficulty)) {
             CGGameUI::m_uiLastInstanceTime = time;
             CGGameUI::m_iMapID = mapId;
         }
@@ -1438,7 +1453,7 @@ struct TargetDirectionData {
 // VERIFY: 977893b4 manual
 // OFFSET: 0x00518F40
 static int32_t TargetDirectionProc(WOWGUID guid, void* param) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 1;
@@ -1467,7 +1482,7 @@ static int32_t TargetDirectionProc(WOWGUID guid, void* param) {
         return 1;
     }
 
-    if (!World::QueryObjectVisible(unit->m_worldObject) || ((unit->m_obj->m_type & TYPEMASK_PLAYER) && static_cast<CGPlayer_C*>(unit)->IsCommentatorUberOrInArena())) {
+    if (!World::QueryObjectVisible(unit->m_worldObject) || ((unit->m_obj->m_type & TYPE_PLAYER) && static_cast<CGPlayer_C*>(unit)->IsCommentatorUberOrInArena())) {
         return 1;
     }
 
@@ -1550,7 +1565,7 @@ void CGGameUI::TargetDirection(float facing, float angle, int32_t type) {
         return;
     }
 
-    CGUnit_C* origin = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* origin = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!origin) {
         origin = unit;
@@ -1567,7 +1582,7 @@ void CGGameUI::TargetDirection(float facing, float angle, int32_t type) {
     }
 
     CGWorldFrame::GetCameraFacing(&cameraFacing);
-    cameraFacing *= C33Matrix::Rotation(6.2831855f - facing);
+    cameraFacing *= C33Matrix::Rotation(TWO_PI - facing);
 
     TargetDirectionData data;
     data.m_worldFrame = worldFrame;
@@ -1604,43 +1619,43 @@ void CGGameUI::TargetDirection(float facing, float angle, int32_t type) {
 int32_t CGGameUI::CanPerformAction(uint32_t action) {
     if (lua_tainted) {
         switch (action) {
-            case 0:
-            case 1:
-            case 2:
-            case 3:
-            case 4:
-            case 5:
-            case 16:
-            case 17:
+            case UI_ACTION::UI_ACTION_MOVEMENT:
+            case UI_ACTION::UI_ACTION_ATTACK:
+            case UI_ACTION::UI_ACTION_CAST_SPELL:
+            case UI_ACTION::UI_ACTION_RUN_MACRO:
+            case UI_ACTION::UI_ACTION_PARTY_ASSIGNMENT:
+            case UI_ACTION::UI_ACTION_UNKNOWN_5:
+            case UI_ACTION::UI_ACTION_UNKNOWN_16:
+            case UI_ACTION::UI_ACTION_GM_TICKET:
                 CGGameUI::ShowBlockedActionFeedback(nullptr, 0);
                 return 0;
 
-            case 6:
-            case 7:
-            case 8:
-            case 9:
-            case 15:
-            case 18:
-            case 19:
-            case 20:
-            case 21:
-            case 23:
+            case UI_ACTION::UI_ACTION_TRADE_SKILL:
+            case UI_ACTION::UI_ACTION_TRADE_ACCEPT:
+            case UI_ACTION::UI_ACTION_AUCTION:
+            case UI_ACTION::UI_ACTION_LFG:
+            case UI_ACTION::UI_ACTION_UNKNOWN_15:
+            case UI_ACTION::UI_ACTION_UNKNOWN_18:
+            case UI_ACTION::UI_ACTION_CALENDAR_EVENT:
+            case UI_ACTION::UI_ACTION_BATTLEFIELD_PORT:
+            case UI_ACTION::UI_ACTION_UNKNOWN_21:
+            case UI_ACTION::UI_ACTION_UNKNOWN_23:
                 if (!CGGameUI::m_simpleTop) {
                     return 1;
                 }
 
-                if (!CGGameUI::m_simpleTop->unk_1250) {
+                if (!CGGameUI::m_simpleTop->unused_1250) {
                     CGGameUI::ShowBlockedActionFeedback(nullptr, 1);
                     return 0;
                 }
 
                 break;
 
-            case 11:
-            case 12:
-            case 13:
-            case 14:
-            case 22:
+            case UI_ACTION::UI_ACTION_RAID_SUBGROUP:
+            case UI_ACTION::UI_ACTION_EDIT_MACRO:
+            case UI_ACTION::UI_ACTION_BINDING:
+            case UI_ACTION::UI_ACTION_ACTION_MANIPULATION:
+            case UI_ACTION::UI_ACTION_EQUIP_ITEM:
                 if (!CGGameUI::m_simpleTop) {
                     return 1;
                 }
@@ -1658,7 +1673,7 @@ int32_t CGGameUI::CanPerformAction(uint32_t action) {
     }
 
     if (CGGameUI::m_simpleTop && !action) {
-        CGGameUI::m_simpleTop->unk_1250 = 0;
+        CGGameUI::m_simpleTop->unused_1250 = 0;
     }
 
     return 1;
@@ -1706,7 +1721,7 @@ void CGGameUI::InitializeFrameXML() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    input->m_mouseModeFlags = 3;
+    input->m_mouseModeFlags = INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_INITIAL_FLAGS;
     input->m_forceCursorOn = 0;
     input->UpdateMouseMode(1);
 
@@ -1794,6 +1809,7 @@ void CGGameUI::InitializeFrameXML() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
+    BugReportRegister();
     LoadAddOns(&status);
     FrameXML_RegisterLoadProgressCallback(nullptr, nullptr, 0);
     CGGameUI::Initialize();
@@ -1931,8 +1947,8 @@ void CGGameUI::InitializeGame() {
     }
 
     CGGameUI::m_phaseMask = 1;
-    CGGameUI::m_instanceDifficulty = 0;
-    CGGameUI::m_dungeonDifficulty = 0;
+    CGGameUI::m_instanceDifficulty = MAP_DIFFICULTY_DEFAULT;
+    CGGameUI::m_dungeonDifficulty = DUNGEON_DIFFICULTY_NORMAL;
     CGGameUI::m_lastRegenTime = 0;
     CGGameUI::m_comboTarget = WOWGUID();
     CGGameUI::m_comboPoints = 0;
@@ -1947,10 +1963,10 @@ void CGGameUI::InitializeGame() {
         totem.m_icon = nullptr;
     }
 
-    for (int32_t i = 0; i < 3; i++) {
+    for (int32_t i = 0; i < NUM_UNIT_MIRROR_TIMERS; i++) {
         MirrorTimerInfo& timer = CGGameUI::m_mirrorTimerInfo[i];
-        timer.m_type = 3;
-        timer.unk_0018 = 0;
+        timer.m_type = UNIT_MIRROR_TIMER_INACTIVE;
+        timer.m_startTime = 0;
         timer.m_spellId = 0;
         timer.m_paused = 0;
         timer.m_scale = 0;
@@ -1996,9 +2012,9 @@ int32_t CGGameUI::Idle(const void* data, void* param) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && !(player->m_unit->m_unitFieldFlags & 0x80000)) {
+    if (player && !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT)) {
         lua_gc(L, LUA_GCSTEP, 1);
     }
 
@@ -2073,14 +2089,14 @@ int32_t CGGameUI::Idle(const void* data, void* param) {
 
     int32_t idleTime = OsGetAsyncTimeMs() - CSimpleTop::s_eventTime;
 
-    if (idleTime - 300000 >= 0) {
-        if (idleTime - 1800000 < 0) {
+    if (idleTime - AUTO_SIT_IDLE_TIME >= 0) {
+        if (idleTime - AUTO_LOGOUT_IDLE_TIME < 0) {
             if (player) {
-                if (!player->m_unit->m_unitFieldBytes1[0] && !(player->m_unit->m_unitFieldFlags & 0x80000) && !player->IsMounted() && !player->IsAutoTracking()) {
-                    player->ChangeStandState(1);
+                if ((player->m_unit->m_standState == UNIT_STANDING) && !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT) && !player->IsMounted() && !player->IsAutoTracking()) {
+                    player->ChangeStandState(UNIT_SITTING);
                 }
 
-                if (!(player->m_unit->m_unitFieldFlags & 0x100000) && !CGChat::m_afk) {
+                if (!(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) && !CGChat::m_afk) {
                     player->SetAFK(nullptr);
                 }
             }
@@ -2115,7 +2131,7 @@ int32_t CGGameUI::FilterMouseMotion(CMouseEvent* evt) {
 // VERIFY: a4222caa manual
 // OFFSET: 0x00520F70
 void CGGameUI::UpdateActivePlayer() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         SErrDisplayAppFatalMessage("", "", 0);
@@ -2211,7 +2227,7 @@ void CGGameUI::ScaleToScreenSize(int32_t width, int32_t height, int32_t force) {
     }
 
     if (fabs(CGGameUI::m_aspect - aspect) >= 0.001f) {
-        if (lua_tainted && CGGameUI::m_simpleTop && !CGGameUI::m_simpleTop->unk_1250) {
+        if (lua_tainted && CGGameUI::m_simpleTop && !CGGameUI::m_simpleTop->unused_1250) {
             CGGameUI::ShowBlockedActionFeedback(nullptr, 1);
             CGGameUI::m_aspect = aspect;
         } else {
@@ -2283,7 +2299,7 @@ void CGGameUI::OnMouseModeNormal() {
 
     CSimpleTop::s_instance->m_checkFocus = 1;
 
-    if (CGInputControl::GetActive()->m_mouseModeFlags & 0x1) {
+    if (CGInputControl::GetActive()->m_mouseModeFlags & INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_CURSOR_ON) {
         g_theGxDevicePtr->CursorSetVisible(1);
     }
 
@@ -2299,11 +2315,11 @@ void CGGameUI::HandleSpriteTrack(const CObjectTrackEvent& evt) {
 // VERIFY: b02d0e37 manual
 // OFFSET: 0x005277B0
 int32_t CGGameUI::OnSpriteRightClick(WOWGUID guid) {
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return 1;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return 0;
@@ -2344,9 +2360,9 @@ int32_t CGGameUI::HandleSpriteClick(const CSpriteClickEvent& evt) {
 // VERIFY: 3b71543e manual
 // OFFSET: 0x005278C0
 int32_t CGGameUI::HandleWorldClick(const CWorldClickEvent& evt) {
-    int32_t noCursorItem = CGGameUI::m_cursorItemType == 0;
-    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_PLAYER, __FILE__, __LINE__));
-    C3Vector direction(evt.m_segEnd.x - evt.m_segStart.x, evt.m_segEnd.y - evt.m_segStart.y, evt.m_segEnd.z - evt.m_segStart.z);
+    int32_t noCursorItem = CGGameUI::m_cursorItemType == UICURSOR_EMPTY;
+    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_PLAYER, __FILE__, __LINE__));
+    C3Vector direction(evt.m_segment.end.x - evt.m_segment.start.x, evt.m_segment.end.y - evt.m_segment.start.y, evt.m_segment.end.z - evt.m_segment.start.z);
 
     if (noCursorItem && direction.x * direction.x + direction.z * direction.z + direction.y * direction.y != 0.0f && mover && mover->CanAutoInteract() && evt.m_button == MOUSE_BUTTON_RIGHT) {
         mover->SetTrackingDirection(direction);
@@ -2364,7 +2380,7 @@ int32_t CGGameUI::HandleWorldClick(const CWorldClickEvent& evt) {
         }
 
         if (noCursorItem && g_deselectOnClickCVar->m_intValue) {
-            CGGameUI::unk_BD08CC = 0;
+            CGGameUI::unused_BD08CC = 0;
 
             if (CGGameUI::m_lockedTarget) {
                 CGGameUI::m_lastTarget = CGGameUI::m_lockedTarget;
@@ -2391,7 +2407,7 @@ void CGGameUI::GetCursorItem(WOWGUID& item, WOWGUID& container, uint32_t& slot) 
 // VERIFY: 9a21a87d manual
 // OFFSET: 0x00513770
 void CGGameUI::UnlockItem(WOWGUID guid) {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item) {
         item->Unlock();
@@ -2409,7 +2425,7 @@ void CGGameUI::ResetCamera(WOWGUID guid) {
         target = ClntObjMgrGetActivePlayer();
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(target, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(target, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object || !CGWorldFrame::s_currentWorldFrame) {
         SErrDisplayAppFatalMessage("", "", 0);
@@ -2438,15 +2454,15 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
     CursorDropItem();
 
     switch (CGGameUI::m_cursorItemType) {
-        case 1: {
+        case UICURSOR_ITEM: {
             if (a1 && CGGameUI::m_cursorItem) {
                 CGGameUI::UnlockItem(CGGameUI::m_cursorItem);
             }
 
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPE_ITEM, __FILE__, __LINE__));
 
             if (item) {
-                SndInterfacePlayItemSound(1, item);
+                SndInterfacePlayItemSound(ITEMSOUND_DROP, item);
             }
 
             CGGameUI::m_cursorItem = WOWGUID();
@@ -2455,7 +2471,7 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
             break;
         }
 
-        case 2:
+        case UICURSOR_MONEY:
             CGGameUI::m_cursorMoney = 0;
             SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
 
@@ -2465,39 +2481,39 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
 
             break;
 
-        case 3:
+        case UICURSOR_SPELL:
             CGGameUI::m_cursorSpell = 0;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
 
-        case 4:
+        case UICURSOR_PET_ACTION:
             CGGameUI::m_cursorPetAction.m_data = 0;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
 
-        case 5:
-        case 6:
-        case 7:
-        case 9:
-            SI2::PlayItemSound(1, CGGameUI::m_cursorVirtualDisplay);
+        case UICURSOR_MERCHANT:
+        case UICURSOR_LOOT:
+        case UICURSOR_ACTIONBAR:
+        case UICURSOR_AMMO:
+            SI2::PlayItemSound(ITEMSOUND_DROP, CGGameUI::m_cursorVirtualDisplay);
             CGGameUI::m_cursorVirtualID = 0;
             CGGameUI::m_cursorVirtualDisplay = 0;
             CGGameUI::m_cursorVirtualSlot = 0;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
 
-        case 8:
+        case UICURSOR_MACRO:
             CGGameUI::m_cursorMacro = 0;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
 
-        case 10:
+        case UICURSOR_PET:
             CGGameUI::m_cursorPet = 0;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
 
-        case 11:
-            SI2::PlayItemSound(1, CGGameUI::m_cursorVirtualDisplay);
+        case UICURSOR_GUILDBANK_ITEM:
+            SI2::PlayItemSound(ITEMSOUND_DROP, CGGameUI::m_cursorVirtualDisplay);
 
             if (a1 && CGGameUI::m_cursorVirtualID) {
                 CGGuildBankInfo::Unlock(CGGameUI::m_cursorVirtualID, CGGameUI::m_cursorVirtualSlot);
@@ -2509,7 +2525,7 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
             CGGameUI::m_cursorVirtualSlot = 0;
             break;
 
-        case 12:
+        case UICURSOR_GUILDBANK_MONEY:
             CGGameUI::m_cursorMoney = 0;
             SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
 
@@ -2519,7 +2535,7 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
 
             break;
 
-        case 13:
+        case UICURSOR_EQUIPMENT_SET:
             CGGameUI::m_cursorEquipmentSet = -1;
             SI2::PlaySoundKit("INTERFACESOUND_CURSORDROPOBJECT", nullptr, nullptr, nullptr);
             break;
@@ -2529,7 +2545,7 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
     }
 
     if (CGGameUI::m_cursorHasAction) {
-        if (CGGameUI::m_cursorItemType == 4) {
+        if (CGGameUI::m_cursorItemType == UICURSOR_PET_ACTION) {
             CGPetInfo::HideGrid();
         } else {
             CGActionBar::HideGrid();
@@ -2538,14 +2554,14 @@ void CGGameUI::ClearCursor(int32_t a1, int32_t a2) {
         CGGameUI::m_cursorHasAction = 0;
     }
 
-    CGGameUI::m_cursorItemType = 0;
+    CGGameUI::m_cursorItemType = UICURSOR_EMPTY;
     FrameScript_SignalEvent(SCRIPT_EVENT_CURSOR_UPDATE, nullptr);
 }
 
 // VERIFY: efbc912f manual
 // OFFSET: 0x0051F790
 void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -2555,28 +2571,28 @@ void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
 
     if (previous || (previous = CGGameUI::m_currentObjectTrack)) {
         CGGameUI::m_currentObjectTrack = WOWGUID();
-        CGObject_C* object = ClntObjMgrObjectPtr(previous, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(previous, TYPE_OBJECT, __FILE__, __LINE__);
         CGGameUI::m_gameTooltip->FadeOut();
 
         if (object) {
-            object->HideHighlightType(1);
+            object->HideHighlightType(HT_MOUSEOVER);
         }
     }
 
     CGGameUI::m_currentObjectTrack = guid;
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return;
     }
 
     if (CGGameUI::m_visible || (g_unitHighlightsCVar && g_unitHighlightsCVar->m_intValue)) {
-        object->ShowHighlightType(1);
+        object->ShowHighlightType(HT_MOUSEOVER);
     }
 
     switch (static_cast<uint32_t>(object->m_obj->m_type)) {
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT:
-        case TYPEMASK_OBJECT | TYPEMASK_UNIT | TYPEMASK_PLAYER: {
+        case HEIR_TYPE_UNIT:
+        case HEIR_TYPE_PLAYER: {
             if (CSimpleTop::GetInstance()->m_mouseFocus == CGWorldFrame::s_currentWorldFrame) {
                 CGGameUI::m_gameTooltip->SetDefaultAnchor();
                 WOWGUID none = { 0 };
@@ -2597,7 +2613,7 @@ void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
             break;
         }
 
-        case TYPEMASK_OBJECT | TYPEMASK_GAMEOBJECT:
+        case HEIR_TYPE_GAMEOBJECT:
             if (CSimpleTop::GetInstance()->m_mouseFocus == CGWorldFrame::s_currentWorldFrame) {
                 if (object->FloatingTooltip()) {
                     CGGameUI::m_gameTooltip->SetOwner(CGGameUI::m_UISimpleParent, ANCHOR_CURSOR, 0.0f, 0.0f);
@@ -2611,7 +2627,7 @@ void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
             SI2::PlaySoundKit("GAMEHIGHLIGHTNEUTRALUNIT", nullptr, nullptr, nullptr);
             break;
 
-        case TYPEMASK_OBJECT | TYPEMASK_CORPSE:
+        case HEIR_TYPE_CORPSE:
             if (CSimpleTop::GetInstance()->m_mouseFocus == CGWorldFrame::s_currentWorldFrame) {
                 CGGameUI::m_gameTooltip->SetDefaultAnchor();
                 CGGameUI::m_gameTooltip->SetCorpse(guid);
@@ -2628,7 +2644,7 @@ void CGGameUI::HandleObjectTrackChange(WOWGUID guid, WOWGUID prevGuid) {
 // VERIFY: ecd66915 manual
 // OFFSET: 0x005206E0
 void CGGameUI::UpdateCombatMode() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -2640,7 +2656,7 @@ void CGGameUI::UpdateCombatMode() {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    if ((player->m_unit->m_unitFieldFlags & 0x80000) || (player->m_combatModeFlags & 0x2) || player->CGUnit_C::IsInMelee()) {
+    if ((player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT) || (player->m_combatModeFlags & CGPlayer_C::COMBAT_MODE_FLAGS::COMBAT_MODE_AUTO_COMBAT) || player->CGUnit_C::IsInMelee()) {
         bindings->EnableBindingMode(BINDING_MODE_1, 1);
     } else {
         bindings->EnableBindingMode(BINDING_MODE_1, 0);
@@ -2673,12 +2689,12 @@ void CGGameUI::ClearTarget(WOWGUID guid, int32_t a2) {
     }
 
     if (!noMgr) {
-        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (object) {
-            object->HideHighlightType(0);
+            object->HideHighlightType(HT_OBJSELECTION);
 
-            if (object->m_obj->m_type & TYPEMASK_UNIT) {
+            if (object->m_obj->m_type & TYPE_UNIT) {
                 CGUnit_C* unit = static_cast<CGUnit_C*>(object);
                 PlayerNameTriggerColorUpdate(unit->m_nameDesc);
                 unit->UnregisterScript(0x1000);
@@ -2693,7 +2709,7 @@ void CGGameUI::ClearTarget(WOWGUID guid, int32_t a2) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->SetCombatMode();
@@ -2717,13 +2733,13 @@ void CGGameUI::ClearTarget(WOWGUID guid, int32_t a2) {
 // VERIFY: e7c59690 manual
 // OFFSET: 0x00524650
 void CGGameUI::DeleteCursorItem() {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item || item->m_item->m_itemFieldOwner != ClntObjMgrGetActivePlayer()) {
         return;
     }
 
-    if (item->GetItemStaticFlags(0) & 0x20) {
+    if (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_NO_USER_DESTROY) {
         CGGameUI::DisplayError(ERR_ITEM_CANT_BE_DESTROYED);
         return;
     }
@@ -2756,7 +2772,7 @@ void CGGameUI::AcceptAreaSpiritHeal() {
 // OFFSET: 0x00524BF0
 void CGGameUI::Target(WOWGUID guid) {
     if (!guid) {
-        CGGameUI::unk_BD08CC = 0;
+        CGGameUI::unused_BD08CC = 0;
 
         if (CGGameUI::m_lockedTarget) {
             CGGameUI::m_lastTarget = CGGameUI::m_lockedTarget;
@@ -2779,13 +2795,13 @@ void CGGameUI::Target(WOWGUID guid) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && player->m_unit->m_unitFieldCharmedby) {
         return;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (object) {
         if (Spell_C_IsTargeting()) {
@@ -2798,10 +2814,10 @@ void CGGameUI::Target(WOWGUID guid) {
         }
 
         if (CGGameUI::m_visible || (g_unitHighlightsCVar && g_unitHighlightsCVar->m_intValue)) {
-            object->ShowHighlightType(0);
+            object->ShowHighlightType(HT_OBJSELECTION);
         }
 
-        if (object->m_obj->m_type & TYPEMASK_UNIT) {
+        if (object->m_obj->m_type & TYPE_UNIT) {
             CGUnit_C* unit = static_cast<CGUnit_C*>(object);
             PlayerNameTriggerColorUpdate(unit->m_nameDesc);
             unit->RegisterScript(0x1000);
@@ -2821,16 +2837,16 @@ void CGGameUI::Target(WOWGUID guid) {
                     CGGameUI::m_lastFriendTarget = guid;
                 }
 
-                if ((unit->m_obj->m_type & TYPEMASK_PLAYER) && unit->m_obj->m_guid != ClntObjMgrGetActivePlayer() && CanTriggerTutorial(18)) {
-                    CGTutorial::TriggerTutorial(18);
-                } else if ((unit->m_obj->m_type & TYPEMASK_PLAYER) && player->CanCooperate(unit) && static_cast<int32_t>(player->m_unit->m_unitFieldLevel) >= 5) {
-                    CGTutorial::TriggerTutorial(17);
+                if ((unit->m_obj->m_type & TYPE_PLAYER) && unit->m_obj->m_guid != ClntObjMgrGetActivePlayer() && CanTriggerTutorial(TUTORIAL::TUTORIAL_PLAYERS)) {
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_PLAYERS);
+                } else if ((unit->m_obj->m_type & TYPE_PLAYER) && player->CanCooperate(unit) && static_cast<int32_t>(player->m_unit->m_unitFieldLevel) >= 5) {
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_GROUPING);
                 } else if (player->CanAttack(unit)) {
-                    CGTutorial::TriggerTutorial(4);
-                } else if (unit->m_unit->m_unitNpcFlags & 0x2000) {
-                    CGTutorial::TriggerTutorial(34);
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_TARGETING_ENEMY);
+                } else if (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_FLIGHT_MASTER) {
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_TRAVEL);
                 } else if (unit->m_questStatus == 1) {
-                    CGTutorial::TriggerTutorial(42);
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_UNAVAILABLE_QUEST_GIVERS);
                 }
             }
         }
@@ -2874,7 +2890,7 @@ int32_t CGGameUI::OnTerrainClick(const CTerrainClickEvent& evt) {
             }
 
             if (g_deselectOnClickCVar->m_intValue) {
-                CGGameUI::unk_BD08CC = 0;
+                CGGameUI::unused_BD08CC = 0;
 
                 if (CGGameUI::m_lockedTarget) {
                     CGGameUI::m_lastTarget = CGGameUI::m_lockedTarget;
@@ -2890,7 +2906,7 @@ int32_t CGGameUI::OnTerrainClick(const CTerrainClickEvent& evt) {
         }
     }
 
-    CGPlayer_C* mover = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGPlayer_C* mover = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!mover) {
         return 1;
@@ -2899,7 +2915,7 @@ int32_t CGGameUI::OnTerrainClick(const CTerrainClickEvent& evt) {
     C3Vector point = evt.m_point;
 
     if (evt.m_guid) {
-        CGObject_C* object = ClntObjMgrObjectPtr(evt.m_guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(evt.m_guid, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (!object) {
             return 1;
@@ -2915,30 +2931,30 @@ int32_t CGGameUI::OnTerrainClick(const CTerrainClickEvent& evt) {
 // VERIFY: e20bf7fa manual
 // OFFSET: 0x005274F0
 int32_t CGGameUI::OnSpriteLeftClick(WOWGUID guid) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return 0;
     }
 
-    if ((object->m_obj->m_type & TYPEMASK_PLAYER) && ((CGGameUI::m_cursorItem && CGGameUI::m_cursorItemContainer) || CGGameUI::m_cursorMoney) && !Spell_C_IsTargeting()) {
+    if ((object->m_obj->m_type & TYPE_PLAYER) && ((CGGameUI::m_cursorItem && CGGameUI::m_cursorItemContainer) || CGGameUI::m_cursorMoney) && !Spell_C_IsTargeting()) {
         int32_t bound = 0;
 
         if (CGGameUI::m_cursorItem) {
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPE_ITEM, __FILE__, __LINE__));
 
             if (item) {
                 if (item->IsBound()) {
                     bound = 1;
                 }
 
-                if (item->m_obj->m_type & TYPEMASK_CONTAINER) {
+                if (item->m_obj->m_type & TYPE_CONTAINER) {
                     CGBag_C* bag = item->GetBag();
 
                     if (bag) {
@@ -2958,7 +2974,7 @@ int32_t CGGameUI::OnSpriteLeftClick(WOWGUID guid) {
             goto npc;
         }
 
-        if (object->m_obj->m_type & TYPEMASK_PLAYER) {
+        if (object->m_obj->m_type & TYPE_PLAYER) {
             if (player->IsDeadOrGhost()) {
                 CGGameUI::DisplayError(ERR_PLAYER_DEAD);
             } else if (!player->CanCooperate(static_cast<CGUnit_C*>(object))) {
@@ -2974,9 +2990,9 @@ int32_t CGGameUI::OnSpriteLeftClick(WOWGUID guid) {
     }
 
 npc:
-    if (object->m_obj->m_type & TYPEMASK_UNIT) {
+    if (object->m_obj->m_type & TYPE_UNIT) {
         if (guid == CGPetInfo::GetPet(0) && CGGameUI::m_cursorItem) {
-            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::m_cursorItem, TYPE_ITEM, __FILE__, __LINE__));
 
             if (item && Spell_C_HandleItemDrop(item, static_cast<CGUnit_C*>(object))) {
                 CGGameUI::ClearCursor(1, 1);
@@ -2986,7 +3002,7 @@ npc:
         static_cast<CGUnit_C*>(object)->HandleNPCFeedback();
     }
 
-    if ((object->m_obj->m_type & TYPEMASK_GAMEOBJECT) && !object->CanBeTargetted()) {
+    if ((object->m_obj->m_type & TYPE_GAMEOBJECT) && !object->CanBeTargetted()) {
         WOWGUID item;
         WOWGUID container;
         uint32_t slot;
@@ -3009,12 +3025,12 @@ void CGGameUI::DisplayError(UIErrors error, ...) {
     }
 
     if (error == ERR_BAG_FULL) {
-        CGTutorial::TriggerTutorial(57);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_FULL_BAGS);
     }
 
     const UIErrorInfo& info = s_errorInfo[error];
 
-    if (info.m_vocalError == 68) {
+    if (info.m_vocalError == VUI_NONE) {
         if (SStrCmpI(info.m_sound, "NONE", STORM_MAX_STR)) {
             SI2::PlaySoundKit(s_errorInfo[error].m_sound, nullptr, nullptr, nullptr);
         }
@@ -3028,7 +3044,7 @@ void CGGameUI::DisplayError(UIErrors error, ...) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     const char* text = player ? player->GetFrameScriptText(token, -1) : FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE);
 
     char buffer[3000];
@@ -3039,25 +3055,25 @@ void CGGameUI::DisplayError(UIErrors error, ...) {
     SStrCopy(CGGameUI::m_lastErrorMessage, buffer, sizeof(CGGameUI::m_lastErrorMessage));
 
     switch (s_errorInfo[error].m_type) {
-        case 0:
+        case ERRORTEXT_CHAT:
             CGChat::AddChatMessage(buffer, s_errorInfo[error].m_chatType, 0, 0, 0, 0, nullptr, WOWGUID(), 0, WOWGUID(), 0, 0, 0);
             break;
 
-        case 1:
+        case ERRORTEXT_UIINFO:
             if (buffer[0]) {
                 FrameScript_SignalEvent(SCRIPT_EVENT_UI_INFO_MESSAGE, "%s", buffer);
             }
 
             break;
 
-        case 2:
+        case ERRORTEXT_UIERROR:
             if (buffer[0]) {
                 FrameScript_SignalEvent(SCRIPT_EVENT_UI_ERROR_MESSAGE, "%s", buffer);
             }
 
             break;
 
-        case 3:
+        case ERRORTEXT_CONSOLE:
             ConsoleWriteA(buffer, static_cast<COLOR_T>(3));
             break;
 
@@ -3110,7 +3126,7 @@ void UpdateInstanceOwnershipPacket(int32_t owns) {
 // VERIFY: 82442556 auto
 // OFFSET: 0x00513660
 WOWGUID CGGameUI::GetCursorItem() {
-    if (CGGameUI::m_cursorItemType == 1) {
+    if (CGGameUI::m_cursorItemType == UICURSOR_ITEM) {
         return CGGameUI::m_cursorItem;
     }
 
@@ -3132,7 +3148,7 @@ int32_t CGGameUI::GetCursorVirtualItem() {
 // VERIFY: 2871c884 auto
 // OFFSET: 0x00520880
 void CGGameUI::SetCursorMoney(uint32_t amount) {
-    if (!CGGameUI::m_hasControl || (!amount && CGGameUI::m_cursorItemType != 2)) {
+    if (!CGGameUI::m_hasControl || (!amount && CGGameUI::m_cursorItemType != UICURSOR_MONEY)) {
         return;
     }
 
@@ -3140,7 +3156,7 @@ void CGGameUI::SetCursorMoney(uint32_t amount) {
 
     if (amount) {
         CGGameUI::m_cursorMoney = amount;
-        CGGameUI::m_cursorItemType = 2;
+        CGGameUI::m_cursorItemType = UICURSOR_MONEY;
         SI2::PlaySoundKit("LOOTWINDOWCOINSOUND", nullptr, nullptr, nullptr);
         CursorGrabMoney(amount);
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_MONEY, nullptr);
@@ -3149,7 +3165,7 @@ void CGGameUI::SetCursorMoney(uint32_t amount) {
 
 // VERIFY: a631ee9a auto
 // OFFSET: 0x005208F0
-void CGGameUI::SetCursorMoney(uint32_t amount, int32_t type, int32_t event) {
+void CGGameUI::SetCursorMoney(uint32_t amount, UICURSORTYPE type, int32_t event) {
     if (!CGGameUI::m_hasControl || (!amount && CGGameUI::m_cursorItemType != type)) {
         return;
     }
@@ -3181,9 +3197,9 @@ void CGGameUI::SetCursorSpell(int32_t spellId) {
 
     const char* texture = nullptr;
 
-    if (spell.m_effect[0] == 78) {
+    if (spell.m_effect[0] == SPELL_EFFECT_ATTACK) {
         texture = CGActionBar::GetAttackTexture();
-    } else if ((spell.m_attributes & 0x2) && (spell.m_attributesExB & 0x20)) {
+    } else if ((spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) && (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_AUTO_REPEAT)) {
         texture = CGActionBar::GetRangedTexture();
     }
 
@@ -3198,7 +3214,7 @@ void CGGameUI::SetCursorSpell(int32_t spellId) {
     if (texture && *texture) {
         CGGameUI::ClearCursor(1, 1);
         CGGameUI::m_cursorSpell = spellId;
-        CGGameUI::m_cursorItemType = 3;
+        CGGameUI::m_cursorItemType = UICURSOR_SPELL;
         SI2::PlaySoundKit("INTERFACESOUND_CURSORGRABOBJECT", nullptr, nullptr, nullptr);
         CursorGrabSpell(texture);
         CGActionBar::ShowGrid();
@@ -3209,7 +3225,7 @@ void CGGameUI::SetCursorSpell(int32_t spellId) {
 // VERIFY: 4a12ec9b auto
 // OFFSET: 0x00520A60
 void CGGameUI::DropCursorSpell() {
-    if (CGGameUI::m_cursorItemType == 3) {
+    if (CGGameUI::m_cursorItemType == UICURSOR_SPELL) {
         CGGameUI::ClearCursor(1, 1);
     }
 }
@@ -3223,21 +3239,21 @@ void CGGameUI::SetCursorPetAction(const PetAction* action) {
 
     const char* texture = nullptr;
 
-    switch ((action->m_data >> 24) & 0x3F) {
-        case 1:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 15:
-        case 16:
-        case 17: {
+    switch ((action->m_data >> 24) & PetAction::PackingMasks::KIND_VALUE_MASK) {
+        case PetAction::Kind::SPELL:
+        case PetAction::Kind::UNKNOWN_8:
+        case PetAction::Kind::UNKNOWN_9:
+        case PetAction::Kind::UNKNOWN_10:
+        case PetAction::Kind::UNKNOWN_11:
+        case PetAction::Kind::UNKNOWN_12:
+        case PetAction::Kind::UNKNOWN_13:
+        case PetAction::Kind::UNKNOWN_14:
+        case PetAction::Kind::UNKNOWN_15:
+        case PetAction::Kind::UNKNOWN_16:
+        case PetAction::Kind::UNKNOWN_17: {
             SpellRec spell;
 
-            if (g_spellDB.GetRecord(action->m_data & 0xFFFFFF, &spell)) {
+            if (g_spellDB.GetRecord(action->m_data & PetAction::PackingMasks::ID_MASK, &spell)) {
                 SpellIconRec* icon = g_spellIconDB.GetRecord(spell.m_spellIconID);
 
                 if (icon) {
@@ -3248,16 +3264,16 @@ void CGGameUI::SetCursorPetAction(const PetAction* action) {
             break;
         }
 
-        case 6: {
+        case PetAction::Kind::MODE: {
             char token[64];
-            SStrPrintf(token, sizeof(token), "PET_%s_TEXTURE", CGPetInfo::GetModeToken(action->m_data & 0xFFFFFF));
+            SStrPrintf(token, sizeof(token), "PET_%s_TEXTURE", CGPetInfo::GetModeToken(action->m_data & PetAction::PackingMasks::ID_MASK));
             texture = FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE);
             break;
         }
 
-        case 7: {
+        case PetAction::Kind::ORDER: {
             char token[64];
-            SStrPrintf(token, sizeof(token), "PET_%s_TEXTURE", CGPetInfo::GetOrdersToken(action->m_data & 0xFFFFFF));
+            SStrPrintf(token, sizeof(token), "PET_%s_TEXTURE", CGPetInfo::GetOrdersToken(action->m_data & PetAction::PackingMasks::ID_MASK));
             texture = FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE);
             break;
         }
@@ -3269,7 +3285,7 @@ void CGGameUI::SetCursorPetAction(const PetAction* action) {
     if (texture) {
         CGGameUI::ClearCursor(1, 1);
         CGGameUI::m_cursorPetAction = *action;
-        CGGameUI::m_cursorItemType = 4;
+        CGGameUI::m_cursorItemType = UICURSOR_PET_ACTION;
         SI2::PlaySoundKit("INTERFACESOUND_CURSORGRABOBJECT", nullptr, nullptr, nullptr);
         CursorGrabSpell(texture);
         CGPetInfo::ShowGrid();
@@ -3286,7 +3302,7 @@ void CGGameUI::SetCursorMacro(int32_t macroId) {
     if (texture[0]) {
         CGGameUI::ClearCursor(1, 1);
         CGGameUI::m_cursorMacro = macroId;
-        CGGameUI::m_cursorItemType = 8;
+        CGGameUI::m_cursorItemType = UICURSOR_MACRO;
         SI2::PlaySoundKit("INTERFACESOUND_CURSORGRABOBJECT", nullptr, nullptr, nullptr);
         CursorGrabSpell(texture);
         CGActionBar::ShowGrid();
@@ -3315,7 +3331,7 @@ void CGGameUI::SetCursorPet(int32_t index) {
 
     if (family && *family->m_iconFile) {
         CGGameUI::m_cursorPet = index;
-        CGGameUI::m_cursorItemType = 10;
+        CGGameUI::m_cursorItemType = UICURSOR_PET;
         SI2::PlaySoundKit("INTERFACESOUND_CURSORGRABOBJECT", nullptr, nullptr, nullptr);
         CursorGrabSpell(family->m_iconFile);
     }
@@ -3323,7 +3339,7 @@ void CGGameUI::SetCursorPet(int32_t index) {
 
 // VERIFY: f5e488ca auto
 // OFFSET: 0x00520D30
-void CGGameUI::SetCursorVirtualItem(int32_t id, int32_t displayId, int32_t slot, int32_t type, int32_t stackSplit) {
+void CGGameUI::SetCursorVirtualItem(int32_t id, int32_t displayId, int32_t slot, UICURSORTYPE type, int32_t stackSplit) {
     if (!CGGameUI::m_hasControl && type != 7) {
         return;
     }
@@ -3346,7 +3362,7 @@ void CGGameUI::SetCursorVirtualItem(int32_t id, int32_t displayId, int32_t slot,
     }
 
     CursorGrabVirtualItem(displayId);
-    SI2::PlayItemSound(0, displayId);
+    SI2::PlayItemSound(ITEMSOUND_PICKUP, displayId);
     FrameScript_SignalEvent(SCRIPT_EVENT_CURSOR_UPDATE, nullptr);
 }
 
@@ -3361,7 +3377,7 @@ void CGGameUI::SetCursorEquipmentSet(int32_t setId) {
     CGEquipmentManager::GetFullIconPath(setId, texture, sizeof(texture));
     CGGameUI::ClearCursor(1, 1);
     CGGameUI::m_cursorEquipmentSet = setId;
-    CGGameUI::m_cursorItemType = 13;
+    CGGameUI::m_cursorItemType = UICURSOR_EQUIPMENT_SET;
     SI2::PlaySoundKit("INTERFACESOUND_CURSORGRABOBJECT", nullptr, nullptr, nullptr);
     CursorGrabSpell(texture);
     CGActionBar::ShowGrid();
@@ -3370,7 +3386,7 @@ void CGGameUI::SetCursorEquipmentSet(int32_t setId) {
 
 // VERIFY: 1e03cef0 auto
 // OFFSET: 0x005844A0
-int32_t CGGameUI::GetCursorVirtualItemOfType(int32_t type) {
+int32_t CGGameUI::GetCursorVirtualItemOfType(UICURSORTYPE type) {
     if (CGGameUI::m_cursorItemType == type) {
         return CGGameUI::GetCursorVirtualItem();
     }
@@ -3412,7 +3428,7 @@ void CGGameUI::UpdateThreatWarningEnabled(int32_t value) {
         CGGameUI::m_threatWarningEnabled = 0;
     } else if (value == 1) {
         MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
-        CGGameUI::m_threatWarningEnabled = map && (map->m_instanceType == 1 || map->m_instanceType == 2);
+        CGGameUI::m_threatWarningEnabled = map && (map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PARTY_DUNGEON || map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_RAID_DUNGEON);
     } else if (value == 2 && !CGPartyInfo::m_members[0] && !CGRaidInfo::m_numMembers) {
         CGGameUI::m_threatWarningEnabled = 0;
     } else {
@@ -3428,7 +3444,7 @@ void CGGameUI::UpdateThreatWarningEnabled(int32_t value) {
 void CGGameUI::SetDeathReleaseLocation(int32_t mapId, const C3Vector& position) {
     CGGameUI::m_deathReleaseMapID = mapId;
     CGGameUI::m_deathReleaseLoc = position;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && (mapId == player->GetNewContinentID() || mapId == -1)) {
         MinimapSetSpiritHealerPOI(position.x, position.y);
@@ -3476,7 +3492,7 @@ void OnItemPushResult(WOWGUID guid, uint8_t bag, uint32_t slot, uint32_t itemId,
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -3485,7 +3501,7 @@ void OnItemPushResult(WOWGUID guid, uint8_t bag, uint32_t slot, uint32_t itemId,
     char text[3000];
 
     if (guid == ClntObjMgrGetActivePlayer()) {
-        const char* path = ClientDBStringLookup(3);
+        const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
         const char* separator = *path ? "\\" : "";
         SStrPrintf(text, sizeof(text), "%s%s%s", path, separator, CGItem_C::GetInventoryArt(stats->m_displayId));
         int32_t slotIndex = bag;
@@ -3510,42 +3526,46 @@ void OnItemPushResult(WOWGUID guid, uint8_t bag, uint32_t slot, uint32_t itemId,
             CGChat::AddChatMessage(text, 27, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
         }
 
-        CGTutorial::TriggerTutorial(7);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_ITEMS);
 
-        for (uint32_t i = 0; i < 5; i++) {
-            if (stats->m_spellId[i] && !stats->m_spellTrigger[i] && (stats->m_class || (stats->m_subClass != 4 && stats->m_subClass != 5))) {
-                CGTutorial::TriggerTutorial(8);
+        for (uint32_t i = 0; i < NUM_ITEM_SPELLS; i++) {
+            if (stats->m_spellId[i] && stats->m_spellTrigger[i] == ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_ON_USE && (stats->m_class || (stats->m_subClass != 4 && stats->m_subClass != 5))) {
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_USABLE_ITEMS);
                 break;
             }
         }
 
+#if defined(WOWDECOMP_ARCH_64)
+        uint32_t slots = stats->m_inventoryType < INVTYPE_COUNT ? s_inventoryTypeSlots[stats->m_inventoryType] : 0;
+#else
         uint32_t slots = s_inventoryTypeSlots[stats->m_inventoryType];
+#endif
 
         for (uint32_t i = 0; i < 23; i++) {
-            if (((1 << i) & slots) && IsTutorialFlagged(55)) {
-                CGTutorial::TriggerTutorial(23);
+            if (((1 << i) & slots) && IsTutorialFlagged(TUTORIAL::TUTORIAL_PLAYER_STATUS)) {
+                CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_EQUIPPABLE_ITEMS);
                 break;
             }
         }
 
-        if (stats->m_class == 1) {
-            CGTutorial::TriggerTutorial(9);
+        if (stats->m_class == ITEM_CLASS::ITEM_CLASS_CONTAINER) {
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_BAGS);
         }
 
         if (bag == 255 && slot - 86 <= 31) {
-            CGTutorial::TriggerTutorial(49);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_KEYRING);
         }
 
         if (itemId == 6948) {
-            CGTutorial::TriggerTutorial(30);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_HEARTHSTONES);
         }
 
         if (player->m_unit->m_unitFieldLevel >= 2 && !stats->m_class && (stats->m_subClass == 4 || stats->m_subClass == 5)) {
-            CGTutorial::TriggerTutorial(10);
-            CGTutorial::TriggerTutorial(11);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_FOOD);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_DRINK);
         }
 
-        SI2::PlayItemSound(1, stats->m_displayId);
+        SI2::PlayItemSound(ITEMSOUND_DROP, stats->m_displayId);
     } else if ((!received || created) && showInChat) {
         if (static_cast<int32_t>(count) > 1) {
             const char* format = FrameScript_GetText(created ? "CREATED_ITEM_MULTIPLE" : "LOOT_ITEM_MULTIPLE", -1, GENDER_NOT_APPLICABLE);
@@ -3560,8 +3580,8 @@ void OnItemPushResult(WOWGUID guid, uint8_t bag, uint32_t slot, uint32_t itemId,
         CGChat::AddChatMessage(text, 27, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
     }
 
-    if ((guid == ClntObjMgrGetActivePlayer() && (stats->m_inventoryType == 15 || stats->m_inventoryType == 26) && player->m_unit->m_unitFieldBytes0[1] != 3) || (stats->m_class == 2 && stats->m_subClass == 19)) {
-        CGTutorial::TriggerTutorial(43);
+    if ((guid == ClntObjMgrGetActivePlayer() && (stats->m_inventoryType == INVTYPE_RANGED || stats->m_inventoryType == INVTYPE_RANGEDRIGHT) && player->m_unit->m_classID != CLASS_HUNTER) || (stats->m_class == ITEM_CLASS::ITEM_CLASS_WEAPON && stats->m_subClass == ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_WAND)) {
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_RANGED_WEAPONS);
     }
 }
 
@@ -3580,7 +3600,7 @@ void CGGameUI::SetCorpseLocation(int32_t mapId, const C3Vector& position, int32_
 
     C3Vector corpse = { 0.0f, 0.0f, 0.0f };
     CGGameUI::GetCorpsePosition(corpse);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && mapId == player->GetNewContinentID()) {
         MinimapSetCorpsePOI(corpse.x, corpse.y);
@@ -3634,14 +3654,14 @@ void CGGameUI::UpdateCorpseLocation() {
     if (CGGameUI::m_corpseInRange) {
         CGGameUI::m_corpseInRange = 0;
 
-        if (CGBattlefieldInfo::m_instanceType != 4) {
+        if (CGBattlefieldInfo::m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
             FrameScript_SignalEvent(SCRIPT_EVENT_CORPSE_OUT_OF_RANGE, nullptr);
         }
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && (player->m_player->m_playerFlags & 0x10) && CGBattlefieldInfo::m_instanceType != 4) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST) && CGBattlefieldInfo::m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
         CDataStore msg;
         msg.Put(static_cast<uint32_t>(MSG_CORPSE_QUERY));
         msg.Finalize();
@@ -3669,7 +3689,7 @@ void CGGameUI::EnterWorld() {
 
     CGGameUI::s_inWorld = 1;
     CGChat::Pause();
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     CM2Model* model = player ? player->GetObjectModel() : nullptr;
 
     if (!model) {
@@ -3687,7 +3707,7 @@ void CGGameUI::EnterWorld() {
         }
     }
 
-    if (player->GetFarSightGuid() && (player->m_combatModeFlags & 0x1)) {
+    if (player->GetFarSightGuid() && (player->m_combatModeFlags & CGPlayer_C::COMBAT_MODE_FLAGS::COMBAT_MODE_FAR_SIGHT)) {
         WOWGUID farSight = { player->GetFarSightGuid() };
         CGGameUI::ResetCamera(farSight);
     } else {
@@ -3769,7 +3789,7 @@ void CGGameUI::EnterWorld() {
         ClientServices::Send2(&msg);
     }
 
-    if (player->m_unit->m_unitFieldFlags & 0x80000) {
+    if (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT) {
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_REGEN_DISABLED, nullptr);
         CGGameUI::m_simpleTop->m_allowProtectedActions = 0;
         CGGameUI::UpdateCombatMode();
@@ -3778,10 +3798,10 @@ void CGGameUI::EnterWorld() {
     CGGameUI::UpdateCorpseLocation();
     C3Vector releaseLoc = { 0.0f, 0.0f, 0.0f };
     CGGameUI::SetDeathReleaseLocation(-1, releaseLoc);
-    CGTutorial::TriggerTutorial(41);
-    CGTutorial::TriggerTutorial(1);
-    CGTutorial::TriggerTutorial(2);
-    CGTutorial::TriggerTutorial(0);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_WELCOME);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_MOVEMENT);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_CAMERA);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_QUESTGIVERS);
     CGGameUI::UpdateThreatWarningEnabled(g_threatWarningCVar->m_intValue);
     CGChat::Resume();
 
@@ -3791,7 +3811,7 @@ void CGGameUI::EnterWorld() {
 
     MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
 
-    if (map && (map->m_instanceType == 3 || map->m_instanceType == 4)) {
+    if (map && (map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PVP_BATTLEFIELD || map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD)) {
         FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_ENTERING_BATTLEGROUND, nullptr);
     }
 
@@ -3859,9 +3879,9 @@ int32_t CGGameUI::HandleMouseDown(const CMouseEvent& evt) {
         CGGameUI::ClearCursor(1, 1);
     }
 
-    if (CursorGetResetMode() == 17) {
-        CursorSetResetMode(1);
-        CursorSetMode(1);
+    if (CursorGetResetMode() == REPAIR_CURSOR) {
+        CursorSetResetMode(POINT_CURSOR);
+        CursorSetMode(POINT_CURSOR);
     }
 
     return 0;
@@ -3960,25 +3980,25 @@ void CGGameUI::UpdateUnitHighlights() {
     bool show = CGGameUI::m_visible || (g_unitHighlightsCVar && g_unitHighlightsCVar->m_intValue);
 
     if (CGGameUI::m_currentObjectTrack) {
-        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_currentObjectTrack, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_currentObjectTrack, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (object) {
             if (show) {
-                object->ShowHighlightType(1);
+                object->ShowHighlightType(HT_MOUSEOVER);
             } else {
-                object->HideHighlightType(1);
+                object->HideHighlightType(HT_MOUSEOVER);
             }
         }
     }
 
     if (CGGameUI::m_lockedTarget) {
-        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (object) {
             if (show) {
-                object->ShowHighlightType(0);
+                object->ShowHighlightType(HT_OBJSELECTION);
             } else {
-                object->HideHighlightType(0);
+                object->HideHighlightType(HT_OBJSELECTION);
             }
         }
     }
@@ -3997,7 +4017,7 @@ void CGGameUI::SetFocusTarget(const WOWGUID& guid) {
     }
 
     if (CGGameUI::m_focusTarget) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_focusTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_focusTarget, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             unit->UnregisterScript(0x2000);
@@ -4007,7 +4027,7 @@ void CGGameUI::SetFocusTarget(const WOWGUID& guid) {
     CGGameUI::m_focusTarget = guid;
 
     if (CGGameUI::m_focusTarget) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_focusTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_focusTarget, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             unit->RegisterScript(0x2000);
@@ -4088,7 +4108,7 @@ void CCapturePointUIManager::AddCapturePoint(CGGameObject_C* object, uint32_t wo
     }
 
     WOWGUID guid = object->m_obj->m_guid;
-    CapturePointUIManagerNode* node = this->m_nodes.NewNode(2, 0, 0);
+    CapturePointUIManagerNode* node = this->m_nodes.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_guid = guid;
     node->m_radiusSquared = radius * radius;
     node->m_worldState = worldState;
@@ -4123,7 +4143,7 @@ bool CGGameUI::CanInspect(CGUnit_C* unit) {
         return false;
     }
 
-    if (!(unit->m_obj->m_type & TYPEMASK_PLAYER) || player->CanAttack(unit)) {
+    if (!(unit->m_obj->m_type & TYPE_PLAYER) || player->CanAttack(unit)) {
         return false;
     }
 
@@ -4184,9 +4204,9 @@ void CGGameUI::NewZoneFeedback(int32_t areaId, int32_t subzoneId, int32_t wmoGro
         }
 
         CGGameUI::m_realZoneText = SStrDupA(realZoneText, __FILE__, __LINE__);
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-        if (player && !(player->m_unit->m_unitFieldFlags & 0x100000) && !CGGameUI::m_inCinematic && !CGPlayer_C::GetPendingMovie()) {
+        if (player && !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) && !CGGameUI::m_inCinematic && !CGPlayer_C::GetPendingMovie()) {
             CGChat::ZoneUpdate();
         }
     }
@@ -4214,15 +4234,15 @@ void CGGameUI::RegisterSavedVariable(const char* name, int32_t perCharacter) {
 
 // VERIFY: 4ea406ee auto
 // OFFSET: 0x00513E00
-const char* MirrorTimerTypeToken(int32_t type) {
+const char* MirrorTimerTypeToken(UNIT_MIRROR_TIMER type) {
     switch (type) {
-        case 0:
+        case UNIT_MIRROR_TIMER_EXHAUSTION:
             return "EXHAUSTION";
 
-        case 1:
+        case UNIT_MIRROR_TIMER_BREATH:
             return "BREATH";
 
-        case 2:
+        case UNIT_MIRROR_TIMER_FEIGNDEATH:
             return "FEIGNDEATH";
     }
 
@@ -4232,7 +4252,7 @@ const char* MirrorTimerTypeToken(int32_t type) {
 // VERIFY: 2f4927a7 auto
 // OFFSET: 0x005198A0
 void CGGameUI::TargetTradeItem() {
-    if (!CGTradeInfo::m_targetItemID[6]) {
+    if (!CGTradeInfo::m_targetItemID[TRADE_SLOT_NONTRADED]) {
         return;
     }
 
@@ -4242,12 +4262,12 @@ void CGGameUI::TargetTradeItem() {
         return;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
-        if (spell.m_effect[i] != 53) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+        if (spell.m_effect[i] != SPELL_EFFECT_ENCHANT_ITEM) {
             continue;
         }
 
-        int32_t current = CGTradeInfo::GetTargetEnchant(6);
+        int32_t current = CGTradeInfo::GetTargetEnchant(TRADE_SLOT_NONTRADED);
 
         if (!current) {
             continue;
@@ -4267,7 +4287,7 @@ void CGGameUI::TargetTradeItem() {
 
 // VERIFY: 4e87f51f manual
 // OFFSET: 0x005199A0
-const char* GetMirrorTimerLabel(int32_t type, int32_t spellId) {
+const char* GetMirrorTimerLabel(UNIT_MIRROR_TIMER type, int32_t spellId) {
     SpellRec spell;
 
     if (g_spellDB.GetRecord(spellId, &spell)) {
@@ -4318,7 +4338,7 @@ void CGGameUI::CloseInteraction() {
     } else if (CGTaxiMap::m_unit == target) {
         CGTaxiMap::CloseMap();
     } else if (CGClassTrainer::m_trainer == target) {
-        CGClassTrainer::SetTrainer(none, 0);
+        CGClassTrainer::SetTrainer(none, TRAINER_TYPE_GENERAL);
     } else if (CGBankInfo::m_banker == target) {
         CGBankInfo::SetBanker(none);
     } else if (CGGuildBankInfo::m_banker == target) {
@@ -4339,7 +4359,7 @@ void CGGameUI::CloseInteraction() {
         CGBattlefieldInfo::SetBattlemaster(none);
     }
 
-    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__));
+    CGGameObject_C* object = static_cast<CGGameObject_C*>(ClntObjMgrObjectPtr(target, TYPE_GAMEOBJECT, __FILE__, __LINE__));
 
     if (object) {
         object->CloseInteraction();
@@ -4353,9 +4373,9 @@ void CGGameUI::ClearInteractTarget(const WOWGUID& guid, int32_t a2) {
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (unit && !(unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+    if (unit && !(unit->m_obj->m_type & TYPE_PLAYER)) {
         if (!a2) {
             unit->PlayNPCSound(false);
         }
@@ -4383,23 +4403,23 @@ int32_t CGGameUI::OnMirrorTimerEvent(void* param, NETMESSAGE msgId, uint32_t tim
         msg->Get(paused);
         msg->Get(spellId);
 
-        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_START, "%s%d%d%d%d%s", MirrorTimerTypeToken(type), value, maxValue, scale, paused, GetMirrorTimerLabel(type, spellId));
+        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_START, "%s%d%d%d%d%s", MirrorTimerTypeToken(static_cast<UNIT_MIRROR_TIMER>(type)), value, maxValue, scale, paused, GetMirrorTimerLabel(static_cast<UNIT_MIRROR_TIMER>(type), spellId));
 
-        if (type == 0) {
-            CGTutorial::TriggerTutorial(26);
-        } else if (type == 1) {
-            CGTutorial::TriggerTutorial(28);
+        if (type == UNIT_MIRROR_TIMER_EXHAUSTION) {
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_FATIGUE);
+        } else if (type == UNIT_MIRROR_TIMER_BREATH) {
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_BREATH);
         }
 
-        if (type <= 2) {
+        if (type <= UNIT_MIRROR_TIMER_FEIGNDEATH) {
             MirrorTimerInfo* info = &CGGameUI::m_mirrorTimerInfo[type];
-            info->m_type = type;
+            info->m_type = static_cast<UNIT_MIRROR_TIMER>(type);
             info->m_value = value;
             info->m_maxValue = maxValue;
             info->m_scale = scale;
             info->m_paused = paused;
             info->m_spellId = spellId;
-            CGGameUI::m_mirrorTimerInfo[type].unk_0018 = OsGetAsyncTimeMs();
+            CGGameUI::m_mirrorTimerInfo[type].m_startTime = OsGetAsyncTimeMs();
         }
 
         return 1;
@@ -4410,24 +4430,24 @@ int32_t CGGameUI::OnMirrorTimerEvent(void* param, NETMESSAGE msgId, uint32_t tim
         uint8_t paused;
         msg->Get(type);
         msg->Get(paused);
-        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_PAUSE, "%s%d", MirrorTimerTypeToken(type), paused);
+        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_PAUSE, "%s%d", MirrorTimerTypeToken(static_cast<UNIT_MIRROR_TIMER>(type)), paused);
         return 1;
     }
 
     if (msgId == SMSG_STOP_MIRROR_TIMER) {
         uint32_t type;
         msg->Get(type);
-        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_STOP, "%s", MirrorTimerTypeToken(type));
+        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_STOP, "%s", MirrorTimerTypeToken(static_cast<UNIT_MIRROR_TIMER>(type)));
 
-        if (type <= 2) {
+        if (type <= UNIT_MIRROR_TIMER_FEIGNDEATH) {
             MirrorTimerInfo* info = &CGGameUI::m_mirrorTimerInfo[type];
-            info->m_type = 3;
+            info->m_type = UNIT_MIRROR_TIMER_INACTIVE;
             info->m_value = 0;
             info->m_maxValue = 0;
             info->m_scale = 0;
             info->m_paused = 0;
             info->m_spellId = 0;
-            info->unk_0018 = 0;
+            info->m_startTime = 0;
         }
     }
 
@@ -4461,14 +4481,14 @@ void CGGameUI::SetInteractTarget(const WOWGUID& guid) {
         return;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return;
     }
 
-    if (object->m_obj->m_type & TYPEMASK_UNIT) {
-        if (object->m_obj->m_type & TYPEMASK_PLAYER) {
+    if (object->m_obj->m_type & TYPE_UNIT) {
+        if (object->m_obj->m_type & TYPE_PLAYER) {
             CGGameUI::m_interactMaxDistSq = s_playerInteractDistSq;
             return;
         }
@@ -4481,7 +4501,7 @@ void CGGameUI::SetInteractTarget(const WOWGUID& guid) {
             unit->PlayNPCSound(true);
             unit->UpdateBaseAnimation(0, -1);
         }
-    } else if (object->m_obj->m_type & TYPEMASK_GAMEOBJECT) {
+    } else if (object->m_obj->m_type & TYPE_GAMEOBJECT) {
         CGGameObject_C* gameObject = static_cast<CGGameObject_C*>(object);
         gameObject->StartInteraction();
         CGGameUI::m_interactMaxDistSq = gameObject->GetInteractDistanceSquared();
@@ -4561,7 +4581,7 @@ void CGGameUI::ShowSpellMissFeedback(const WOWGUID& guid, int32_t reason) {
 // OFFSET: 0x00513480
 void CGGameUI::ShowHealingFeedback(const WOWGUID& guid, int32_t amount, bool crit) {
     if (amount) {
-        CGGameUI::SignalUnitCombat(guid, "HEAL", amount, GetPhysicalDamageClassMask(), crit ? 0x200 : 0);
+        CGGameUI::SignalUnitCombat(guid, "HEAL", amount, GetPhysicalDamageClassMask(), crit ? HIT_INFO_FLAGS::HIT_INFO_FLAG_CRITICAL : HIT_INFO_FLAGS::HIT_INFO_FLAG_NONE);
     }
 }
 
@@ -4570,22 +4590,22 @@ void CGGameUI::ShowEnergizeFeedback(const WOWGUID& guid, int32_t powerType, int3
 
 // VERIFY: c776ed02 auto
 // OFFSET: 0x005132C0
-void CGGameUI::SignalUnitCombat(const WOWGUID& guid, const char* action, int32_t amount, uint32_t schoolMask, uint32_t flags) {
+void CGGameUI::SignalUnitCombat(const WOWGUID& guid, const char* action, int32_t amount, uint32_t schoolMask, uint32_t hitInfo) {
     const char* modifier = "";
 
     if (amount <= 0) {
-        if (flags & 0x20) {
+        if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_FULL_ABSORB) {
             modifier = "ABSORB";
-        } else if (flags & 0x2000) {
+        } else if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_BLOCK) {
             modifier = "BLOCK";
-        } else if (flags & 0x80) {
+        } else if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_FULL_RESIST) {
             modifier = "RESIST";
         }
-    } else if (flags & 0x200) {
+    } else if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_CRITICAL) {
         modifier = "CRITICAL";
-    } else if (flags & 0x10000) {
+    } else if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_GLANCING) {
         modifier = "GLANCING";
-    } else if (flags & 0x20000) {
+    } else if (hitInfo & HIT_INFO_FLAGS::HIT_INFO_FLAG_CRUSHING) {
         modifier = "CRUSHING";
     }
 
@@ -4627,20 +4647,20 @@ TotemInfo* CGGameUI::GetTotemInfo(WOWGUID guid) {
 // OFFSET: 0x00513E40
 int32_t CGGameUI::MirrorTimerToIndex(const char* timer) {
     if (!SStrCmpI(timer, "EXHAUSTION", STORM_MAX_STR)) {
-        return 0;
+        return UNIT_MIRROR_TIMER_EXHAUSTION;
     }
 
     if (!SStrCmpI(timer, "BREATH", STORM_MAX_STR)) {
-        return 1;
+        return UNIT_MIRROR_TIMER_BREATH;
     }
 
-    return (SStrCmpI(timer, "FEIGNDEATH", STORM_MAX_STR) != 0) + 2;
+    return (SStrCmpI(timer, "FEIGNDEATH", STORM_MAX_STR) != 0) + UNIT_MIRROR_TIMER_FEIGNDEATH;
 }
 
 // VERIFY: 61c73da2 manual
 // OFFSET: 0x00513F20
 MirrorTimerInfo* CGGameUI::MirrorTimerGetInfo(uint32_t index) {
-    if (index > 2) {
+    if (index > UNIT_MIRROR_TIMER_FEIGNDEATH) {
         return nullptr;
     }
 
@@ -4666,15 +4686,15 @@ void CGGameUI::CastSpiritHealSpell() {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(2584, &spell) && player) {
+    if (g_spellDB.GetRecord(SPELL_ID_WAITING_TO_RESURRECT, &spell) && player) {
         Spell_C_CancelAura(&spell, player, -1);
     }
 }
 
 // VERIFY: cd2d4923 auto
 // OFFSET: 0x00513380
-void CGGameUI::ShowCombatFeedback(const WOWGUID& guid, int32_t amount, uint32_t schoolMask, uint32_t flags) {
-    CGGameUI::SignalUnitCombat(guid, "WOUND", amount, schoolMask, flags);
+void CGGameUI::ShowCombatFeedback(const WOWGUID& guid, int32_t amount, uint32_t schoolMask, uint32_t hitInfo) {
+    CGGameUI::SignalUnitCombat(guid, "WOUND", amount, schoolMask, hitInfo);
 }
 
 // STATIC: 0x00BD08D8
@@ -4707,7 +4727,7 @@ static TSGrowableArray<NearestUnitData> s_nearestUnits;
 // VERIFY: 0f5d7c71 manual
 // OFFSET: 0x005210D0
 void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return;
@@ -4720,18 +4740,18 @@ void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
         return;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
         int32_t effect = spell.m_effect[i];
 
-        if (effect == 53 || effect == 54 || effect == 156) {
-            if (item->GetItemStaticFlags(0) & 0x2000) {
+        if (effect == SPELL_EFFECT_ENCHANT_ITEM || effect == SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY || effect == SPELL_EFFECT_ENCHANT_ITEM_PRISMATIC) {
+            if (item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION) {
                 return;
             }
 
             bool matchesSubclass = false;
 
             if (spell.m_effectMiscValueB[i]) {
-                const ItemSubClassRec* subclass = SDBItemSubclassGetSubClassRec(7, spell.m_effectMiscValueB[i]);
+                const ItemSubClassRec* subclass = SDBItemSubclassGetSubClassRec(ITEM_CLASS::ITEM_CLASS_TRADE_GOODS, spell.m_effectMiscValueB[i]);
 
                 if (subclass && subclass->m_subClassID == static_cast<int32_t>(item->GetSubtypeID()) && subclass->m_classID == static_cast<int32_t>(item->GetClassID())) {
                     matchesSubclass = true;
@@ -4758,7 +4778,7 @@ void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
 
             CGItem_C::ItemPurchaseData* purchase = item->m_itemPurchaseData;
 
-            if (purchase && spell.m_effect[i] != 54 && !confirmed && static_cast<int32_t>(purchase->m_refundTimeLeft - ClntObjMgrGetActivePlayerObj()->GetPlayedTime() + 7200) > 0) {
+            if (purchase && spell.m_effect[i] != SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY && !confirmed && static_cast<int32_t>(purchase->m_purchasePlayedTime - ClntObjMgrGetActivePlayerObj()->GetPlayedTime() + CGItem_C::ItemPurchaseData::REFUND_PERIOD_SECONDS) > 0) {
                 CGGameUI::m_lastItemSpellTarget = item->m_obj->m_guid;
                 FrameScript_SignalEvent(SCRIPT_EVENT_END_REFUND, "%d", 1);
                 return;
@@ -4767,7 +4787,7 @@ void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
             if (item->IsBound() && !item->IsBoundForTrade() && !confirmed) {
                 SpellItemEnchantmentRec* boundEnchant;
 
-                if (spell.m_effect[i] != 54 || ((boundEnchant = g_spellItemEnchantmentDB.GetRecord(spell.m_effectMiscValue[i])) && (boundEnchant->m_flags & 1))) {
+                if (spell.m_effect[i] != SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY || ((boundEnchant = g_spellItemEnchantmentDB.GetRecord(spell.m_effectMiscValue[i])) && (boundEnchant->m_flags & 1))) {
                     CGGameUI::m_lastItemSpellTarget = item->m_obj->m_guid;
                     FrameScript_SignalEvent(SCRIPT_EVENT_END_BOUND_TRADEABLE, "%s", "itemenchant");
                     return;
@@ -4776,16 +4796,16 @@ void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
 
             if (enchant && item->GetEnchantmentSpell(0) && !item->HasOnUseEnchant()) {
                 for (uint32_t j = 0; j < 3; j++) {
-                    if (enchant->m_effect[j] == 7 && enchant->m_effectArg[j]) {
+                    if (enchant->m_effect[j] == ITEM_ENCHANTMENT_EFFECT::ENCHANTMENT_EFFECT_USE_SPELL && enchant->m_effectArg[j]) {
                         Spell_C_SpellFailed(cast, &spell, 170, -1, -1, 0);
                         return;
                     }
                 }
             }
 
-            uint32_t slot = spell.m_effect[i] != 53;
+            uint32_t slot = spell.m_effect[i] != SPELL_EFFECT_ENCHANT_ITEM;
 
-            if (!(item->GetItemStaticFlags(0) & 0x2000)) {
+            if (!(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_PETITION)) {
                 int32_t existingId = item->m_item->m_itemFieldEnchantment[slot].m_id;
 
                 if (existingId) {
@@ -4804,16 +4824,16 @@ void CGGameUI::CastItemSpell(WOWGUID guid, int32_t confirmed) {
 
         effect = spell.m_effect[i];
 
-        if (effect != 127 && effect != 158) {
+        if (effect != SPELL_EFFECT_PROSPECTING && effect != SPELL_EFFECT_MILLING) {
             continue;
         }
 
-        if (effect == 127 && !(item->GetItemStaticFlags(0) & 0x40000)) {
+        if (effect == SPELL_EFFECT_PROSPECTING && !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_PROSPECTABLE)) {
             Spell_C_SpellFailed(cast, &spell, 17, -1, -1, 0);
             return;
         }
 
-        if (spell.m_effect[i] == 158 && !(item->GetItemStaticFlags(0) & 0x20000000)) {
+        if (spell.m_effect[i] == SPELL_EFFECT_MILLING && !(item->GetItemStaticFlags(0) & ITEM_STATIC_FLAGS::ITEM_FLAG_IS_MILLABLE)) {
             Spell_C_SpellFailed(cast, &spell, 16, -1, -1, 0);
             return;
         }
@@ -4903,7 +4923,7 @@ static void UpdateClosestMatch(ClosestObjectMatchData* data, const WOWGUID& guid
 // OFFSET: 0x0051FFE0
 static int32_t ClosestObjectMatchProc(WOWGUID guid, void* param) {
     ClosestObjectMatchData* data = static_cast<ClosestObjectMatchData*>(param);
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return 1;
@@ -4913,7 +4933,7 @@ static int32_t ClosestObjectMatchProc(WOWGUID guid, void* param) {
         return 1;
     }
 
-    if ((object->m_obj->m_type & TYPEMASK_UNIT) && !UnitMatchesTargetType(data->m_unit, static_cast<CGUnit_C*>(object), data->m_targetType)) {
+    if ((object->m_obj->m_type & TYPE_UNIT) && !UnitMatchesTargetType(data->m_unit, static_cast<CGUnit_C*>(object), data->m_targetType)) {
         return 1;
     }
 
@@ -4921,15 +4941,15 @@ static int32_t ClosestObjectMatchProc(WOWGUID guid, void* param) {
 
     if (guid == data->m_unit->m_obj->m_guid) {
         distance = 2500000000.0f;
-    } else if (object->m_obj->m_type & TYPEMASK_UNIT) {
+    } else if (object->m_obj->m_type & TYPE_UNIT) {
         CGUnit_C* unit = static_cast<CGUnit_C*>(object);
         CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-        if (data->m_ignoreHostileTotems && unit->GetCreatureType() == 11 && !player->IsFriendly(unit)) {
+        if (data->m_ignoreHostileTotems && unit->GetCreatureType() == CREATURE_TYPE_TOTEM && !player->IsFriendly(unit)) {
             return 1;
         }
 
-        if (unit->IsDeadOrGhost() || (unit->m_unit->m_unitDynamicFlags & 0x20) || unit->GetClientStandState() == 7) {
+        if (unit->IsDeadOrGhost() || (unit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD) || unit->GetClientStandState() == UNIT_DEAD) {
             distance = s_maxMatchDistance + distance;
         }
     }
@@ -4937,7 +4957,7 @@ static int32_t ClosestObjectMatchProc(WOWGUID guid, void* param) {
     char fullName[305];
     const char* name;
 
-    if (data->m_hasRealm && (object->m_obj->m_type & TYPEMASK_UNIT)) {
+    if (data->m_hasRealm && (object->m_obj->m_type & TYPE_UNIT)) {
         const char* realm = nullptr;
         name = static_cast<CGUnit_C*>(object)->GetUnitName(&realm, 1);
 
@@ -4970,18 +4990,18 @@ WOWGUID CGGameUI::ClosestObjectMatch(const char* name, uint32_t typeMask, int32_
 
     WOWGUID guid = WOWGUID();
 
-    if (Script_GetGUIDFromToken(name, guid, true) && guid.m_guid != 0xFFFFFFFFFFFFFFFEULL) {
+    if (Script_GetGUIDFromToken(name, guid, true) && guid.m_guid != WOWGUID_EMPTY_UNIT_TOKEN) {
         if (!guid) {
             return WOWGUID();
         }
 
-        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (object && !(typeMask & object->m_obj->m_type)) {
             return WOWGUID();
         }
 
-        if (typeMask != TYPEMASK_UNIT && typeMask != TYPEMASK_PLAYER) {
+        if (typeMask != TYPE_UNIT && typeMask != TYPE_PLAYER) {
             return guid;
         }
 
@@ -5007,7 +5027,7 @@ WOWGUID CGGameUI::ClosestObjectMatch(const char* name, uint32_t typeMask, int32_
         for (uint32_t i = 0; i < 4; i++) {
             WOWGUID member = GetPartyMemberGUID(i);
 
-            if (member && !ClntObjMgrObjectPtr(member, TYPEMASK_UNIT, __FILE__, __LINE__)) {
+            if (member && !ClntObjMgrObjectPtr(member, TYPE_UNIT, __FILE__, __LINE__)) {
                 WOWGUID none = WOWGUID();
                 NameCache* record = g_nameDBCache.GetRecord(member.m_guid, none, nullptr, nullptr, false);
 
@@ -5021,7 +5041,7 @@ WOWGUID CGGameUI::ClosestObjectMatch(const char* name, uint32_t typeMask, int32_
             for (uint32_t i = 0; i < CGRaidInfo::m_numMembers; i++) {
                 WOWGUID member = CGRaidInfo::m_members[i]->m_guid;
 
-                if (member && !ClntObjMgrObjectPtr(member, TYPEMASK_UNIT, __FILE__, __LINE__)) {
+                if (member && !ClntObjMgrObjectPtr(member, TYPE_UNIT, __FILE__, __LINE__)) {
                     WOWGUID none = WOWGUID();
                     NameCache* record = g_nameDBCache.GetRecord(member.m_guid, none, nullptr, nullptr, false);
 
@@ -5063,15 +5083,15 @@ static int QSortCompareNearestUnit(const void* a, const void* b) {
 int32_t UnitMatchesTargetType(CGUnit_C* unit, CGUnit_C* target, int32_t type) {
     switch (type) {
         case 1: {
-            return unit->CanAttack(target) && !target->IsDeadOrGhost() && !(target->m_unit->m_unitDynamicFlags & 0x20) && target->GetClientStandState() != 7;
+            return unit->CanAttack(target) && !target->IsDeadOrGhost() && !(target->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD) && target->GetClientStandState() != UNIT_DEAD;
         }
 
         case 2: {
-            if (!(target->m_obj->m_type & TYPEMASK_PLAYER)) {
+            if (!(target->m_obj->m_type & TYPE_PLAYER)) {
                 return 0;
             }
 
-            return unit->CanAttack(target) && !target->IsDeadOrGhost() && !(target->m_unit->m_unitDynamicFlags & 0x20) && target->GetClientStandState() != 7;
+            return unit->CanAttack(target) && !target->IsDeadOrGhost() && !(target->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD) && target->GetClientStandState() != UNIT_DEAD;
         }
 
         case 3: {
@@ -5079,7 +5099,7 @@ int32_t UnitMatchesTargetType(CGUnit_C* unit, CGUnit_C* target, int32_t type) {
         }
 
         case 4: {
-            if (!(target->m_obj->m_type & TYPEMASK_PLAYER)) {
+            if (!(target->m_obj->m_type & TYPE_PLAYER)) {
                 return 0;
             }
 
@@ -5104,7 +5124,7 @@ int32_t UnitMatchesTargetType(CGUnit_C* unit, CGUnit_C* target, int32_t type) {
 // OFFSET: 0x00524440
 static int32_t TargetUpdateProc(WOWGUID guid, void* param) {
     CGUnit_C* searcher = static_cast<CGUnit_C*>(param);
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit || unit == searcher || !UnitMatchesTargetType(searcher, unit, s_nearestType)) {
         return 1;
@@ -5119,22 +5139,22 @@ static int32_t TargetUpdateProc(WOWGUID guid, void* param) {
     C3Vector targetPos = unit->GetPosition();
     C3Vector fromPos = searcher->GetPosition();
     float facingTo = CalculateFacingTo(&fromPos, &targetPos);
-    float delta = fmod(facingTo - searcher->GetFacing() + 12.566371f, 6.2831855f);
+    float delta = fmod(facingTo - searcher->GetFacing() + 12.566371f, TWO_PI);
     static float s_coneAngle = 0.52359879f;
     int32_t inFront = 0;
     float maxDistanceSq;
 
-    if (s_coneAngle > delta || 6.2831855f - s_coneAngle < delta) {
-        maxDistanceSq = 1681.0f;
+    if (s_coneAngle > delta || TWO_PI - s_coneAngle < delta) {
+        maxDistanceSq = TARGET_NEAREST_FRONT_MAX_DISTANCE_SQUARED;
         inFront = 1;
     } else {
-        maxDistanceSq = 100.0f;
+        maxDistanceSq = TARGET_NEAREST_BACK_MAX_DISTANCE_SQUARED;
     }
 
     if (maxDistanceSq >= distanceSq) {
         CreatureTypeRec* creatureType = g_creatureTypeDB.GetRecord(unit->GetCreatureType());
 
-        if ((!creatureType || !(creatureType->m_flags & 1)) && World::QueryObjectVisible(unit->m_worldObject) && (!(unit->m_obj->m_type & TYPEMASK_PLAYER) || !static_cast<CGPlayer_C*>(unit)->IsCommentatorUberOrInArena())) {
+        if ((!creatureType || !(creatureType->m_flags & 1)) && World::QueryObjectVisible(unit->m_worldObject) && (!(unit->m_obj->m_type & TYPE_PLAYER) || !static_cast<CGPlayer_C*>(unit)->IsCommentatorUberOrInArena())) {
             NearestUnitData* data = s_nearestUnits.New();
             data->m_distanceSq = distanceSq;
             data->m_guid = guid;
@@ -5180,7 +5200,7 @@ void TargetNearestEnemy(int32_t reverse, int32_t type) {
                 if (player->GetTransportGUID() == searcher->m_obj->m_guid.m_guid) {
                     VehicleSeatRec* seat = player->m_vehiclePassenger ? player->m_vehiclePassenger->m_seatRec : nullptr;
 
-                    if (seat && (seat->m_flags & 0x4000)) {
+                    if (seat && (seat->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_CAN_ATTACK)) {
                         searcher = player;
                         ClntObjMgrEnumVisibleObjects(TargetUpdateProc, player);
                     }
@@ -5224,7 +5244,7 @@ void TargetNearestEnemy(int32_t reverse, int32_t type) {
 
         s_nearestTargetTime = OsGetAsyncTimeMs();
         uint32_t i = s_nearestIndex;
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_nearestUnits.m_data[i].m_guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_nearestUnits.m_data[i].m_guid, TYPE_UNIT, __FILE__, __LINE__));
         bool restart = false;
 
         while (true) {
@@ -5248,7 +5268,7 @@ void TargetNearestEnemy(int32_t reverse, int32_t type) {
                 break;
             }
 
-            unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_nearestUnits.m_data[i].m_guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+            unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(s_nearestUnits.m_data[i].m_guid, TYPE_UNIT, __FILE__, __LINE__));
         }
 
         if (restart) {
@@ -5261,16 +5281,16 @@ void TargetNearestEnemy(int32_t reverse, int32_t type) {
 }
 
 // STATIC: 0x00AC8050
-static const char* s_victimStateTokens[9] = { "MISS", "WOUND", "DODGE", "PARRY", "INTERRUPT", "BLOCK", "EVADE", "IMMUNE", "DEFLECT" };
+static const char* s_victimStateTokens[NUM_VICTIMSTATES] = { "MISS", "WOUND", "DODGE", "PARRY", "INTERRUPT", "BLOCK", "EVADE", "IMMUNE", "DEFLECT" };
 
 // VERIFY: e98c251d manual
 // OFFSET: 0x005133B0
 void CGGameUI::ShowCombatFeedbackAttackRoundInfo(const ATTACKROUNDINFO* info) {
-    if (!info || info->m_victimState >= 9) {
+    if (!info || info->m_victimState >= NUM_VICTIMSTATES) {
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    CGGameUI::SignalUnitCombat(info->m_target, s_victimStateTokens[info->m_victimState], info->m_damage, info->m_schoolMask[0], info->m_hitInfo);
+    CGGameUI::SignalUnitCombat(info->m_victim, s_victimStateTokens[info->m_victimState], info->m_damage, info->m_schoolMask[0], info->m_hitInfo);
 }
 
 // VERIFY: 632abec5 auto
@@ -5322,7 +5342,7 @@ uint8_t CGGameUI::THREATMAP::ComputeMaxThreatLevel(const WOWGUID& guid) {
             continue;
         }
 
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_units[i], TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_units[i], TYPE_UNIT, __FILE__, __LINE__));
 
         if (!unit) {
             this->m_units[i] = WOWGUID();
@@ -5417,10 +5437,10 @@ void CGGameUI::ThreatMapAdd(const WOWGUID& unit, const WOWGUID& target) {
     map->AddUnit(unit);
 
     if (CGGameUI::m_threatWarningEnabled && target == ClntObjMgrGetActivePlayer()) {
-        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player->m_unit->m_unitFieldLevel >= 14) {
-            CGTutorial::TriggerTutorial(53);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_THREAT_WARNINGS);
         }
     }
 }
@@ -5453,7 +5473,7 @@ uint32_t CGGameUI::GetEffectiveRaidDifficulty() {
 
     if (map && (map->m_flags & 0x100)) {
         uint32_t difficulty = CGRaidInfo::m_numMembers ? CGPartyInfo::m_raidDifficulty : CGGameUI::m_raidDifficulty;
-        return (difficulty & 1) + 2 * CGPartyInfo::m_dynamicDifficulty;
+        return (difficulty & RAID_DIFFICULTY_SIZE_MASK) + RAID_DIFFICULTY_HEROIC_OFFSET * CGPartyInfo::m_dynamicDifficulty;
     }
 
     return CGRaidInfo::m_numMembers ? CGPartyInfo::m_raidDifficulty : CGGameUI::m_raidDifficulty;
@@ -5481,13 +5501,13 @@ void CGGameUI::DoPowerRegen() {
         return;
     }
 
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_UNIT, __FILE__, __LINE__));
 
     if (player) {
         player->DoPowerRegen(elapsed);
     }
 
-    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
 
     if (pet) {
         pet->DoPowerRegen(elapsed);
@@ -5541,9 +5561,9 @@ int32_t CGGameUI::StartCinematicCamera() {
     }
 
     C3Vector position(0.0f, 0.0f, 0.0f);
-    DataMgrGetCoord(static_cast<CDataMgr*>(camera->m_model->GetCameraByIndex(0)), 7, &position);
+    DataMgrGetCoord(reinterpret_cast<CDataMgr*>(camera->m_model->GetCameraByIndex(0)), 7, &position);
 
-    if ((previous.x - position.x) * (previous.x - position.x) + (previous.y - position.y) * (previous.y - position.y) + (previous.z - position.z) * (previous.z - position.z) > 900.0f) {
+    if ((previous.x - position.x) * (previous.x - position.x) + (previous.y - position.y) * (previous.y - position.y) + (previous.z - position.z) * (previous.z - position.z) > MAX_CAMERA_SHIFT_SQUARED) {
         World::Preload(position, 0);
     }
 
@@ -5572,12 +5592,12 @@ int32_t CGGameUI::StartCinematicCamera() {
 
 // VERIFY: 60912e63 manual
 // OFFSET: 0x005264F0
-void CGGameUI::OpenLoot(CGObject_C* object, int32_t coins, uint32_t lootType) {
-    if (object->m_obj->m_type & TYPEMASK_UNIT) {
+void CGGameUI::OpenLoot(CGObject_C* object, int32_t coins, LOOT_ACQUIRE lootAcquire) {
+    if (object->m_obj->m_type & TYPE_UNIT) {
         CGGameUI::Target(object->m_obj->m_guid);
     }
 
-    CGLootInfo::SetObject(object, coins, lootType);
+    CGLootInfo::SetObject(object, coins, lootAcquire);
 }
 
 // VERIFY: f309811b auto
@@ -5602,14 +5622,14 @@ void CGGameUI::NextCinematicInternal(void* param) {
 // VERIFY: 4b188323 manual
 // OFFSET: 0x00523640
 void CGGameUI::CloseLoot(bool a1, bool a2, bool a3) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     WOWGUID guid = CGLootInfo::m_lootObj;
 
     if (!guid) {
         return;
     }
 
-    if ((CGLootDisplay::GetLootAcquireType() == 4 || CGLootDisplay::GetLootAcquireType() == 7 || CGLootDisplay::GetLootAcquireType() == 8) && CGLootInfo::HasLoot() && !a2) {
+    if ((CGLootDisplay::GetLootAcquireType() == LOOT_ACQUIRE_UNKNOWN_4 || CGLootDisplay::GetLootAcquireType() == LOOT_ACQUIRE_UNKNOWN_7 || CGLootDisplay::GetLootAcquireType() == LOOT_ACQUIRE_UNKNOWN_8) && CGLootInfo::HasLoot() && !a2) {
         CGLootInfo::DoAutoLoot(1);
     }
 
@@ -5617,9 +5637,9 @@ void CGGameUI::CloseLoot(bool a1, bool a2, bool a3) {
         CGGameUI::DisplayError(ERR_LOOT_NO_UI);
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (object && (object->m_obj->m_type & TYPEMASK_ITEM)) {
+    if (object && (object->m_obj->m_type & TYPE_ITEM)) {
         if (a2) {
             return;
         }
@@ -5639,13 +5659,13 @@ void CGGameUI::CloseLoot(bool a1, bool a2, bool a3) {
         ClientServices::Send2(&msg);
     }
 
-    CGLootInfo::SetObject(nullptr, 0, 0);
+    CGLootInfo::SetObject(nullptr, 0, LOOT_ACQUIRE_FAILED);
 
-    if (object && (object->m_obj->m_type & TYPEMASK_UNIT) && static_cast<int32_t>(static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth) <= 0) {
+    if (object && (object->m_obj->m_type & TYPE_UNIT) && static_cast<int32_t>(static_cast<CGUnit_C*>(object)->m_unit->m_unitFieldHealth) <= 0) {
         CGGameUI::ClearTarget(guid, 1);
     }
 
-    if (CGGameUI::m_cursorItemType == 6) {
+    if (CGGameUI::m_cursorItemType == UICURSOR_LOOT) {
         CGGameUI::ClearCursor(1, 1);
     }
 }
@@ -5667,7 +5687,7 @@ void CGGameUI::SetRegenEnabled(int32_t enabled) {
 // VERIFY: 4e314fe3 manual
 // OFFSET: 0x00513740
 void CGGameUI::LockItem(WOWGUID guid) {
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (item) {
         item->Lock();
@@ -5679,7 +5699,7 @@ void CGGameUI::LockItem(WOWGUID guid) {
 // VERIFY: f953bccb manual
 // OFFSET: 0x00520E40
 void CGGameUI::UnlockAllItems() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || !player->GetBag()) {
         return;
@@ -5690,7 +5710,7 @@ void CGGameUI::UnlockAllItems() {
 
     for (uint32_t i = 0; i < numSlots; i++) {
         WOWGUID guid = i < static_cast<uint32_t>(bag->m_numSlots) ? bag->m_slots[i] : WOWGUID();
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
         if (!item) {
             continue;
@@ -5698,14 +5718,14 @@ void CGGameUI::UnlockAllItems() {
 
         item->Unlock();
 
-        if (!(item->m_obj->m_type & TYPEMASK_CONTAINER) || !item->GetBag()) {
+        if (!(item->m_obj->m_type & TYPE_CONTAINER) || !item->GetBag()) {
             continue;
         }
 
         for (uint32_t j = 0; j < static_cast<uint32_t>(item->GetBag()->m_numSlots); j++) {
             CGBag_C* container = item->GetBag();
             WOWGUID contained = i < static_cast<uint32_t>(container->m_numSlots) ? container->m_slots[i] : WOWGUID();
-            CGItem_C* containedItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(contained, TYPEMASK_ITEM, __FILE__, __LINE__));
+            CGItem_C* containedItem = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(contained, TYPE_ITEM, __FILE__, __LINE__));
 
             if (containedItem) {
                 containedItem->Unlock();
@@ -5794,9 +5814,9 @@ int32_t CGGameUI::GetVirtualItemCount(int32_t id, uint32_t virtualSlot, int32_t 
 // VERIFY: 2e88ceb5 manual
 // OFFSET: 0x00520770
 void CGGameUI::SetCursorItem(WOWGUID item, WOWGUID container, uint32_t slot, int32_t a4, int32_t stackSplit, int32_t playSound) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || (!CGGameUI::m_hasControl && !(player->m_unit->m_unitFieldFlags & 0x100000))) {
+    if (!player || (!CGGameUI::m_hasControl && !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI))) {
         return;
     }
 
@@ -5810,9 +5830,9 @@ void CGGameUI::SetCursorItem(WOWGUID item, WOWGUID container, uint32_t slot, int
     CGGameUI::m_cursorItem = item;
     CGGameUI::m_cursorItemSlot = slot;
     CGGameUI::m_stackSplit = stackSplit;
-    CGGameUI::m_cursorItemType = 1;
+    CGGameUI::m_cursorItemType = UICURSOR_ITEM;
     CursorSetHeldItem(item);
-    CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* itemObject = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
     if (itemObject) {
         if (itemObject->CanBeUsed() || itemObject->GetInventoryType()) {
@@ -5821,7 +5841,7 @@ void CGGameUI::SetCursorItem(WOWGUID item, WOWGUID container, uint32_t slot, int
         }
 
         if (playSound) {
-            SndInterfacePlayItemSound(0, itemObject);
+            SndInterfacePlayItemSound(ITEMSOUND_PICKUP, itemObject);
         }
     }
 
@@ -5830,53 +5850,53 @@ void CGGameUI::SetCursorItem(WOWGUID item, WOWGUID container, uint32_t slot, int
 
 // VERIFY: 632849ec manual
 // OFFSET: 0x005218C0
-void CGGameUI::DisplayNameError(uint32_t error) {
+void CGGameUI::DisplayNameError(VALIDATE_NAME_RESULT error) {
     switch (error) {
-        case 2:
+        case NAME_NO_NAME:
             CGGameUI::DisplayError(ERR_NAME_NO_NAME);
             break;
 
-        case 3:
+        case NAME_TOO_SHORT:
             CGGameUI::DisplayError(ERR_NAME_TOO_SHORT);
             break;
 
-        case 4:
+        case NAME_TOO_LONG:
             CGGameUI::DisplayError(ERR_NAME_TOO_LONG);
             break;
 
-        case 6:
+        case NAME_MIXED_LANGUAGES:
             CGGameUI::DisplayError(ERR_NAME_MIXED_LANGUAGES);
             break;
 
-        case 7:
+        case NAME_PROFANE:
             CGGameUI::DisplayError(ERR_NAME_PROFANE);
             break;
 
-        case 8:
+        case NAME_RESERVED:
             CGGameUI::DisplayError(ERR_NAME_RESERVED);
             break;
 
-        case 11:
+        case NAME_THREE_CONSECUTIVE:
             CGGameUI::DisplayError(ERR_NAME_THREE_CONSECUTIVE);
             break;
 
-        case 12:
+        case NAME_INVALID_SPACE:
             CGGameUI::DisplayError(ERR_NAME_INVALID_SPACE);
             break;
 
-        case 13:
+        case NAME_CONSECUTIVE_SPACES:
             CGGameUI::DisplayError(ERR_NAME_CONSECUTIVE_SPACES);
             break;
 
-        case 14:
+        case NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS:
             CGGameUI::DisplayError(ERR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS);
             break;
 
-        case 15:
+        case NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END:
             CGGameUI::DisplayError(ERR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END);
             break;
 
-        case 16:
+        case NAME_DECLENSION_DOESNT_MATCH_BASE_NAME:
             CGGameUI::DisplayError(ERR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME);
             break;
 
@@ -5913,10 +5933,10 @@ void CGGameUI::UpdateThreatWarningFromCVar() {
 // OFFSET: 0x00521BF0
 void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color, int32_t a3) {
     // STATIC: 0x00BD0C94
-    static CImVector s_reactionColors[8] = { CImVector(0x00, 0x00, 0xFF, 0xFF), CImVector(0x00, 0x00, 0xFF, 0xFF), CImVector(0x00, 0x80, 0xFF, 0xFF), CImVector(0x00, 0xFF, 0xFF, 0xFF), CImVector(0x00, 0xFF, 0x00, 0xFF), CImVector(0x00, 0xFF, 0x00, 0xFF), CImVector(0x00, 0xFF, 0x00, 0xFF), CImVector(0x00, 0xFF, 0x00, 0xFF) };
+    static CImVector s_reactionColors[NUM_UNIT_REACTIONS] = { CImVector(COLOR_RED_BGRA), CImVector(COLOR_RED_BGRA), CImVector(0x00, 0x80, 0xFF, 0xFF), CImVector(COLOR_YELLOW_BGRA), CImVector(COLOR_GREEN_BGRA), CImVector(COLOR_GREEN_BGRA), CImVector(COLOR_GREEN_BGRA), CImVector(COLOR_GREEN_BGRA) };
 
     // STATIC: 0x00BD0C8C
-    static CImVector s_playerColors[2] = { CImVector(0xFF, 0x00, 0x00, 0xFF), CImVector(0xFF, 0x60, 0x60, 0xFF) };
+    static CImVector s_playerColors[2] = { CImVector(COLOR_BLUE_BGRA), CImVector(0xFF, 0x60, 0x60, 0xFF) };
 
     // STATIC: 0x00BD0C88
     static CImVector s_partyColor = CImVector(0xFF, 0xAA, 0xAA, 0xFF);
@@ -5932,7 +5952,7 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         bool pvp = false;
@@ -5957,11 +5977,11 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
             }
         }
 
-        *color = pvp ? s_reactionColors[4] : s_playerColors[a3];
+        *color = pvp ? s_reactionColors[UNIT_REACTION_FRIENDLY] : s_playerColors[a3];
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     CGUnit_C* viewer = nullptr;
 
     if (player) {
@@ -5973,7 +5993,7 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
 
         VehicleSeatRec* seat = viewer->m_vehiclePassenger ? viewer->m_vehiclePassenger->m_seatRec : nullptr;
 
-        if (seat && (seat->m_flags & 0x100000)) {
+        if (seat && (seat->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE)) {
             CGUnit_C* vehicle = viewer->GetVehicleUnit();
 
             if (vehicle) {
@@ -5986,19 +6006,19 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
         SErrDisplayAppFatalMessage("", "", 0);
     }
 
-    if (unit->m_unit->m_unitFieldFlags & 0x8) {
+    if (unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PLAYER_CONTROLLED) {
         if (unit->CanAttack(viewer)) {
-            *color = viewer->CanAttack(unit) ? s_reactionColors[1] : s_playerColors[a3];
+            *color = viewer->CanAttack(unit) ? s_reactionColors[UNIT_REACTION_HOSTILE] : s_playerColors[a3];
             return;
         }
 
         if (viewer->CanAttack(unit)) {
-            *color = s_reactionColors[3];
+            *color = s_reactionColors[UNIT_REACTION_NEUTRAL];
             return;
         }
 
-        uint8_t pvpFlags = unit->m_unit->m_unitFieldBytes2[1];
-        bool pvp = (pvpFlags & 1) && !(pvpFlags & 8) && !(viewer->m_unit->m_unitFieldBytes2[1] & 8) && CGBattlefieldInfo::m_instanceType != 4;
+        uint8_t pvpFlags = unit->m_unit->m_pvpFlags;
+        bool pvp = (pvpFlags & UNIT_PVP_FLAG_PVP) && !(pvpFlags & UNIT_PVP_FLAG_SANCTUARY) && !(viewer->m_unit->m_pvpFlags & UNIT_PVP_FLAG_SANCTUARY) && CGBattlefieldInfo::m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD;
 
         if (a3) {
             if (CGPartyInfo::IsMemberOrPet(guid) && CGPartyInfo::m_realNumMembers) {
@@ -6013,7 +6033,7 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
         }
 
         *color = pvp ? s_reactionColors[unit->UnitReaction(viewer)] : s_playerColors[a3];
-    } else if (a3 && (unit->m_unit->m_unitFieldHealth <= 0 || (unit->m_unit->m_unitDynamicFlags & 0x20))) {
+    } else if (a3 && (unit->m_unit->m_unitFieldHealth <= 0 || (unit->m_unit->m_unitDynamicFlags & UNIT_DYNAMIC_FLAGS::UNIT_DYNFLAG_DEAD))) {
         *color = s_deadSelectionColor;
     } else {
         *color = s_reactionColors[unit->UnitReaction(viewer)];
@@ -6023,7 +6043,7 @@ void CGGameUI::GetSelectionHighlightColor(const WOWGUID& guid, CImVector* color,
 // VERIFY: 8e316898 manual
 // OFFSET: 0x00512B00
 void CGGameUI::UnitNameUpdate(const WOWGUID& guid) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         CGGameUI::UnitTooltipUpdate(guid);
@@ -6063,16 +6083,16 @@ static void PlaceFrame(CSimpleFrame* frame, int32_t level, FRAMEPOINT point, int
         frame->SetFrameLevel(level, 1);
     }
 
-    if (frame->m_frameFlags & 0x100) {
+    if (frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_MOVABLE) {
         frame->MarkFramePointsUnused();
         frame->SetPoint(point, frame->m_simpleTop, point, NDCToDDCWidth(x / (CoordinateGetAspectCompensation() * 1024.0f)), NDCToDDCWidth(y / (CoordinateGetAspectCompensation() * 1024.0f)), 1);
-        frame->SetFrameFlag(0x1000, 1);
+        frame->SetFrameFlag(CSimpleFrame::FrameFlags::FRAME_USER_PLACED, 1);
     }
 
-    if (frame->m_frameFlags & 0x200) {
+    if (frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_RESIZABLE) {
         frame->SetWidth(NDCToDDCWidth(width / (CoordinateGetAspectCompensation() * 1024.0f)));
         frame->SetHeight(NDCToDDCWidth(height / (CoordinateGetAspectCompensation() * 1024.0f)));
-        frame->SetFrameFlag(0x1000, 1);
+        frame->SetFrameFlag(CSimpleFrame::FrameFlags::FRAME_USER_PLACED, 1);
     }
 
     frame->Resize(1);
@@ -6154,7 +6174,7 @@ void CGGameUI::StopMovie() {
     ClientServices::Send2(&msg);
 
     CGInputControl* input = CGInputControl::GetActive();
-    input->m_mouseModeFlags &= ~0x40u;
+    input->m_mouseModeFlags &= ~INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_FORCE_CURSOR_OFF;
     input->UpdateMouseMode(0);
     CGInputControl::GetActive()->EnterWorld();
 }
@@ -6212,19 +6232,19 @@ void LoadAccountVariables() {
 // VERIFY: b84f77ba manual
 // OFFSET: 0x005284D0
 void CCapturePointUIManager::Update() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     uint32_t time = OsGetAsyncTimeMs();
 
     if (!player || static_cast<int32_t>(time - this->m_nextWarningTime) < 0) {
         return;
     }
 
-    if ((player->m_unit->m_unitFieldBytes2[1] & 0x1) || (player->m_unit->m_unitFieldFlags & 0x100000)) {
+    if ((player->m_unit->m_pvpFlags & UNIT_PVP_FLAG_PVP) || (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI)) {
         return;
     }
 
     for (CapturePointUIManagerNode* node = this->m_nodes.Head(); node; node = this->m_nodes.Next(node)) {
-        CGObject_C* object = ClntObjMgrObjectPtr(node->m_guid, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(node->m_guid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
         if (object && static_cast<float>(node->m_radiusSquared) > player->GetDistanceToPos(object->GetPosition())) {
             CGChat::AddChatMessage(FrameScript_GetText("PVP_REQUIRED_FOR_CAPTURE", -1, GENDER_NOT_APPLICABLE), 0, 0, 0, 0, 0, nullptr, WOWGUID(), 0, WOWGUID(), 0, 0, 0);
@@ -6247,7 +6267,7 @@ struct AutoMouseOverData {
 // VERIFY: 4cd54d7b manual
 // OFFSET: 0x00519E80
 static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
-    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (!object) {
         return 1;
@@ -6281,7 +6301,7 @@ static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
 
     uint32_t type = object->m_obj->m_type;
 
-    if (type & TYPEMASK_UNIT) {
+    if (type & TYPE_UNIT) {
         CGUnit_C* unit = static_cast<CGUnit_C*>(object);
         float rangeSq;
 
@@ -6293,13 +6313,13 @@ static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
             }
 
             rangeSq = distSq;
-        } else if ((unit->m_unit->m_unitFieldFlags & 0x4000000) && CGSpellBook::GetSkinningSpell(unit) && (!(unit->m_obj->m_type & TYPEMASK_PLAYER) || !player->CanAssist(unit, false))) {
+        } else if ((unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_SKINNABLE) && CGSpellBook::GetSkinningSpell(unit) && (!(unit->m_obj->m_type & TYPE_PLAYER) || !player->CanAssist(unit, false))) {
             float minRange;
             float maxRange;
             Spell_C::GetSpellRange(player, CGSpellBook::GetSkinningSpell(unit), &minRange, &maxRange, unit);
             rangeSq = maxRange * maxRange;
         } else {
-            if (!player->CanAttackNow(unit) || (player->m_unit->m_unitFieldFlags & 0x20000) || !CGGameUI::m_hasControl) {
+            if (!player->CanAttackNow(unit) || (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PACIFIED) || !CGGameUI::m_hasControl) {
                 return 1;
             }
 
@@ -6309,13 +6329,13 @@ static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
         if (rangeSq < distSq) {
             return 1;
         }
-    } else if (type & TYPEMASK_GAMEOBJECT) {
+    } else if (type & TYPE_GAMEOBJECT) {
         CGGameObject_C* gameObject = static_cast<CGGameObject_C*>(object);
 
         if (player != data->m_mover || !gameObject->CanUse() || !gameObject->CanUseNow()) {
             return 1;
         }
-    } else if (type & TYPEMASK_CORPSE) {
+    } else if (type & TYPE_CORPSE) {
         if (player != data->m_mover) {
             return 1;
         }
@@ -6327,7 +6347,7 @@ static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
                 return 1;
             }
         } else {
-            if (!(corpse->m_corpse->m_corpseFieldFlags & 0x20) || !CGSpellBook::GetSkinningSpell(reinterpret_cast<CGUnit_C*>(corpse)) || player->CanAssist(corpse)) {
+            if (!(corpse->m_corpse->m_corpseFieldFlags & CORPSE_FIELD_FLAGS::CORPSE_FIELD_FLAG_SKINNABLE) || !CGSpellBook::GetSkinningSpell(reinterpret_cast<CGUnit_C*>(corpse)) || player->CanAssist(corpse)) {
                 return 1;
             }
 
@@ -6353,11 +6373,11 @@ static int32_t AutoMouseOverProc(WOWGUID guid, void* param) {
 // VERIFY: e37a0d1f manual
 // OFFSET: 0x005220B0
 void CGGameUI::AutoMouseOver() {
-    if (CGInputControl::GetActive()->m_mouseModeFlags & 0x1) {
+    if (CGInputControl::GetActive()->m_mouseModeFlags & INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_CURSOR_ON) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -6434,7 +6454,7 @@ int32_t CGGameUI::MessageHandler(void* param, NETMESSAGE msgId, uint32_t time, C
         case SMSG_BREAK_TARGET: {
             SmartGUID guid;
             *msg >> guid;
-            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
             WOWGUID target = guid;
 
             if (!CGGameUI::IsRaidMemberOrPet(target) || (unit && unit->IsDuelingWith(ClntObjMgrGetActivePlayerObj()))) {
@@ -6471,7 +6491,7 @@ int32_t CGGameUI::MessageHandler(void* param, NETMESSAGE msgId, uint32_t time, C
                 msg->Get(reinterpret_cast<uint32_t&>(actualMapId));
                 msg->Get(reinterpret_cast<uint32_t&>(transport));
 
-                if (player && (player->m_player->m_playerFlags & 0x10)) {
+                if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST)) {
                     CGGameUI::SetCorpseLocation(mapId, position, actualMapId, transport);
                 }
             } else {
@@ -6480,7 +6500,7 @@ int32_t CGGameUI::MessageHandler(void* param, NETMESSAGE msgId, uint32_t time, C
                 if (CGGameUI::m_corpseInRange) {
                     CGGameUI::m_corpseInRange = 0;
 
-                    if (CGBattlefieldInfo::m_instanceType != 4) {
+                    if (CGBattlefieldInfo::m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
                         FrameScript_SignalEvent(SCRIPT_EVENT_CORPSE_OUT_OF_RANGE, nullptr);
                     }
                 }
@@ -6513,13 +6533,13 @@ int32_t CGGameUI::MessageHandler(void* param, NETMESSAGE msgId, uint32_t time, C
             WOWGUID guid;
             msg->Get(soundKitId);
             msg->Get(guid.m_guid);
-            CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            CGObject_C* object = ClntObjMgrObjectPtr(guid, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (!object) {
                 return 1;
             }
 
-            if (object->m_obj->m_type & TYPEMASK_UNIT) {
+            if (object->m_obj->m_type & TYPE_UNIT) {
                 static_cast<CGUnit_C*>(object)->PlayAISound(soundKitId);
             } else {
                 C3Vector position = object->GetPosition();
@@ -6739,7 +6759,7 @@ int32_t CGGameUI::MessageHandler(void* param, NETMESSAGE msgId, uint32_t time, C
             char name[48];
             name[0] = '\0';
 
-            if (error == 9) {
+            if (error == CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_NOT_IN_GROUP) {
                 msg->GetString(name, sizeof(name));
             }
 
@@ -6819,7 +6839,7 @@ void CGGameUI::SetCorpseMapPosition(const C3Vector& position, const float& facin
 void CGGameUI::StopCinematicInternal(void* param) {
     CGCamera* camera = CGWorldFrame::GetActiveCamera();
     FrameScript_SignalEvent(SCRIPT_EVENT_CINEMATIC_STOP, nullptr);
-    CGObject_C* target = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(camera->m_targetGUID, TYPEMASK_OBJECT, __FILE__, __LINE__));
+    CGObject_C* target = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(camera->m_targetGUID, TYPE_OBJECT, __FILE__, __LINE__));
 
     if (target) {
         C3Vector position = target->GetPosition();
@@ -6827,7 +6847,7 @@ void CGGameUI::StopCinematicInternal(void* param) {
         float dy = camera->m_position.y - position.y;
         float dx = camera->m_position.x - position.x;
 
-        if (dx * dx + (dy * dy + dz * dz) > 900.0f) {
+        if (dx * dx + (dy * dy + dz * dz) > MAX_CAMERA_SHIFT_SQUARED) {
             World::Preload(target->GetPosition(), 0);
         }
     }
@@ -6850,12 +6870,12 @@ void CGGameUI::StopCinematicInternal(void* param) {
     DisableFadingScreen(0.25f, nullptr, nullptr);
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && !(player->m_unit->m_unitFieldFlags & 0x100000)) {
+    if (player && !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI)) {
         CGChat::ZoneUpdate();
     }
 
     CGInputControl* input = CGInputControl::GetActive();
-    input->m_mouseModeFlags &= ~0x40;
+    input->m_mouseModeFlags &= ~INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_FORCE_CURSOR_OFF;
     input->UpdateMouseMode(0);
     CGInputControl::GetActive()->EnterWorld();
 }
@@ -6868,7 +6888,7 @@ void CGGameUI::GetCorpsePosition(C3Vector& position) {
         return;
     }
 
-    if (ClntObjMgrObjectPtr(CGGameUI::m_corpseTransportGUID, TYPEMASK_OBJECT, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(CGGameUI::m_corpseTransportGUID, TYPE_OBJECT, __FILE__, __LINE__)) {
         C44Matrix transform;
 
         if (!MovementGetTransportMtxX(CGGameUI::m_corpseTransportGUID, &transform, ClntObjMgrGetActivePlayer(), __FILE__, __LINE__)) {
@@ -6902,7 +6922,7 @@ static void UpdateCorpseRange(int32_t inRange) {
 
     CGGameUI::m_corpseInRange = inRange;
 
-    if (CGBattlefieldInfo::m_instanceType == 4) {
+    if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
         return;
     }
 
@@ -6919,7 +6939,7 @@ void CGGameUI::UpdateCorpseDistance() {
     int32_t inRange = 0;
 
     if (CGGameUI::m_corpseMapID >= 0) {
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player) {
             C3Vector corpse = { 0.0f, 0.0f, 0.0f };
@@ -6951,14 +6971,14 @@ void CGGameUI::UpdateInteractTarget() {
     }
 
     bool clear = false;
-    CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (!object || (object->m_modelFlags & 0x10000)) {
+    if (!object || (object->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_DISABLED)) {
         CGGameUI::ClearInteractTarget(CGGameUI::m_interactTarget, 0);
         return;
     }
 
-    if (object->m_obj->m_type & TYPEMASK_ITEM) {
+    if (object->m_obj->m_type & TYPE_ITEM) {
         return;
     }
 
@@ -6971,7 +6991,7 @@ void CGGameUI::UpdateInteractTarget() {
 
     uint32_t type = object->m_obj->m_type;
 
-    if (type & TYPEMASK_GAMEOBJECT) {
+    if (type & TYPE_GAMEOBJECT) {
         CGGameObject_C* gameObject = static_cast<CGGameObject_C*>(object);
 
         if (!player->CGUnit_C::CanInteract(gameObject) || !gameObject->CheckRange()) {
@@ -6981,10 +7001,10 @@ void CGGameUI::UpdateInteractTarget() {
         return;
     }
 
-    if (type & TYPEMASK_UNIT) {
+    if (type & TYPE_UNIT) {
         CGUnit_C* unit = static_cast<CGUnit_C*>(object);
 
-        if (((type & TYPEMASK_PLAYER) && player->m_obj->m_guid != object->m_obj->m_guid && !player->CanCooperate(unit)) || (!(object->m_obj->m_type & TYPEMASK_PLAYER) && !player->CanInteract(unit))) {
+        if (((type & TYPE_PLAYER) && player->m_obj->m_guid != object->m_obj->m_guid && !player->CanCooperate(unit)) || (!(object->m_obj->m_type & TYPE_PLAYER) && !player->CanInteract(unit))) {
             clear = true;
         }
     }
@@ -6998,9 +7018,9 @@ void CGGameUI::UpdateInteractTarget() {
 // OFFSET: 0x00523F80
 static int32_t AreaSpiritHealerCheck(WOWGUID guid, void* param) {
     CGUnit_C* player = static_cast<CGUnit_C*>(param);
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (unit && (unit->m_unit->m_unitNpcFlags & 0x8000) && unit->CanAssist(player, false) && unit->GetDistanceToPos(player->GetPosition()) <= 400.0f) {
+    if (unit && (unit->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_SPIRIT_GUIDE) && unit->CanAssist(player, false) && unit->GetDistanceToPos(player->GetPosition()) <= 400.0f) {
         CGGameUI::SetAreaSpiritHealer(unit->m_obj->m_guid);
     }
 
@@ -7010,15 +7030,15 @@ static int32_t AreaSpiritHealerCheck(WOWGUID guid, void* param) {
 // VERIFY: 5df5fddf manual
 // OFFSET: 0x00524010
 void CGGameUI::UpdateAreaSpiritHealerDistance() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x10)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_GHOST)) {
         CGGameUI::SetAreaSpiritHealer(WOWGUID());
         return;
     }
 
     if (CGGameUI::m_areaSpiritHealerGUID) {
-        CGUnit_C* healer = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_areaSpiritHealerGUID, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* healer = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGameUI::m_areaSpiritHealerGUID, TYPE_UNIT, __FILE__, __LINE__));
 
         if (!healer || player->GetDistanceToPos(healer->GetPosition()) > 484.00003f) {
             CGGameUI::SetAreaSpiritHealer(WOWGUID());
@@ -7074,7 +7094,7 @@ void CGGameUI::SendRaidDifficultyMessage() {
 
     map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
 
-    if (map->m_instanceType == 2) {
+    if (map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_RAID_DUNGEON) {
         MapDifficultyRec* difficulty = GetMapDifficultyEntryByMapIdAndDifficulty(CGGameUI::m_iCurrentMapID, CGGameUI::m_instanceDifficulty, nullptr);
         CGGameUI::DisplayError(ERR_RAID_DIFFICULTY_CHANGED_S, FrameScript_GetText(difficulty->m_difficultystring, -1, GENDER_NOT_APPLICABLE));
     } else {
@@ -7096,7 +7116,7 @@ void CGGameUI::SetRaidDifficulty(uint32_t difficulty, uint32_t unk, uint32_t inG
         MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
 
         if (map && (map->m_flags & 0x100)) {
-            CGPartyInfo::ChangeRaidDifficulty(difficulty > 1);
+            CGPartyInfo::ChangeRaidDifficulty(difficulty > RAID_DIFFICULTY_25MAN_NORMAL);
         } else {
             CGPartyInfo::m_raidDifficulty = difficulty;
         }
@@ -7116,8 +7136,8 @@ void CGGameUI::SetRaidDifficulty(uint32_t difficulty, uint32_t unk, uint32_t inG
 // VERIFY: fc4f2074 manual
 // OFFSET: 0x0057EA60
 void CGGameUI::LoadMinimapTrackingState(const char* state) {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
-    uint32_t classMask = player ? 1 << player->m_unit->m_unitFieldBytes0[1] : 0;
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
+    uint32_t classMask = player ? 1 << player->m_unit->m_classID : 0;
 
     for (uint32_t i = 0; i < 15; i++) {
         const TrackingTypeInfo& info = CGMinimapFrame::s_trackingTypes[i];
@@ -7218,10 +7238,10 @@ void CGGameUI::ShutdownGame() {
     CGGameUI::m_minimapZoneText = nullptr;
     CGGameUI::s_threatMap.Clear();
 
-    for (int32_t i = 0; i < 3; i++) {
+    for (int32_t i = 0; i < NUM_UNIT_MIRROR_TIMERS; i++) {
         MirrorTimerInfo& timer = CGGameUI::m_mirrorTimerInfo[i];
-        timer.m_type = 3;
-        timer.unk_0018 = 0;
+        timer.m_type = UNIT_MIRROR_TIMER_INACTIVE;
+        timer.m_startTime = 0;
         timer.m_spellId = 0;
         timer.m_paused = 0;
         timer.m_scale = 0;
@@ -7278,7 +7298,7 @@ void CGGameUI::StartCinematic(int32_t cinematic) {
             SE2SoundKitProperties properties;
             properties.ResetToDefaults();
             properties.m_group = 3;
-            properties.m_loopMode = 1;
+            properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
             SI2::PlaySoundKit(CGGameUI::m_cinematic.m_sequence->m_soundID, nullptr, &CGGameUI::m_cinematic.m_music, &properties, 0, nullptr, 1, 0);
         }
 
@@ -7289,7 +7309,7 @@ void CGGameUI::StartCinematic(int32_t cinematic) {
 
     CGGameUI::m_inCinematic = 1;
     CGInputControl* input = CGInputControl::GetActive();
-    input->m_mouseModeFlags |= 0x40;
+    input->m_mouseModeFlags |= INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_FORCE_CURSOR_OFF;
     input->UpdateMouseMode(0);
 
     if (ClntObjMgrGetActivePlayerObj()) {
@@ -7459,7 +7479,7 @@ void CGGameUI::Shutdown() {
     g_theGxDevicePtr->RemoveTextureRecreationCallback(UpdateAllPortraits);
     g_theGxDevicePtr->RemoveDeviceRestoredCallback(UpdateAllPortraits);
     CGChat::Pause();
-    CGGameUI::unk_BD08CC = 0;
+    CGGameUI::unused_BD08CC = 0;
 
     if (CGGameUI::m_lockedTarget != WOWGUID()) {
         CGGameUI::m_lastTarget = CGGameUI::m_lockedTarget;
@@ -7479,12 +7499,12 @@ void CGGameUI::Shutdown() {
     }
 
     if (ClntObjMgrGetActivePlayer() != WOWGUID()) {
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player) {
             player->ClearTrackingTarget(false, true);
 
-            if (player->m_unit->m_unitFieldFlags & 0x80000) {
+            if (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_IN_COMBAT) {
                 CGGameUI::m_simpleTop->m_allowProtectedActions = 1;
                 FrameScript_SignalEvent(SCRIPT_EVENT_PLAYER_REGEN_ENABLED, nullptr);
                 CGGameUI::UpdateCombatMode();
@@ -7633,7 +7653,7 @@ static void PlacedFrameCallback(HOSFILE file, CSimpleFrame* frame) {
 
     uint32_t flags = frame->m_frameFlags;
 
-    if (!(flags & 0x1000) || (flags & 0x80000) || !(flags & 0x300)) {
+    if (!(flags & CSimpleFrame::FrameFlags::FRAME_USER_PLACED) || (flags & CSimpleFrame::FrameFlags::FRAME_DONT_SAVE_POSITION) || !(flags & CSimpleFrame::FrameFlags::FRAME_MOVABLE_OR_RESIZABLE_MASK)) {
         return;
     }
 
@@ -7788,7 +7808,7 @@ const char* CGGameUI::GetErrorToken(int32_t error) {
 // VERIFY: d1aeabdd auto
 // OFFSET: 0x0051D960
 void CGGameUI::Reload() {
-    if (lua_tainted && CGGameUI::m_simpleTop && !CGGameUI::m_simpleTop->unk_1250) {
+    if (lua_tainted && CGGameUI::m_simpleTop && !CGGameUI::m_simpleTop->unused_1250) {
         CGGameUI::ShowBlockedActionFeedback(nullptr, 1);
         return;
     }
@@ -7805,11 +7825,11 @@ uint32_t CGGameUI::GetInstanceDifficulty() {
 // VERIFY: bf3170ba manual
 // OFFSET: 0x00513EA0
 void CGGameUI::CancelMirrorTimers() {
-    for (int32_t i = 0; i < 3; i++) {
-        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_STOP, "%s", MirrorTimerTypeToken(i));
+    for (int32_t i = 0; i < NUM_UNIT_MIRROR_TIMERS; i++) {
+        FrameScript_SignalEvent(SCRIPT_EVENT_MIRROR_TIMER_STOP, "%s", MirrorTimerTypeToken(static_cast<UNIT_MIRROR_TIMER>(i)));
         MirrorTimerInfo* info = &CGGameUI::m_mirrorTimerInfo[i];
-        info->m_type = 3;
-        info->unk_0018 = 0;
+        info->m_type = UNIT_MIRROR_TIMER_INACTIVE;
+        info->m_startTime = 0;
         info->m_spellId = 0;
         info->m_paused = 0;
         info->m_scale = 0;
@@ -7838,7 +7858,7 @@ void CGGameUI::SetInstanceBootTime(uint32_t time) {
 
 // VERIFY: a656407b manual
 // OFFSET: 0x00513B20
-void CGGameUI::SetInstanceLockTime(uint32_t time, uint32_t a2, uint32_t a3) {
+void CGGameUI::SetInstanceLockTime(uint32_t time, uint32_t completedMask, uint32_t extending) {
     if (static_cast<int32_t>(time) <= 0) {
         CGGameUI::m_instanceLockTime = 0;
         CGGameUI::m_instanceLockCompletedMask = 0;
@@ -7846,8 +7866,8 @@ void CGGameUI::SetInstanceLockTime(uint32_t time, uint32_t a2, uint32_t a3) {
         FrameScript_SignalEvent(SCRIPT_EVENT_INSTANCE_LOCK_STOP, nullptr);
     } else {
         CGGameUI::m_instanceLockTime = time + OsGetAsyncTimeMs();
-        CGGameUI::m_instanceLockCompletedMask = a2;
-        CGGameUI::m_instanceLockExtending = a3;
+        CGGameUI::m_instanceLockCompletedMask = completedMask;
+        CGGameUI::m_instanceLockExtending = extending;
         FrameScript_SignalEvent(SCRIPT_EVENT_INSTANCE_LOCK_START, nullptr);
     }
 }
@@ -7994,43 +8014,43 @@ static void PlayMovie() {
 // OFFSET: 0x005219E0
 void BroadcastUIError(int32_t error, const char* name) {
     switch (error) {
-        case 1:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NOT_REFERRED_BY:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_NOT_REFERRED_BY);
             break;
-        case 2:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_TOO_HIGH:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_TARGET_TOO_HIGH);
             break;
-        case 3:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_INSUFFICIENT_GRANTABLE_LEVELS:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_INSUFFICIENT_GRANTABLE_LEVELS);
             break;
-        case 4:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TOO_FAR:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_TOO_FAR);
             break;
-        case 5:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_DIFFERENT_FACTION:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_DIFFERENT_FACTION);
             break;
-        case 6:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NOT_NOW:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_NOT_NOW);
             break;
-        case 7:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_GRANT_LEVEL_MAX:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I, 60);
             break;
-        case 8:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_NO_TARGET:
             CGGameUI::DisplayError(ERR_GENERIC_NO_TARGET);
             break;
-        case 9:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_TARGET_NOT_IN_GROUP:
             CGGameUI::DisplayError(ERR_TARGET_NOT_IN_GROUP_S, name);
             break;
-        case 10:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_LEVEL_MAX:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_SUMMON_LEVEL_MAX_I, 60);
             break;
-        case 11:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_COOLDOWN:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_SUMMON_COOLDOWN);
             break;
-        case 12:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_INSUFFICIENT_EXPANSION_LEVEL:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_INSUF_EXPAN_LVL);
             break;
-        case 13:
+        case CGPlayer_C::REFER_A_FRIEND_RESULT::RAF_RESULT_UI_SUMMON_OFFLINE:
             CGGameUI::DisplayError(ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S, name);
             break;
     }
@@ -8067,10 +8087,10 @@ void CGGameUI::StartMovie(uint32_t movieId) {
     CGGameUI::m_movieFileDataID = fileDataId;
     CGGameUI::m_movieVolume = movie->m_volume;
     CGInputControl* input = CGInputControl::GetActive();
-    input->m_mouseModeFlags |= 0x40;
+    input->m_mouseModeFlags |= INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_FORCE_CURSOR_OFF;
     input->UpdateMouseMode(0);
 
-    if (ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         PlayMovie();
     }
 }
@@ -8118,7 +8138,7 @@ void CGGameUI::LeaveWorld() {
         SI2::StopSound(&CGGameUI::m_cinematic.m_music, 1, -1.0f, 1);
         CGGameUI::m_inCinematic = 0;
         CGInputControl* input = CGInputControl::GetActive();
-        input->m_mouseModeFlags &= ~0x40;
+        input->m_mouseModeFlags &= ~INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_FORCE_CURSOR_OFF;
         input->UpdateMouseMode(0);
     }
 
@@ -8181,7 +8201,7 @@ void CGGameUI::LeaveWorld() {
     CGGameUI::CloseInteraction();
 
     if (CGGameUI::m_lockedTarget && !CGGameUI::IsRaidMemberOrPet(CGGameUI::m_lockedTarget)) {
-        CGGameUI::unk_BD08CC = 0;
+        CGGameUI::unused_BD08CC = 0;
 
         if (CGGameUI::m_lockedTarget) {
             CGGameUI::m_lastTarget = CGGameUI::m_lockedTarget;

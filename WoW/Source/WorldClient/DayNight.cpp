@@ -1,4 +1,6 @@
+#include "Engine/Source/Tempest/CMath.h"
 #include "WoW/Source/WorldClient/DayNight__DNInfo.h"
+#include "WoW/Source/Object/ObjectClient/Types.h"
 #include <cmath>
 #include <new>
 #include <typeinfo>
@@ -32,6 +34,18 @@
 #include "WoW/Source/WorldClient/WorldParam.h"
 #include "Engine/Source/Gxu/Gxu.h"
 #include "WoW/Source/Ui/WorldFrame.h"
+#include "Engine/Source/ShaderEffect/Types.h"
+
+static const float SUNRISE = 0.22916667f;
+static const float NOON = 0.5f;
+static const float SUNSET = 0.89583331f;
+static const float MOONRISE = 0.91666669f;
+static const float DAYEND = 1.0f;
+static const float MIDNIGHT = 0.0f;
+static const float MOONSET = 0.16666667f;
+static const float VALUE_SCALE = 1.25f;
+static const float SATURATION_SCALE = 0.33f;
+static const float DEFAULT_FOG_SCALER = 0.5f;
 
 // STATIC: 0x00AF4C20
 static C2Vector s_starFadeTable[4] = { C2Vector(0.125f, 1.0f), C2Vector(0.1875f, 0.0f), C2Vector(0.9375f, 0.0f), C2Vector(1.0f, 1.0f) };
@@ -165,8 +179,12 @@ static C2Vector s_highlightCurve[6] = { C2Vector(0.125f, 0.0f), C2Vector(0.27083
 // STATIC: 0x00AF4BAC
 static C2Vector s_skyFaceCurve[6] = { C2Vector(0.125f, 1.0f), C2Vector(0.375f, 0.0f), C2Vector(0.5f, -0.5f), C2Vector(0.625f, -0.69999999f), C2Vector(0.75f, -0.5f), C2Vector(0.875f, 0.0f) };
 
+enum SKY_CONSTANTS : int32_t {
+    SKY_NUMBANDS = 7,
+};
+
 // STATIC: 0x00A41A90
-static const float s_skyThetaTable[7] = { 0.0f, 0.17f, 0.2f, 0.23f, 0.24f, 0.25f, 1.0f };
+static const float s_skyThetaTable[SKY_NUMBANDS] = { 0.0f, 0.17f, 0.2f, 0.23f, 0.24f, 0.25f, 1.0f };
 
 // STATIC: 0x00AF4DAC
 static const uint16_t s_planetIndices[4] = { 0, 1, 2, 3 };
@@ -539,7 +557,7 @@ void DayNight::SyncSkyAnimWithTime(DNOverrideSky* sky, int32_t minutes) {
     if (abs(minutes - static_cast<int32_t>(sky->m_lastTimeOfDay)) >= 2 && (sky->m_flags & 1)) {
         float speed = 0.000000011574074f * length;
         uint32_t time = static_cast<uint32_t>(length * (minutes * 0.00069444446f));
-        sky->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, time, speed, 1, 1);
+        sky->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, time, speed, 1, 1);
     }
 
     sky->m_lastTimeOfDay = minutes;
@@ -1117,10 +1135,10 @@ void DayNight::SetLightColors() {
     *reinterpret_cast<uint32_t*>(&info.m_light1.m_mid1) = bright;
     info.m_light1.m_mid0 = toAmbient;
     info.m_light0.m_mid0 = info.m_light1.m_mid0;
-    info.m_light0.m_desatR = info.m_light1.m_desatR;
-    info.m_light0.m_desatG = info.m_light1.m_desatG;
-    info.m_light0.m_desatB = info.m_light1.m_desatB;
-    info.m_light0.m_desatA = info.m_light1.m_desatA;
+    info.m_light0.m_desaturatedAmbient.x = info.m_light1.m_desaturatedAmbient.x;
+    info.m_light0.m_desaturatedAmbient.y = info.m_light1.m_desaturatedAmbient.y;
+    info.m_light0.m_desaturatedAmbient.z = info.m_light1.m_desaturatedAmbient.z;
+    info.m_light0.m_desaturatedAmbient.w = info.m_light1.m_desaturatedAmbient.w;
     info.m_light0.m_diffuse = bands.m_diffuse;
     info.m_light0.m_ambient = bands.m_ambient;
 
@@ -1136,13 +1154,13 @@ void DayNight::SetLightColors() {
     C3Vector rgb(bands.m_ambient.r * (1.0f / 255.0f), bands.m_ambient.g * (1.0f / 255.0f), (1.0f / 255.0f) * bands.m_ambient.b);
     C3Vector hsv(0.0f, 0.0f, 0.0f);
     RGBtoHSV(rgb, hsv);
-    hsv.y = hsv.y * 0.33f;
-    hsv.z = hsv.z * 1.25f;
+    hsv.y = hsv.y * SATURATION_SCALE;
+    hsv.z = hsv.z * VALUE_SCALE;
     HSVtoRGB(hsv, rgb);
-    info.m_light1.m_desatR = rgb.x;
-    info.m_light1.m_desatG = rgb.y;
-    info.m_light1.m_desatB = rgb.z;
-    info.m_light1.m_desatA = 1.0f;
+    info.m_light1.m_desaturatedAmbient.x = rgb.x;
+    info.m_light1.m_desaturatedAmbient.y = rgb.y;
+    info.m_light1.m_desaturatedAmbient.z = rgb.z;
+    info.m_light1.m_desaturatedAmbient.w = 1.0f;
 }
 
 // VERIFY: 8ddbd15b manual
@@ -1184,14 +1202,14 @@ void DayNight::SetDirection() {
 // VERIFY: 3766e44c manual
 // OFFSET: 0x007EECC0
 void DayNight::SetPlanets() {
-    static C2Vector s_sunTheta[5] = { C2Vector(0.22916667f, 1.7453293f), C2Vector(0.49652779f, 0.087266468f), C2Vector(0.5f, 0.087266468f), C2Vector(0.50347221f, 0.087266468f), C2Vector(0.89583331f, 1.7453293f) };
-    static C2Vector s_sunPhi[3] = { C2Vector(0.22916667f, 0.78539819f), C2Vector(0.5f, 0.78539819f), C2Vector(0.89583331f, 0.78539819f) };
-    static C2Vector s_moonTheta[5] = { C2Vector(0.0f, 0.61086524f), C2Vector(0.0034722222f, 0.61086524f), C2Vector(0.16666667f, 1.7453293f), C2Vector(0.91666669f, 1.7453293f), C2Vector(0.99652779f, 0.61086524f) };
-    static C2Vector s_moonPhi[3] = { C2Vector(0.0f, 0.78539819f), C2Vector(0.16666667f, 0.78539819f), C2Vector(0.91666669f, 0.78539819f) };
-    static C2Vector s_moon2Theta[5] = { C2Vector(0.0f, 0.61086524f), C2Vector(0.0034722222f, 0.61086524f), C2Vector(0.16666667f, 1.7453293f), C2Vector(0.91666669f, 1.7453293f), C2Vector(0.99652779f, 0.61086524f) };
-    static C2Vector s_moon2Phi[3] = { C2Vector(0.0f, 2.3561945f), C2Vector(0.16666667f, 2.6179938f), C2Vector(0.91666669f, 2.8797934f) };
+    static C2Vector s_sunTheta[5] = { C2Vector(SUNRISE, 1.7453293f), C2Vector(0.49652779f, 0.087266468f), C2Vector(NOON, 0.087266468f), C2Vector(0.50347221f, 0.087266468f), C2Vector(SUNSET, 1.7453293f) };
+    static C2Vector s_sunPhi[3] = { C2Vector(SUNRISE, 0.78539819f), C2Vector(NOON, 0.78539819f), C2Vector(SUNSET, 0.78539819f) };
+    static C2Vector s_moonTheta[5] = { C2Vector(MIDNIGHT, 0.61086524f), C2Vector(0.0034722222f, 0.61086524f), C2Vector(MOONSET, 1.7453293f), C2Vector(MOONRISE, 1.7453293f), C2Vector(0.99652779f, 0.61086524f) };
+    static C2Vector s_moonPhi[3] = { C2Vector(MIDNIGHT, 0.78539819f), C2Vector(MOONSET, 0.78539819f), C2Vector(MOONRISE, 0.78539819f) };
+    static C2Vector s_moon2Theta[5] = { C2Vector(MIDNIGHT, 0.61086524f), C2Vector(0.0034722222f, 0.61086524f), C2Vector(MOONSET, 1.7453293f), C2Vector(MOONRISE, 1.7453293f), C2Vector(0.99652779f, 0.61086524f) };
+    static C2Vector s_moon2Phi[3] = { C2Vector(MIDNIGHT, 2.3561945f), C2Vector(MOONSET, 2.6179938f), C2Vector(MOONRISE, 2.8797934f) };
     static C2Vector s_sunScale[4] = { C2Vector(0.25f, 2.0f), C2Vector(0.28125f, 1.0f), C2Vector(0.84375f, 1.0f), C2Vector(0.875f, 2.0f) };
-    static C2Vector s_moonScale[4] = { C2Vector(0.041666672f, 1.0f), C2Vector(0.16666667f, 1.5f), C2Vector(0.91666669f, 1.5f), C2Vector(0.99930561f, 1.0f) };
+    static C2Vector s_moonScale[4] = { C2Vector(0.041666672f, 1.0f), C2Vector(MOONSET, 1.5f), C2Vector(MOONRISE, 1.5f), C2Vector(0.99930561f, 1.0f) };
 
     DNInfo& info = DayNight::g_dnInfo;
     DNPlanets& planets = DayNight::g_planets;
@@ -1254,16 +1272,16 @@ void DayNight::SetPlanets() {
 
     float time = info.m_dayProgression;
 
-    if (time >= 0.22916667f && time < 0.5f) {
-        info.m_sunMoonPath = (time - 0.22916667f) * 3.6923077f;
+    if (time >= SUNRISE && time < NOON) {
+        info.m_sunMoonPath = (time - SUNRISE) * 3.6923077f;
         return;
     }
 
-    if (time >= 0.5f && time < 0.89583331f) {
-        info.m_sunMoonPath = 1.0f - (time - 0.5f) * 2.5263159f;
-    } else if (time >= 0.91666669f && time < 1.0f) {
-        info.m_sunMoonPath = (time - 0.91666669f) * 12.000003f;
-    } else if (time >= 0.0f && time < 0.16666667f) {
+    if (time >= NOON && time < SUNSET) {
+        info.m_sunMoonPath = 1.0f - (time - NOON) * 2.5263159f;
+    } else if (time >= MOONRISE && time < DAYEND) {
+        info.m_sunMoonPath = (time - MOONRISE) * 12.000003f;
+    } else if (time >= MIDNIGHT && time < MOONSET) {
         info.m_sunMoonPath = 1.0f - time * 6.0f;
     } else {
         info.m_sunMoonPath = 0.0f;
@@ -1749,15 +1767,15 @@ void DayNight::DrawSky(DNOverrideSky* sky, float weight) {
     CM2Model* parent = model->m_attachParent;
 
     if (parent) {
-        model->m_fFlags |= 0x80;
+        model->m_runtimeFlags |= 0x80;
     } else {
-        model->m_fFlags |= 0x8;
+        model->m_runtimeFlags |= 0x8;
     }
 
     if (parent) {
-        model->m_fFlags |= 0x20000;
+        model->m_runtimeFlags |= 0x20000;
     } else {
-        model->m_fFlags |= 0x10000;
+        model->m_runtimeFlags |= 0x10000;
     }
 
     sky->m_model->m_fadeAlpha = weight;
@@ -1770,15 +1788,15 @@ void DayNight::DrawSky(DNOverrideSky* sky, float weight) {
     parent = model->m_attachParent;
 
     if (parent) {
-        model->m_fFlags &= ~0x80u;
+        model->m_runtimeFlags &= ~0x80u;
     } else {
-        model->m_fFlags &= ~0x8u;
+        model->m_runtimeFlags &= ~0x8u;
     }
 
     if (parent) {
-        model->m_fFlags &= ~0x20000u;
+        model->m_runtimeFlags &= ~0x20000u;
     } else {
-        model->m_fFlags &= ~0x10000u;
+        model->m_runtimeFlags &= ~0x10000u;
     }
 }
 
@@ -2082,10 +2100,10 @@ void DayNight::DoAreaLights(CurrentLight* light, int32_t underwater) {
         uint32_t elapsed = now - override->m_lastTime;
         override->m_lastTime = now;
 
-        if (override->m_state == 1) {
+        if (override->m_state == AreaLightOverride::FADE_IN) {
             float fade = static_cast<float>(elapsed) / static_cast<float>(override->m_duration) + override->m_fade;
             override->m_fade = fade > 1.0f ? 1.0f : fade;
-        } else if (override->m_state == 2) {
+        } else if (override->m_state == AreaLightOverride::FADE_OUT) {
             float fade = override->m_fade - static_cast<float>(elapsed) / static_cast<float>(override->m_duration);
             override->m_fade = fade < 0.0f ? 0.0f : fade;
         }
@@ -2102,7 +2120,7 @@ void DayNight::DoAreaLights(CurrentLight* light, int32_t underwater) {
             }
         }
 
-        if (override->m_state == 2 && override->m_fade == 0.0f) {
+        if (override->m_state == AreaLightOverride::FADE_OUT && override->m_fade == 0.0f) {
             LightRec* rec = override->m_light;
             count--;
             rec->~LightRec();
@@ -2173,7 +2191,7 @@ void DayNight::UpdateFog() {
         }
 
         if (apply) {
-            DayNight::ApplyFogSettings(underwater ? &fog.m_underwaterFog : &fog.m_fog);
+            DayNight::ApplyFogSettings(underwater ? &fog.m_fogs.m_fog[SMOFog::UWFOG] : &fog.m_fogs.m_fog[SMOFog::FOG]);
 
             if (underwater && liquid && (liquid->m_flags & 0x40)) {
                 info.m_fog.m_end = info.m_fogGroup.m_end;
@@ -2426,7 +2444,7 @@ void DayNight::DNClouds::GenSphere(float radius) {
             texCoords->y = cosPhi * texRadius + 0.5f;
             texCoords++;
 
-            if (top || CMath::fequal(theta, 6.2831855f) || ++i >= 16) {
+            if (top || CMath::fequal(theta, TWO_PI) || ++i >= 16) {
                 break;
             }
 
@@ -2435,7 +2453,7 @@ void DayNight::DNClouds::GenSphere(float radius) {
 
         if (row) {
             bool prevPole = CMath::fequal(prevTheta, 0.0f);
-            bool pole = CMath::fequal(theta, 6.2831855f);
+            bool pole = CMath::fequal(theta, TWO_PI);
 
             for (uint32_t i = 0; i < 17; i++) {
                 *indices++ = (prevPole ? 0 : i & 0xF) + prevRowStart;
@@ -2465,7 +2483,7 @@ void DayNight::DNSky::GenSphere(float sphRadius) {
     uint16_t prevRowStart = 0;
     float prevTheta = 0.0f;
 
-    for (int32_t row = 0; row < 7; row++) {
+    for (int32_t row = 0; row < SKY_NUMBANDS; row++) {
         float theta = s_skyThetaTable[row] * 3.1415927f;
         float cosTheta = CMath::cos_(theta);
         float sinTheta = CMath::sin_(theta);
@@ -2474,7 +2492,7 @@ void DayNight::DNSky::GenSphere(float sphRadius) {
         bool top = CMath::fequal(theta, 0.0f);
 
         for (int32_t i = 0; ; ) {
-            float angle = i * 0.041666668f * 6.2831855f;
+            float angle = i * 0.041666668f * TWO_PI;
             verts->x = sinf(angle) * sinTheta * sphRadius;
             verts->y = sinTheta * cosf(angle) * sphRadius;
             verts->z = z;
@@ -2570,6 +2588,10 @@ void DayNight::LoadMap(int32_t mapId) {
     s_cvSkyCloudLOD = CVar::Register("SkyCloudLOD", nullptr, 0, "0", CWorldParam::CloudLODCallback, 1, false, nullptr, false);
     ConsoleCommandRegister("SkySunGlare", SkySunGlare, CATEGORY_GRAPHICS, "0, 1");
     DayNight::g_forceFullUpdate = 1;
+}
+
+// INLINED
+DayNight::DNOverrideSky::DNOverrideSky() : m_model(nullptr), m_animLengthMs(0), m_lastTimeOfDay(static_cast<uint32_t>(-2)), m_flags(0) {
 }
 
 // VERIFY: a23a774f manual
@@ -2674,7 +2696,7 @@ void DayNight::SetColors() {
         memset(&info.m_bands, 0xFF, sizeof(info.m_bands));
         info.m_bands.m_fogEnd = 1.0e10f;
         *reinterpret_cast<uint32_t*>(&info.m_bands.m_ambient) = 0xFF404040;
-        info.m_bands.m_fogStartMul = 0.5f;
+        info.m_bands.m_fogStartMul = DEFAULT_FOG_SCALER;
         info.m_bands.m_cloudTypeId = 0;
         info.m_bands.m_skyboxes[0].m_id = 0;
         info.m_bands.m_fogRate = 4.0f;
@@ -2815,7 +2837,7 @@ void DayNight::UpdateLighting() {
     info.m_faceAngle = angle;
 
     if (angle < 0.0f) {
-        info.m_faceAngle = angle + 6.2831855f;
+        info.m_faceAngle = angle + TWO_PI;
     }
 
     float storm = info.m_weatherIntensity * 4.0f;
@@ -2899,18 +2921,18 @@ DayNight::DNGlare::DNGlare() {
     this->m_occlusionQuery = nullptr;
     this->m_position.z = 0.0f;
     this->m_color = CImVector();
-    this->unk_003C[0] = 0.0f;
-    this->unk_003C[1] = 0.0f;
-    this->unk_003C[2] = 0.0f;
-    this->unk_003C[3] = 0.0f;
-    this->unk_003C[4] = 0.0f;
-    this->unk_003C[5] = 0.0f;
-    this->unk_003C[6] = 0.0f;
-    this->unk_003C[7] = 0.0f;
-    this->unk_005C[0] = 0;
-    this->unk_005C[1] = 0;
-    this->unk_005C[2] = 0;
-    this->unk_005C[3] = 0;
+    this->unused_003C[0] = 0.0f;
+    this->unused_003C[1] = 0.0f;
+    this->unused_003C[2] = 0.0f;
+    this->unused_003C[3] = 0.0f;
+    this->unused_003C[4] = 0.0f;
+    this->unused_003C[5] = 0.0f;
+    this->unused_003C[6] = 0.0f;
+    this->unused_003C[7] = 0.0f;
+    this->unused_005C[0] = 0;
+    this->unused_005C[1] = 0;
+    this->unused_005C[2] = 0;
+    this->unused_005C[3] = 0;
     this->m_alphaCurve[0].m_time = 0.0f;
     this->m_alphaCurve[0].m_value = 0.0f;
     this->m_planet = nullptr;
@@ -3024,8 +3046,8 @@ void DayNight::DNGlare::Render() {
     GxRsSet(GxRs_Culling, 0);
     GxRsSet(GxRs_DepthTest, 0);
     g_theGxDevicePtr->RsSet(GxRs_Texture0, gxTex);
-    GxRsSet(GxRs_ColorOp0, 0);
-    GxRsSet(GxRs_AlphaOp0, 0);
+    GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
     GxPrimVertexPtr(4, s_glareVertices, sizeof(C3Vector), nullptr, 0, &this->m_color, 0, s_glareTexCoords, sizeof(C2Vector), nullptr, 0);
     GxPrimIndexPtr(4, s_glareIndices);
     CGxBatch batch;
@@ -3074,7 +3096,7 @@ float DayNight::DNGlare::GetPointOcclusion() {
 float DayNight::DNGlare::GetQueryOcclusion() {
     uint32_t pixels = 0;
     uint32_t available;
-    GxQueryGetParam(this->m_occlusionQuery, GxQueryParam_Unk1, &available);
+    GxQueryGetParam(this->m_occlusionQuery, GxQueryParam_ResultAvailable, &available);
 
     if (!available || !GxQueryGetData(this->m_occlusionQuery, &pixels)) {
         pixels = this->m_occlusionPixels;
@@ -3247,7 +3269,7 @@ void DayNight::AddLightOverride(int32_t lightId, int32_t overrideId, uint32_t du
     entry->m_light = rec;
     entry->m_fade = 0.0f;
     entry->m_id = lightId;
-    entry->m_state = 1;
+    entry->m_state = AreaLightOverride::FADE_IN;
     entry->m_lastTime = OsGetAsyncTimeMs();
     entry->m_duration = duration;
     DayNight::ResetFogAccumulators(true);
@@ -3262,7 +3284,7 @@ void DayNight::RemoveLightOverride(int32_t lightId, uint32_t duration) {
         }
 
         AreaLightOverride* entry = &s_areaLightOverrides.m_data[i];
-        entry->m_state = 2;
+        entry->m_state = AreaLightOverride::FADE_OUT;
         entry->m_lastTime = OsGetAsyncTimeMs();
         entry->m_duration = duration;
         DayNight::ResetFogAccumulators(true);
@@ -3272,13 +3294,13 @@ void DayNight::RemoveLightOverride(int32_t lightId, uint32_t duration) {
 
 // VERIFY: 1d606d65 auto
 // OFFSET: 0x007F31C0
-void DayNight::SetBlendSky(uint32_t index, const char* sky, int32_t a3, float blend) {
+void DayNight::SetBlendSky(uint32_t index, const char* sky, int32_t flags, float blend) {
     if (index > 3) {
         return;
     }
 
     if (sky) {
-        DayNight::g_dnInfo.m_blendSkybox[index] = DayNight::GetOverrideSky(sky, a3);
+        DayNight::g_dnInfo.m_blendSkybox[index] = DayNight::GetOverrideSky(sky, flags);
         DayNight::g_dnInfo.m_blendSkyboxWeight[index] = blend;
         DayNight::g_dnInfo.m_blendSkyboxFlags[index] = 0;
     } else {

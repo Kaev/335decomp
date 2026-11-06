@@ -13,7 +13,7 @@ TSGrowableArray<Liquid::CMaterialSettings*> Liquid::CSettingsBank::s_settings;
 // VERIFY: 1d70e7aa manual
 // OFFSET: 0x008A2380
 void Liquid::CSettingsBank::Destroy() {
-    if (!--Liquid::s_unk_D43AF8) {
+    if (!--Liquid::s_settingsBankRefCount) {
         for (uint32_t i = 0; i < Liquid::CSettingsBank::s_settings.Count(); i++) {
             if (Liquid::CSettingsBank::s_settings[i]) {
                 Liquid::CSettingsBank::s_settings[i]->Destroy();
@@ -100,7 +100,7 @@ Liquid::CMaterialSettings* Liquid::CSettingsBank::GetSettings(uint32_t liquidTyp
             break;
         }
 
-        SysMsgPrintf(STATUS_ERROR, 2, "Settings Bank: Liquid type [%d] not found, defaulting to water!", liquidType);
+        SysMsgPrintf(SYSMSG_ERROR, 2, "Settings Bank: Liquid type [%d] not found, defaulting to water!", liquidType);
         liquidType = 1;
     }
 

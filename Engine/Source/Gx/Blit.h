@@ -25,6 +25,24 @@ class CRgb565 {
 
 class CArgb1555 {
     public:
+    enum : uint32_t {
+        eAlphaMask = 0x8000,
+        eNotAlphaMask = 0xFFFF7FFF,
+        eRedMask = 0x7C00,
+        eNotRedMask = 0xFFFF83FF,
+        eGreenMask = 0x3E0,
+        eNotGreenMask = 0xFFFFFC1F,
+        eBlueMask = 0x1F,
+        eNotBlueMask = 0xFFFFFFE0,
+    };
+
+    enum : uint32_t {
+        eAlphaS = 15,
+        eRedS = 10,
+        eGreenS = 5,
+        eBlueS = 0,
+    };
+
     /* 0000 */ uint16_t m_value;
 
     CArgb1555();
@@ -39,6 +57,11 @@ class CArgb4444 {
 
 class DxtColorBlock {
     public:
+    enum : uint32_t {
+        BPP = 2,
+        PIXEL_LSB_MASK = 3,
+    };
+
     class Tables {
         public:
         /* 0000 */ uint16_t m_oneThird5[32];
@@ -51,9 +74,9 @@ class DxtColorBlock {
 
     static Tables s_tables;
 
-    /* 0000 */ uint16_t m_color0;
-    /* 0002 */ uint16_t m_color1;
-    /* 0004 */ uint8_t m_indices[4];
+    /* 0000 */ CRgb565 m_color0;
+    /* 0002 */ CRgb565 m_color1;
+    /* 0004 */ uint8_t m_row[4]; // Four rows of four packed 2-bit color-table indices.
 };
 
 class Dxt1Block {
@@ -61,9 +84,14 @@ class Dxt1Block {
     /* 0000 */ DxtColorBlock m_color;
 };
 
+class Dxt3AlphaBlock {
+    public:
+    /* 0000 */ uint16_t m_row[4]; // Four rows of four packed 4-bit alpha values.
+};
+
 class Dxt3Block {
     public:
-    /* 0000 */ uint16_t m_alpha[4];
+    /* 0000 */ Dxt3AlphaBlock m_alpha;
     /* 0008 */ DxtColorBlock m_color;
 };
 

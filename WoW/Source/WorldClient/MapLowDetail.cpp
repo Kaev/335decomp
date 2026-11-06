@@ -1,4 +1,6 @@
 #include "MapLowDetail.h"
+#include "Engine/Source/Tempest/Color.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include <cmath>
 #include <cstring>
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
@@ -26,7 +28,7 @@ CMapAreaLow::CMapAreaLow() {
     this->m_horizonLink.m_next = nullptr;
     this->m_indexCount = 0;
     this->m_block = nullptr;
-    this->unk_0058 = 0;
+    this->m_flags = 0;
     this->m_heights = nullptr;
     this->m_holes = nullptr;
 }
@@ -62,9 +64,9 @@ void CMapLowDetail::Purge() {
 // OFFSET: 0x007CC0B0
 void CMapLowDetail::CullHorizonAreas(const C3Vector* pos) {
     float y = -(pos->y - 17066.666f);
-    float x = -(pos->x - 17066.666f) * 0.029999999f;
+    float x = -(pos->x - 17066.666f) * OO_COORD_TO_CHUNK;
     int32_t row = CMath::fint_(x - 0.5f);
-    y = y * 0.029999999f;
+    y = y * OO_COORD_TO_CHUNK;
     int32_t col = CMath::fint_(y - 0.5f);
     int32_t radius = static_cast<int32_t>(static_cast<int64_t>(World::s_horizonFarClipScale * World::s_farClip * 0.030000001f));
 
@@ -272,11 +274,11 @@ void CMap::RenderLowDetail(CMapAreaLow* area) {
     if (area->m_block) {
         CGxBuf* buf = area->m_block->m_buf;
 
-        if (!buf->unk_001C || !buf->unk_001D) {
+        if (!buf->m_hasData || !buf->m_valid) {
             CMap::BuildLowDetailGridVertices(area, buf);
         }
 
-        area->m_block->unk_0008 = CWorld::frameCnt;
+        area->m_block->m_lastUsedFrame = CWorld::frameCnt;
         GxPrimVertexPtr(area->m_block->m_buf, GxVBF_PC);
     } else {
         CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, 16, 545);
@@ -286,11 +288,11 @@ void CMap::RenderLowDetail(CMapAreaLow* area) {
 
     uint32_t count;
 
-    if (!(area->unk_0058 & 0x1) && area->m_indexCount == 3072) {
+    if (!(area->m_flags & 0x1) && area->m_indexCount == 3072) {
         GxRsSet(GxRs_Culling, 0);
         CGxBuf* indexBuf = CMap::lowDetailIndexBuf;
 
-        if (!indexBuf->unk_001C || !indexBuf->unk_001D) {
+        if (!indexBuf->m_hasData || !indexBuf->m_valid) {
             CMap::BuildLowDetailGridIndices(nullptr, 0, CMap::lowDetailIndexBuf);
             indexBuf = CMap::lowDetailIndexBuf;
         }
@@ -344,7 +346,7 @@ void CMap::BuildLowDetailGridVertices(CMapAreaLow* area, CGxBuf* buf) {
             vertex->p.x = x;
             vertex->p.y = y;
             vertex->p.z = area->m_heights[index++];
-            vertex->c = CImVector(0xFF, 0xFF, 0xFF, 0xFF);
+            vertex->c = CImVector(COLOR_WHITE_BGRA);
             vertex++;
             y -= 33.333332f;
         }
@@ -361,7 +363,7 @@ void CMap::BuildLowDetailGridVertices(CMapAreaLow* area, CGxBuf* buf) {
             vertex->p.x = x;
             vertex->p.y = y;
             vertex->p.z = area->m_heights[index++];
-            vertex->c = CImVector(0xFF, 0xFF, 0xFF, 0xFF);
+            vertex->c = CImVector(COLOR_WHITE_BGRA);
             vertex++;
             y -= 33.333332f;
         }
@@ -370,7 +372,7 @@ void CMap::BuildLowDetailGridVertices(CMapAreaLow* area, CGxBuf* buf) {
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 7d2e0b07 manual
@@ -405,7 +407,7 @@ void CMap::BuildLowDetailGridIndices(uint16_t* holes, int32_t pass, CGxBuf* buf)
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: f803b515 manual

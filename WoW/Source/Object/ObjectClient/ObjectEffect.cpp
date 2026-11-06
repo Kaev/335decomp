@@ -51,6 +51,14 @@ CObjectEffectModifier::CObjectEffectModifier() {
 }
 
 // INLINED
+CObjectEffectModifier::~CObjectEffectModifier() {
+    if (this->m_params) {
+        delete[] this->m_params;
+        this->m_params = nullptr;
+    }
+}
+
+// INLINED
 void CObjectEffectModifier::Init(const ObjectEffectModifierRec* rec) {
     this->m_inputType = rec->m_inputType;
     this->m_outputType = rec->m_outputType;
@@ -238,6 +246,42 @@ void InitObjectEffectStateMap() {
     s_objectEffectAnimStateMap[ANIM_CUSTOM_3].m_altStateID = 0;
 }
 
+// OFFSET: 0x006F2020
+CObjectEffectDef::~CObjectEffectDef() {
+    if (this->m_modifier) {
+        delete this->m_modifier;
+        this->m_modifier = nullptr;
+    }
+}
+
+// OFFSET: 0x006F3040
+CObjectEffectGroupDef::~CObjectEffectGroupDef() {
+    this->m_enterEffects.Clear();
+    this->m_loopEffects.Clear();
+    this->m_exitEffects.Clear();
+    this->m_eventEffects.Clear();
+}
+
+// OFFSET: 0x006F5830
+CObjectEffectPackageDef::~CObjectEffectPackageDef() {
+    for (OBJ_EFFECT_GROUP_DEF_REF_LIST_LOOKUP* lookup = this->m_stateGroupRefs.m_fulllist.Head(); lookup; lookup = this->m_stateGroupRefs.Next(lookup)) {
+        lookup->m_groupDefRefs.Clear();
+    }
+
+    this->m_stateGroupRefs.Clear();
+
+    for (OBJ_EFFECT_GROUP_DEF_REF_LIST_LOOKUP* lookup = this->m_eventGroupRefs.m_fulllist.Head(); lookup; lookup = this->m_eventGroupRefs.Next(lookup)) {
+        lookup->m_groupDefRefs.Clear();
+    }
+
+    this->m_eventGroupRefs.Clear();
+}
+
+// INLINED
+OBJ_EFFECT_GROUP_LOOKUP::~OBJ_EFFECT_GROUP_LOOKUP() {
+    this->m_effects.Clear();
+}
+
 // VERIFY: 56342ab3 auto
 // OFFSET: 0x006F2B40
 void ObjectEffectSystem_ShutDown() {
@@ -379,7 +423,7 @@ C3Vector CObjectEffect::GetWorldPosition() {
     CM2Model* model = object->GetObjectModel();
     C44Matrix transform;
 
-    if (model && model->IsLoaded(0, 0) && (model->m_fFlags & 0x8000)) {
+    if (model && model->IsLoaded(0, 0) && (model->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
         if (model->HasAttachment(this->m_def->m_attachment)) {
             transform = model->GetAttachmentWorldTransform(this->m_def->m_attachment);
         } else {
@@ -492,7 +536,7 @@ void CObjectEffect::PlayOneShot() {
     if (this->m_def->m_effectRecType == 1) {
         SE2SoundKitProperties properties;
         properties.ResetToDefaults();
-        properties.m_loopMode = 2;
+        properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
 
         if (!SI2::IsPlaying(&this->m_soundKitObject)) {
             SI2::PlaySoundKit(this->m_def->m_effectRecID, &position, &this->m_soundKitObject, &properties, 0, nullptr, 0, 0);
@@ -519,7 +563,7 @@ void CObjectEffect::TriggerLoopingEffect() {
             properties.ResetToDefaults();
             properties.m_fadeInTime = 0.7f;
             properties.m_fadeOutTime = 0.7f;
-            properties.m_loopMode = usage != 1;
+            properties.m_loopMode = static_cast<SE2_LOOP_MODE>(usage != 1);
 
             SI2::PlaySoundKit(this->m_def->m_effectRecID, &position, &this->m_soundKitObject, &properties, 0, nullptr, 0, 0);
             this->m_playCount++;

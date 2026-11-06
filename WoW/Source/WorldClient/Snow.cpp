@@ -1,9 +1,11 @@
 #include "MapWeather.h"
+#include "WoW/Source/Object/Types.h"
 #include <cmath>
 #include <cstdint>
 #include "Engine/Source/Base/Handle.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "Engine/Source/Gx/CGxBuf.h"
+#include "Engine/Source/Gx/CGxVertexPCT.h"
 #include "Engine/Source/Gx/CGxDevice/CGxShader.h"
 #include "Engine/Source/Gx/CGxTexFlags.h"
 #include "Engine/Source/Gx/Gx.h"
@@ -49,7 +51,7 @@ void Snow::InitFlake(SnowFlakeParticle* flake, float time, const C3Vector* origi
     float randomX = CRandom::ufloat_(g_rndSeed);
     C3Vector offset((randomX - 0.5f) * size.x, (randomY - 0.5f) * size.y, size.z * 0.0f);
     float randomAngle = CRandom::ufloat_(g_rndSeed);
-    float angle = (6.2831855f - this->m_intensity * 5.9341197f) * (randomAngle - 0.5f) - 1.5700001f;
+    float angle = (TWO_PI - this->m_intensity * 5.9341197f) * (randomAngle - 0.5f) - 1.5700001f;
     float c = cos(angle);
     float s = sin(angle);
     float baseSpeed = this->m_intensity * 5.9850001f + 0.015f;
@@ -65,7 +67,7 @@ void Snow::InitFlake(SnowFlakeParticle* flake, float time, const C3Vector* origi
     flake->m_position.z = offset.z - t * flake->m_velocity.z;
     Weather* weather = World::s_weather;
     C3Vector axis(0.0f, 0.0f, 0.0f);
-    CMath::sincos_(weather->m_facing - 1.5707964f, &axis.y, &axis.x);
+    CMath::sincos_(weather->m_facing - HALF_PI, &axis.y, &axis.x);
     float tilt = weather->m_speed * 0.055555556f;
 
     if (tilt < 0.0f) {
@@ -222,7 +224,7 @@ void Snow::UpdatePackets() {
             this->m_snowFlakePacketList.m_activePacketsCount--;
             this->m_snowFlakePacketList.m_freePacketsCount++;
             this->m_snowFlakePacketList.m_freePackets.LinkToTail(packet);
-        } else if (!packet->m_vertexBufHandle->unk_001C || !packet->m_vertexBufHandle->unk_001D) {
+        } else if (!packet->m_vertexBufHandle->m_hasData || !packet->m_vertexBufHandle->m_valid) {
             RealizeParticlePacket(packet);
         }
 
@@ -240,9 +242,9 @@ void Snow::UpdatePackets() {
         WOWGUID active = ClntObjMgrGetActivePlayer();
 
         if (active) {
-            CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(active, TYPEMASK_PLAYER, __FILE__, __LINE__));
+            CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(active, TYPE_PLAYER, __FILE__, __LINE__));
 
-            if (player && player->m_movement->m_spline && !(player->m_movement->m_spline->m_flags & 0x400)) {
+            if (player && player->m_movement->m_spline && !(player->m_movement->m_spline->m_flags & SPLINEFLAG_NO_SPLINE)) {
                 C3Spline_CatmullRom* spline = player->GetSpline();
 
                 if (spline && spline->m_pointCount > 2) {
@@ -448,8 +450,8 @@ void Snow::RenderPacketsSW() {
         }
 
         float age = (now - packet->m_packetStartTick) * 0.0009765625f;
-        CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, 24, 3 * packet->m_currParticle);
-        uint8_t* vertices = reinterpret_cast<uint8_t*>(g_theGxDevicePtr->BufLock(buf));
+        CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(CGxVertexPCT), 3 * packet->m_currParticle);
+        CGxVertexPCT* vertices = reinterpret_cast<CGxVertexPCT*>(g_theGxDevicePtr->BufLock(buf));
         uint32_t vertexCount = 0;
 
         for (uint32_t i = 0; i < packet->m_currParticle; i++) {
@@ -481,20 +483,20 @@ void Snow::RenderPacketsSW() {
             C3Vector relative(position.x - camera.x, position.y - camera.y, position.z - camera.z);
 
             for (uint32_t j = 0; j < 3; j++) {
-                C3Vector* p = reinterpret_cast<C3Vector*>(vertices);
+                C3Vector* p = &vertices->p;
                 p->x = relative.x + corners[j].x;
                 p->y = relative.y + corners[j].y;
                 p->z = relative.z + corners[j].z;
-                *reinterpret_cast<CImVector*>(vertices + 12) = color;
-                *reinterpret_cast<C2Vector*>(vertices + 16) = s_texCoords[j];
-                vertices += 24;
+                vertices->c = color;
+                vertices->tc = s_texCoords[j];
+                vertices++;
             }
 
             vertexCount += 3;
         }
 
         g_theGxDevicePtr->BufUnlock(buf, 0);
-        buf->unk_001C = 1;
+        buf->m_hasData = 1;
 
         if (vertexCount) {
             GxPrimVertexPtr(buf, GxVBF_PCT);

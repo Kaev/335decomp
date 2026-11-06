@@ -20,8 +20,55 @@ class SpellVisualEffectNameRec;
 class SpellVisualKitModelAttachRec;
 class SpellVisualKitRec;
 
+enum UNITEFFECTSPECIALS : int32_t {
+    SPECIALEFFECT_FOOTSTEPSPRAYWATER = 0,
+    SPECIALEFFECT_FOOTSTEPSPRAYWATERWALK = 1,
+    SPECIALEFFECT_UNDERWATERBUBBLES = 2,
+    SPECIALEFFECT_COLDBREATH = 3,
+    SPECIALEFFECT_LOOTART = 4,
+    SPECIALEFFECT_LEVELUP = 5,
+    SPECIALEFFECT_MOUNTPOOF = 6,
+    SPECIALEFFECT_INEBRIATEDBUBBLES = 7,
+    SPECIALEFFECT_MEETINGSTONEJOIN = 8,
+    SPECIALEFFECT_REPUTATION = 9,
+    SPECIALEFFECT_RESISTSPELL = 10,
+    SPECIALEFFECT_ACHIEVEMENTBASE = 11,
+    NUM_UNITEFFECTSPECIALS = 12,
+};
+
 class CEffect {
     public:
+    // Client effect lifecycle/creation state. Names describe current behavior.
+    enum EFFECT_FLAGS : uint32_t {
+        EFFECT_NONE                                  = 0x00000000u,
+        EFFECT_SOUND_LOOPING                         = 0x00000001u,
+        EFFECT_WORLD_SPACE                           = 0x00000002u,
+        EFFECT_FREEZE_ANIMATION                      = 0x00000004u,
+        EFFECT_LOOT_ART                              = 0x00000008u,
+        EFFECT_PLAY_CAMERA_SHAKE                     = 0x00000010u,
+        EFFECT_CALLBACK_LIFETIME                     = 0x00000020u,
+        EFFECT_PRECAST                               = 0x00000040u,
+        EFFECT_SET_SPECIAL_IDLE                      = 0x00000080u,
+        EFFECT_DESTROY_PENDING                       = 0x00000100u,
+        EFFECT_SCALE_TO_TARGET                       = 0x00000200u,
+        EFFECT_SUPPRESS_SOUND                        = 0x00000400u,
+        EFFECT_POST_INITIALIZED                      = 0x00000800u,
+        EFFECT_AURA_ANIMATION                        = 0x00001000u,
+        EFFECT_USE_SUPPLIED_POSITION                 = 0x00002000u,
+        EFFECT_FOLLOW_SOURCE_POSITION                = 0x00004000u,
+        EFFECT_FIXED_FACING                          = 0x00008000u,
+        EFFECT_ATTACHMENT_OFFSET                     = 0x00010000u,
+        EFFECT_PERSIST_ON_PARTIAL_CLEAR              = 0x00020000u,
+        EFFECT_LIGHTNING_CONNECTION                  = 0x00040000u,
+        EFFECT_ITEM_VISUAL                           = 0x00080000u,
+        EFFECT_SOUND_ONLY                            = 0x00100000u,
+        EFFECT_DETACHED_SOUND                        = 0x00200000u,
+        EFFECT_IGNORE_EMISSION_DISTANCE              = 0x00400000u,
+        EFFECT_MOUNT_AURA                            = 0x00800000u,
+        EFFECT_RAW_ANIMATION_ID                      = 0x01000000u,
+        EFFECT_IGNORE_PARENT_EFFECTIVE_ALPHA         = 0x02000000u,
+    };
+
     void ApplyItemVisual();
     static void ApplyItemVisualByItemId(int32_t id, const WOWGUID& guid, void* param, bool success);
     static void MountTransitionCacheCB(int32_t id, const WOWGUID& guid, void* param, bool success);
@@ -51,29 +98,29 @@ class CEffect {
     /* 0034 */ SE2SoundKitObject m_soundKitObject;
     /* 0048 */ uint32_t m_flags;
     /* 004C */ LightningObject* m_lightning [12];
-    /* 007C */ uint32_t unk_007C;
-    /* 0080 */ uint32_t unk_0080;
-    /* 0084 */ uint32_t unk_0084;
+    /* 007C */ uint32_t unknown_007C;
+    /* 0080 */ uint32_t unknown_0080;
+    /* 0084 */ uint32_t unknown_0084;
     /* 0088 */ float m_facing;
-    /* 008C */ int32_t unk_008C;
+    /* 008C */ int32_t m_lightningAttachment;
     /* 0090 */ MountTransitionObject* m_mountTransition;
     /* 0094 */ int32_t m_pendingCacheId;
     /* 0098 */ int32_t m_displayId;
     /* 009C */ int32_t m_itemSlot;
-    /* 00A0 */ uint32_t unk_00A0;
+    /* 00A0 */ uint32_t m_fadeTime;
     /* 00A4 */ C3Vector m_position;
     /* 00B0 */ C3Vector m_worldPosition;
-    /* 00BC */ uint32_t unk_00BC;
+    /* 00BC */ uint32_t unknown_00BC;
     /* 00C0 */ WOWGUID m_transportGuid;
-    /* 00C8 */ uint32_t unk_00C8;
+    /* 00C8 */ uint32_t m_startTime;
     /* 00CC */ uint32_t m_expireTime;
     /* 00D0 */ uint32_t unk_00D0;
     /* 00D4 */ uint32_t m_attachToModel;
     /* 00D8 */ uint32_t m_attachToMount;
-    /* 00DC */ uint32_t unk_00DC;
-    /* 00E0 */ float unk_00E0;
-    /* 00E4 */ float unk_00E4;
-    /* 00E8 */ float unk_00E8;
+    /* 00DC */ uint32_t unknown_00DC;
+    /* 00E0 */ float unknown_00E0;
+    /* 00E4 */ float unknown_00E4;
+    /* 00E8 */ float m_alpha;
     /* 00EC */ CImVector m_color;
     /* 00F0 */ CMapEntity* m_mapEntity;
     /* 00F4 */ int32_t m_refCount;
@@ -82,14 +129,14 @@ class CEffect {
     /* 0100 */ const SpellVisualKitModelAttachRec* m_attachRec;
     /* 0104 */ CEffect** m_prevLink;
     /* 0108 */ CEffect* m_next;
-    /* 010C */ uint32_t unk_010C;
+    /* 010C */ uint32_t unknown_010C;
 
     CEffect();
     ~CEffect();
     void AddFishingLine(CGObject_C* object, const WOWGUID& target);
     static void CreateModelFromEffect(CM2Model* model, void* arg);
-    void AddAnimKitEffect(int32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags, uint32_t a5);
-    void AddSoundEffect(int32_t soundId, int32_t a2, int32_t spellId, const C3Vector* position, CGObject_C* object, uint32_t a6);
+    void AddAnimKitEffect(int32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags, uint32_t fadeTime);
+    void AddSoundEffect(int32_t soundId, int32_t expireTime, int32_t spellId, const C3Vector* position, CGObject_C* object, uint32_t fadeTime);
     static void __stdcall DestroyMatchingEffects(CGObject_C* object, const SpellVisualEffectNameRec* effectName, int32_t attachType, int32_t spellId, int32_t kitId, const SpellVisualKitModelAttachRec* attach);
     static void EffectEvent(CM2Model* model, uint32_t boneId, uint32_t eventId, uint32_t data, const C3Vector* position, uint32_t time, uint64_t param);
     void AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKitRec* kit, const SpellVisualEffectNameRec* effectName, const WOWGUID* target, const WOWGUID* source, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), const C3Vector* position, uint32_t a10, const SpellVisualKitModelAttachRec* attach);
@@ -101,11 +148,11 @@ class CEffect {
     int32_t UpdateAttachment();
     void InitLightningEndpoint();
     void LinkTo(CEffect** head);
-    void AddLightning(int32_t a2, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
+    void AddLightning(int32_t expireTime, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
     void AddMountTransition(uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid);
     void InitAtPosition(int32_t spellId, const SpellVisualKitRec* kit, const SpellVisualEffectNameRec* effectName, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), const C3Vector* position, uint32_t a8, WOWGUID transport);
-    void CreateProceduralEffectImpl(int32_t a2, float param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
-    void InitProceduralEffect(int32_t a2, int32_t param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
+    void CreateProceduralEffectImpl(int32_t expireTime, float param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
+    void InitProceduralEffect(int32_t expireTime, int32_t param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags);
     void MoveToDestroyList();
     void ReleaseLightningRef();
     void EffectUpdate();

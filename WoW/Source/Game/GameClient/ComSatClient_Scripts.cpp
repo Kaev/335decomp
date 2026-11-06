@@ -59,7 +59,11 @@ static int32_t Script_VoiceEnumerateOutputDevices(lua_State* L) {
 
     int32_t index = static_cast<int32_t>(lua_tonumber(L, 1));
 
+#if defined(WOWDECOMP_ARCH_64)
+    if (index < 0 || static_cast<uint32_t>(index) >= sizeof(devices) / sizeof(devices[0]) || comsat->EnumerateOutputDevices(devices, 20) <= index) {
+#else
     if (comsat->EnumerateOutputDevices(devices, 20) <= index) {
+#endif
         lua_pushnil(L);
     } else {
         lua_pushstring(L, devices[index].m_name);
@@ -88,7 +92,11 @@ static int32_t Script_VoiceEnumerateCaptureDevices(lua_State* L) {
 
     int32_t index = static_cast<int32_t>(lua_tonumber(L, 1));
 
+#if defined(WOWDECOMP_ARCH_64)
+    if (index < 0 || static_cast<uint32_t>(index) >= sizeof(devices) / sizeof(devices[0]) || comsat->EnumerateCaptureDevices(devices, 20) <= index) {
+#else
     if (comsat->EnumerateCaptureDevices(devices, 20) <= index) {
+#endif
         lua_pushnil(L);
     } else {
         lua_pushstring(L, devices[index].m_name);
@@ -212,15 +220,15 @@ static int32_t Script_GetVoiceSessionInfo(lua_State* L) {
         }
 
         switch (s_comsatData[i].m_type) {
-            case 2:
+            case COMSATDATA::SESSION_TYPE::PARTY:
                 lua_pushstring(L, FrameScript_GetText("CHAT_MSG_PARTY", -1, GENDER_NOT_APPLICABLE));
                 break;
 
-            case 3:
+            case COMSATDATA::SESSION_TYPE::RAID:
                 lua_pushstring(L, FrameScript_GetText("CHAT_MSG_RAID", -1, GENDER_NOT_APPLICABLE));
                 break;
 
-            case 1:
+            case COMSATDATA::SESSION_TYPE::BATTLEGROUND:
                 lua_pushstring(L, FrameScript_GetText("CHAT_MSG_BATTLEGROUND", -1, GENDER_NOT_APPLICABLE));
                 break;
 
@@ -347,7 +355,7 @@ static int32_t Script_SetActiveVoiceChannelBySessionID(lua_State* L) {
     int32_t id = static_cast<int32_t>(lua_tonumber(L, 1));
 
     if (id <= 0) {
-        CGChat::SetActiveVoiceSession(nullptr, 4, -1);
+        CGChat::SetActiveVoiceSession(nullptr, COMSATDATA::SESSION_TYPE::NONE, -1);
         lua_pushnumber(L, 1.0);
         return 1;
     }

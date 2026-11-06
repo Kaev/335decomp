@@ -29,12 +29,12 @@ CMapObjDefGroup::CMapObjDefGroup() {
     this->m_entityLinkList.SetLinkOffset(offsetof(CMapBaseObjLink, m_refLink));
     this->m_lightLinkList.SetLinkOffset(offsetof(CMapBaseObjLink, m_refLink));
     this->m_unkLinkList.SetLinkOffset(offsetof(CMapBaseObjLink, m_refLink));
-    this->m_type |= 0x10;
+    this->m_type |= CMapBaseObj::Type_MapObjDefGroup;
     this->m_flags = static_cast<MapObjFlag>(this->m_flags | MAPOBJ_FLAG_UNPLACED);
     this->m_groupNum = -1;
     this->m_unkFlags = -1;
-    this->unk_0058 = 0;
-    this->unk_0064 = 0;
+    this->unused_0058 = 0;
+    this->unused_0064 = 0;
     this->m_subzoneName = nullptr;
     this->m_liquidInstance = nullptr;
 }
@@ -75,11 +75,11 @@ CMapObjDef::CMapObjDef() {
     this->m_argbColor = 0;
     this->m_nameId = 0;
     this->m_owner = nullptr;
-    this->unk_00F8 = 0;
-    this->m_type |= 0x8;
+    this->unused_00F8 = 0;
+    this->m_type |= CMapBaseObj::Type_MapObjDef;
     this->m_doodadSet = 0;
     this->m_nameSet = 0;
-    this->unk_0108 = 0;
+    this->unused_0108 = 0;
     this->m_objectGuid = WOWGUID();
     this->m_unkFlags = 0xFFFF;
 }
@@ -126,12 +126,12 @@ void CMapObjDefGroup::SetSequenceFinishedCallback(M2SequenceCallback callback, u
     for (CMapBaseObjLink* link = this->m_doodadDefLinkList.Head(); link; link = this->m_doodadDefLinkList.Next(link)) {
         CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(link->m_owner);
 
-        if (doodadSet && !doodadDef->unk_016C) {
+        if (doodadSet && !doodadDef->m_doodadSet) {
             break;
         }
 
-        if (doodadDef->m_model && doodadDef->unk_016C == doodadSet) {
-            doodadDef->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), param);
+        if (doodadDef->m_model && doodadDef->m_doodadSet == doodadSet) {
+            doodadDef->m_model->SetSequenceCallback(callback, param);
         }
     }
 }
@@ -161,12 +161,12 @@ void CMapObjDefGroup::SetEventCallback(M2EventCallback callback, uint64_t param,
     for (CMapBaseObjLink* link = this->m_doodadDefLinkList.Head(); link; link = this->m_doodadDefLinkList.Next(link)) {
         CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(link->m_owner);
 
-        if (doodadSet && !doodadDef->unk_016C) {
+        if (doodadSet && !doodadDef->m_doodadSet) {
             break;
         }
 
-        if (doodadDef->m_model && doodadDef->unk_016C == doodadSet) {
-            doodadDef->m_model->SetEventCallback(reinterpret_cast<void*>(callback), param);
+        if (doodadDef->m_model && doodadDef->m_doodadSet == doodadSet) {
+            doodadDef->m_model->SetEventCallback(callback, param);
         }
     }
 }
@@ -227,7 +227,7 @@ void CMapObjDefGroup::Update(const C44Matrix& matrix) {
     this->m_flags = static_cast<MapObjFlag>(this->m_flags | MAPOBJ_FLAG_UNPLACED);
 
     for (CMapBaseObjLink* link = this->m_doodadDefLinkList.Head(); link; link = this->m_doodadDefLinkList.Next(link)) {
-        static_cast<CMapDoodadDef*>(link->m_owner)->UpdateMatrixOnly(matrix);
+        static_cast<CMapDoodadDef*>(link->m_owner)->Update(matrix);
     }
 
     for (CMapBaseObjLink* link = this->m_entityLinkList.Head(); link; link = this->m_entityLinkList.Next(link)) {
@@ -241,11 +241,11 @@ void CMapObjDefGroup::SetSequence(uint32_t sequence, int32_t a3, uint16_t doodad
     for (CMapBaseObjLink* link = this->m_doodadDefLinkList.Head(); link; link = this->m_doodadDefLinkList.Next(link)) {
         CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(link->m_owner);
 
-        if (doodadSet && !doodadDef->unk_016C) {
+        if (doodadSet && !doodadDef->m_doodadSet) {
             break;
         }
 
-        if (doodadDef->m_model && doodadDef->unk_016C == doodadSet) {
+        if (doodadDef->m_model && doodadDef->m_doodadSet == doodadSet) {
             doodadDef->m_model->SetBoneSequence(0xFFFFFFFF, sequence, 0xFFFFFFFF, 0, 1.0f, 1, 1);
         }
     }
@@ -349,11 +349,11 @@ int32_t CMapObjDef::MoveDoodadDefs(CMapObjDef* source, uint16_t doodadSet, CMapO
             CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(doodadLink->m_owner);
             next = group->m_doodadDefLinkList.Next(doodadLink);
 
-            if (!doodadDef->unk_016C) {
+            if (!doodadDef->m_doodadSet) {
                 break;
             }
 
-            if (doodadDef->unk_016C != doodadSet) {
+            if (doodadDef->m_doodadSet != doodadSet) {
                 continue;
             }
 
@@ -365,7 +365,7 @@ int32_t CMapObjDef::MoveDoodadDefs(CMapObjDef* source, uint16_t doodadSet, CMapO
             }
 
             CMapObjDef::LinkDoodadDef(doodadDef, target, 0);
-            doodadDef->unk_016C = targetDoodadSet;
+            doodadDef->m_doodadSet = targetDoodadSet;
         }
     }
 
@@ -381,18 +381,18 @@ void CMapObjDef::SetDoodadEmittersIgnoresDistance(CMapObjDef* mapObjDef, int32_t
         for (CMapBaseObjLink* doodadLink = group->m_doodadDefLinkList.Head(); doodadLink; doodadLink = group->m_doodadDefLinkList.Next(doodadLink)) {
             CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(doodadLink->m_owner);
 
-            if (!doodadDef->unk_016C) {
+            if (!doodadDef->m_doodadSet) {
                 break;
             }
 
-            if (doodadDef->unk_016C != doodadSet || !doodadDef->m_model) {
+            if (doodadDef->m_doodadSet != doodadSet || !doodadDef->m_model) {
                 continue;
             }
 
             for (uint32_t i = 0;; i++) {
                 CM2Model* model = doodadDef->m_model;
 
-                if (!(model->m_fFlags & 0x1)) {
+                if (!(model->m_runtimeFlags & 0x1)) {
                     model->WaitForLoad(nullptr);
                 }
 
@@ -402,16 +402,16 @@ void CMapObjDef::SetDoodadEmittersIgnoresDistance(CMapObjDef* mapObjDef, int32_t
 
                 model = doodadDef->m_model;
 
-                if (!(model->m_fFlags & 0x1)) {
+                if (!(model->m_runtimeFlags & 0x1)) {
                     model->WaitForLoad(nullptr);
                 }
 
                 CParticleEmitter2* emitter = model->m_particleEmitters[i];
 
                 if (ignore) {
-                    emitter->m_flags |= 0x400000;
+                    emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::IGNORE_DISTANCE;
                 } else {
-                    emitter->m_flags &= ~0x400000u;
+                    emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::IGNORE_DISTANCE;
                 }
             }
         }
@@ -443,17 +443,17 @@ void CMapObjDef::SetDoodadsEnabled(CMapObjDef* mapObjDef, int32_t enable, uint16
             CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(doodadLink->m_owner);
             next = group->m_doodadDefLinkList.Next(doodadLink);
 
-            if (!doodadDef->unk_016C) {
+            if (!doodadDef->m_doodadSet) {
                 break;
             }
 
-            if (doodadDef->unk_016C != doodadSet || !doodadDef->m_model) {
+            if (doodadDef->m_doodadSet != doodadSet || !doodadDef->m_model) {
                 continue;
             }
 
             if (enable) {
                 doodadDef->m_flags = static_cast<MapObjFlag>(doodadDef->m_flags & ~(MAPOBJ_FLAG_DISABLED | MAPOBJ_FLAG_NO_HITTEST));
-                doodadDef->unk_007C &= ~0xE0u;
+                doodadDef->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LIQUID_CACHE_MASK;
                 CMap::LinkDoodadDefToMapObjDefs(doodadDef, mapObjDef);
                 continue;
             }
@@ -465,7 +465,7 @@ void CMapObjDef::SetDoodadsEnabled(CMapObjDef* mapObjDef, int32_t enable, uint16
                 parentNext = doodadDef->m_parentLinkList.Next(parentLink);
                 CMapBaseObj* parent = parentLink->m_ref;
 
-                if (!(parent->m_type & 0x10) || parent->m_parentLinkList.Head()->m_ref != mapObjDef) {
+                if (!(parent->m_type & CMapBaseObj::Type_MapObjDefGroup) || parent->m_parentLinkList.Head()->m_ref != mapObjDef) {
                     CMap::FreeBaseObjLink(parentLink);
                 }
             }

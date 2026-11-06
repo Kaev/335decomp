@@ -16,6 +16,16 @@ class CMovementStatus;
 
 class CMovementShared : public CPassenger {
     public:
+    // Runtime integration selector built by PlotUnitMovement, separate from MovementFlags.
+    enum PLOT_MOVEMENT_FLAGS : uint32_t {
+        PLOT_NONE                = 0,
+        PLOT_FORWARD_BACKWARD    = 0x01,
+        PLOT_TURN                = 0x02,
+        PLOT_STRAFE              = 0x04,
+        PLOT_PITCH               = 0x08,
+        PLOT_ASCEND_DESCEND      = 0x10,
+    };
+
     void ResetFallOnControlLoss();
     void Disable();
     using CPassenger::GetPosition;
@@ -30,10 +40,10 @@ class CMovementShared : public CPassenger {
 
     /* 0030 */ TSLink<void> m_globalUnitsLink;
     /* 0038 */ C3Vector m_groundNormal;
-    /* 0044 */ uint32_t m_flags;
-    /* 0048 */ uint16_t m_flags2;
+    /* 0044 */ uint32_t m_flags; // MovementFlags
+    /* 0048 */ uint16_t m_flags2; // MovementFlags2
     /* 004A */ uint8_t m_transportSeat;
-    /* 004B */ uint8_t unk_004B;
+    /* 004B */ uint8_t unknown_004B;
     /* 004C */ C3Vector m_anchorPos;
     /* 0058 */ float m_anchorFacing;
     /* 005C */ float m_anchorPitch;

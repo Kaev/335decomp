@@ -10,6 +10,22 @@
 struct CGxString;
 class CTexture;
 
+enum WORLDTEXT_STYLE : uint32_t {
+    WT_DAMAGE = 0,
+    WT_ABSORB = 1,
+    WT_CRIT = 2,
+    WT_MISS = 3,
+    WT_XPGAIN = 4,
+    WT_HONORGAIN = 5,
+    WT_HEAL = 6,
+    WT_CRIT_HEAL = 7,
+    WT_BUILDING_DAMAGE = 8,
+    WT_BUILDING_HEAL = 9,
+    WT_THREAT = 10,
+    NUM_WORLDTEXTTYPES = 11,
+    WT_ALL = 11, // Deletion selector; not an index into the style table.
+};
+
 struct WORLDTEXTTYPE {
     /* 0000 */ float m_ascendDistance;
     /* 0004 */ uint32_t m_fadeInTime;
@@ -28,7 +44,7 @@ struct SWorldTextIcon {
 };
 
 struct WORLDTEXTSTRING : public CHandleObject {
-    /* 0008 */ uint32_t m_type;
+    /* 0008 */ WORLDTEXT_STYLE m_type; // NUM_WORLDTEXTTYPES is the initial unset marker; live styles index the table.
     /* 000C */ float m_halfWidth;
     /* 0010 */ float m_halfHeight;
     /* 0014 */ C3Vector m_position;

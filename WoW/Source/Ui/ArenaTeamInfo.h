@@ -9,6 +9,31 @@
 struct lua_State;
 class CDataStore;
 
+// SMSG_ARENA_TEAM_COMMAND_RESULT result word, separate from command/event IDs.
+// Unknown results retain the original silent default.
+enum ARENA_TEAM_COMMAND_RESULT : uint32_t {
+    ARENA_RESULT_SUCCESS                                     = 0,
+    ARENA_RESULT_INTERNAL                                    = 1,
+    ARENA_RESULT_ALREADY_IN_TEAM                             = 2,
+    ARENA_RESULT_PLAYER_ALREADY_IN_TEAM                      = 3,
+    ARENA_RESULT_ALREADY_INVITED                             = 4,
+    ARENA_RESULT_PLAYER_ALREADY_INVITED                      = 5,
+    ARENA_RESULT_NAME_INVALID                                = 6,
+    ARENA_RESULT_NAME_EXISTS                                 = 7,
+    // Quit command 3 reports leader-cannot-leave; others report permissions.
+    ARENA_RESULT_LEADER_CANNOT_LEAVE_OR_NO_PERMISSION        = 8,
+    ARENA_RESULT_NOT_IN_TEAM                                 = 9,
+    ARENA_RESULT_PLAYER_NOT_IN_TEAM                          = 10,
+    ARENA_RESULT_PLAYER_NOT_FOUND                            = 11,
+    ARENA_RESULT_NOT_ALLIED                                  = 12,
+    ARENA_RESULT_IGNORING_YOU                                = 19,
+    ARENA_RESULT_TARGET_TOO_LOW                              = 21,
+    ARENA_RESULT_TARGET_TOO_HIGH                             = 22,
+    ARENA_RESULT_TOO_MANY_MEMBERS                            = 23,
+    ARENA_RESULT_TEAM_NOT_FOUND                              = 27,
+    ARENA_RESULT_TEAMS_LOCKED                                = 30,
+};
+
 struct ArenaTeamMember {
     /* 0000 */ WOWGUID m_guid;
     /* 0008 */ char m_name[48];
@@ -23,7 +48,7 @@ struct ArenaTeamMember {
     /* 0058 */ uint32_t m_personalRating;
     /* 005C */ float m_matchmakerRatingBefore;
     /* 0060 */ float m_matchmakerRatingAfter;
-    /* 0064 */ uint32_t unk_0064;
+    /* 0064 */ uint32_t unused_0064;
 };
 
 struct ArenaTeam {
@@ -49,10 +74,22 @@ struct ArenaTeamSort {
 
 class CGArenaTeamInfo {
     public:
+    // Arena roster keys and exclusive sort-order bound;raw reorder API retained.
+    enum SORT_COLUMN : int32_t {
+        COLUMN_NAME = 0,
+        COLUMN_CLASS = 1,
+        COLUMN_WEEK_GAMES = 2,
+        COLUMN_WEEK_WINS = 3,
+        COLUMN_SEASON_GAMES = 4,
+        COLUMN_SEASON_WINS = 5,
+        COLUMN_PERSONAL_RATING = 6,
+        NUM_COLUMNS = 7,
+    };
+
     static ArenaTeam m_arenaTeams[3];
     static int32_t m_showOffline;
     static uint32_t m_nextAllowedQuery[3];
-    static ArenaTeamSort m_sortOrder[7];
+    static ArenaTeamSort m_sortOrder[CGArenaTeamInfo::SORT_COLUMN::NUM_COLUMNS];
     static WOWGUID m_selectedMember;
     static void EnterWorld();
     static void InitializeGame();

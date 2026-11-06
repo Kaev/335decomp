@@ -18,6 +18,18 @@ struct SIMPLEANIMNODE : public TSLinkedNode<SIMPLEANIMNODE> {
 
 class CSimpleAnimGroup : public CScriptObject {
     public:
+    enum GROUP_FLAGS : int32_t {
+        FLAG_NONE = 0,
+        FLAG_XML_LOAD_MARKER = 1,
+        FLAG_FINISH_REQUESTED = 0x2,
+        FLAG_PAUSED = 0x4,
+        FLAG_LOOP_INVERSE_PENDING = 0x8,
+        FLAG_FINISHED_CALLBACKS = 0x10,
+        FLAG_STOPPING = 0x20,
+        FLAG_PAUSE_TRANSITION_MASK = 0xC,
+        FLAG_STOP_TRANSITION_MASK = 0x28,
+    };
+
     static int32_t s_metatable;
     static int32_t s_objectType;
     static const char* s_objectTypeName;
@@ -40,10 +52,10 @@ class CSimpleAnimGroup : public CScriptObject {
     /* 0078 */ FrameScript_Object::ScriptIx m_onUpdate;
     /* 0080 */ FrameScript_Object::ScriptIx m_onLoop;
     /* 0088 */ uint16_t m_flags;
-    /* 008A */ uint8_t unk_008A[2];
+    /* 008A */ uint8_t unused_008A[2];
     /* 008C */ int8_t m_loopType;
     /* 008D */ int8_t m_loopState;
-    /* 008E */ uint8_t unk_008E[2];
+    /* 008E */ uint8_t unused_008E[2];
     /* 0090 */ int32_t m_currentOrder;
     /* 0094 */ float m_elapsed;
     /* 0098 */ float m_duration;

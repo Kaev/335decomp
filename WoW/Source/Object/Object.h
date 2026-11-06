@@ -12,12 +12,13 @@ class CGObjectData;
 
 class CGObject {
     public:
-    static const uint32_t s_savedFields[3];
+    static const int32_t NUM_SAVED_FIELDS = 3;
+    static const uint32_t s_savedFields[NUM_SAVED_FIELDS];
 
-    static int32_t GetSavedIndexFromDataIndex(uint32_t index);
+    static int32_t GetSavedIndexFromDataIndex(uint32_t index, uint32_t unused_count, uint32_t unused_local);
     static int32_t TotalFieldsSaved();
 
-    /* 0004 */ uint32_t unk_0004;
+    /* 0004 */ uint32_t unknown_0004;
     /* 0008 */ CGObjectData* m_obj;
     /* 000C */ void* m_objMirror;
     /* 0010 */ uint32_t m_heapIndex;
@@ -28,8 +29,14 @@ class CGObject {
 
 class CGObjectData {
     public:
+    // Descriptor spans are measured in DWORDs.
+    enum FIELD_SIZE : uint32_t {
+        OBJECT_FIELD_GUID_SIZE = 2,
+    };
+
+
     /* 0000 */ WOWGUID m_guid;
-    /* 0008 */ TypeMask m_type;
+    /* 0008 */ OBJECT_TYPE m_type;
     /* 000C */ uint32_t m_entryID;
     /* 0010 */ float m_scale;
     /* 0014 */ uint32_t m_pad;

@@ -18,7 +18,7 @@ class CAsyncObject {
     /* 0010 */ void* m_userPostloadCallback;
     /* 0014 */ void* m_userPostUnloadCallback;
     /* 0018 */ CAsyncQueue* m_queue;
-    /* 001C */ uint32_t unk_001C;
+    /* 001C */ uint32_t m_queuedFrame;
     /* 0020 */ uint8_t m_priority;
     /* 0021 */ int8_t m_isProcessed;
     /* 0022 */ int8_t m_isRead;
@@ -29,6 +29,32 @@ class CAsyncObject {
     /* 0028 */ TSLink<CAsyncObject> m_link;
 
     int32_t IsPending();
+};
+
+enum TEXTBLOCK_STYLE_FLAGS : uint32_t {
+    TEXTBLOCK_NONE = 0,
+    TEXTBLOCK_JUSTIFY_LEFT = 0x1,
+    TEXTBLOCK_JUSTIFY_CENTER = 0x2,
+    TEXTBLOCK_JUSTIFY_RIGHT = 0x4,
+    TEXTBLOCK_JUSTIFY_TOP = 0x8,
+    TEXTBLOCK_JUSTIFY_MIDDLE = 0x10,
+    TEXTBLOCK_JUSTIFY_BOTTOM = 0x20,
+    TEXTBLOCK_NO_WORD_WRAP = 0x40,
+    TEXTBLOCK_IGNORE_PIPE_CODES = 0x80,
+    TEXTBLOCK_SHADOW = 0x100,
+    TEXTBLOCK_FIXED_SIZE = 0x200,
+    TEXTBLOCK_UNIFORM_COLOR = 0x400,
+    TEXTBLOCK_FIXED_WIDTH = 0x800,
+    TEXTBLOCK_NON_SPACE_WRAP = 0x1000,
+    TEXTBLOCK_IGNORE_COLOR_CODES = 0x2000,
+    TEXTBLOCK_IGNORE_NEWLINE_CODES = 0x4000,
+    TEXTBLOCK_IGNORE_HYPERLINK_CODES = 0x8000,
+    TEXTBLOCK_IGNORE_TEXTURE_CODES = 0x10000,
+    TEXTBLOCK_INDENTED = 0x20000,
+    TEXTBLOCK_JUSTIFY_H_MASK = 0x7,
+    TEXTBLOCK_JUSTIFY_V_MASK = 0x38,
+    TEXTBLOCK_DEFAULT_STYLE = 0x212,
+    TEXTBLOCK_DEFAULT_SETTABLE_STYLE = 0x2107F,
 };
 
 struct HTEXTBLOCK__ {

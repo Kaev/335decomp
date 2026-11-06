@@ -1,3 +1,4 @@
+#include "Engine/Source/Os/TimeManager.h"
 #include "MathState.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "WoW/Source/DB/DBClient/DBCacheInstances.h"
@@ -53,32 +54,32 @@ static const char* s_mathDelimiters = "()[]^*/%+-#,> ";
 
 // VERIFY: 419474d0 auto
 // OFFSET: 0x00576B10
-static uint8_t LookupMathFunction(const char* name, int32_t* argCount) {
+static MATHOP LookupMathFunction(const char* name, int32_t* argCount) {
     for (uint32_t i = 0; i < 12; i++) {
         if (!SStrCmpI(name, s_mathFunctions[i].m_name, STORM_MAX_STR)) {
             *argCount = s_mathFunctions[i].m_argCount;
-            return i + MATHOP_ABS;
+            return static_cast<MATHOP>(i + MATHOP_ABS);
         }
     }
 
     *argCount = 0;
-    return 0;
+    return static_cast<MATHOP>(0);
 }
 
 // VERIFY: 924c0932 auto
 // OFFSET: 0x00576B50
-static uint8_t LookupMathVariable(const char* name) {
+static MATHOP LookupMathVariable(const char* name) {
     if (!name || !*name) {
-        return 0;
+        return static_cast<MATHOP>(0);
     }
 
     for (uint32_t i = 0; i < 140; i++) {
         if (!SStrCmp(name, s_mathVariables[i], STORM_MAX_STR)) {
-            return i + MATHOP_STAT_STRENGTH;
+            return static_cast<MATHOP>(i + MATHOP_STAT_STRENGTH);
         }
     }
 
-    return 0;
+    return static_cast<MATHOP>(0);
 }
 
 // VERIFY: 217b88e2 auto
@@ -200,7 +201,7 @@ int32_t MathState::CompilePrimary(int32_t pos) {
         }
 
         int32_t argCount;
-        uint8_t function = LookupMathFunction(name, &argCount);
+        MATHOP function = LookupMathFunction(name, &argCount);
 
         if (function) {
             this->Expect("(", &pos);
@@ -237,7 +238,7 @@ int32_t MathState::CompilePrimary(int32_t pos) {
             }
         }
 
-        uint8_t variable = LookupMathVariable(name);
+        MATHOP variable = LookupMathVariable(name);
 
         if (variable) {
             this->m_ops[this->m_numOps] = variable;
@@ -319,7 +320,7 @@ int32_t MathState::CompileSum(int32_t pos) {
         }
 
         pos = this->CompileProduct(pos + 1);
-        this->m_ops[this->m_numOps] = (op != '+') + MATHOP_ADD;
+        this->m_ops[this->m_numOps] = static_cast<MATHOP>((op != '+') + MATHOP_ADD);
         this->m_numOps++;
     }
 
@@ -474,7 +475,7 @@ void MathState::ExecuteOperator(uint32_t op, MathStack* stack) {
 // OFFSET: 0x005782D0
 void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* spell, int32_t spellLevel, int32_t scale, int32_t parseUnit, int32_t parsePet, int32_t noModifiers) {
     float value = 0.0f;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         switch (op) {
@@ -523,12 +524,12 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
                 float radius = 0.0f;
                 uint32_t index = op < MATHOP_RADIUS_1_UPPER ? op - MATHOP_RADIUS_1 : op - MATHOP_RADIUS_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     SpellRadiusRec* rec = g_spellRadiusDB.GetRecord(spell->m_effectRadiusIndex[index]);
 
                     if (rec) {
                         radius = rec->m_radius;
-                        Spell_C_ModifySpellValue(spell, radius, 6);
+                        Spell_C_ModifySpellValue(spell, radius, SPELLMOD_RADIUS);
                     }
                 }
 
@@ -538,7 +539,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
 
             case MATHOP_DURATION:
             case MATHOP_DURATION_UPPER:
-                value = Spell_C_GetDuration(spell, parsePet, parseUnit, noModifiers, 1) * 0.001f;
+                value = Spell_C_GetDuration(spell, parsePet, parseUnit, noModifiers, 1) * TIME_SECONDS_PER_MILLISECOND_FLOAT;
                 break;
 
             case MATHOP_POWER_COST:
@@ -546,9 +547,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
                 CGUnit_C* unit;
 
                 if (parseUnit) {
-                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPE_UNIT, __FILE__, __LINE__));
                 } else if (parsePet) {
-                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
                 } else {
                     unit = player;
                 }
@@ -562,9 +563,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
                 CGUnit_C* unit;
 
                 if (parseUnit) {
-                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPEMASK_UNIT, __FILE__, __LINE__));
+                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGCharacterInfo::m_inspectTarget, TYPE_UNIT, __FILE__, __LINE__));
                 } else if (parsePet) {
-                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+                    unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
                 } else {
                     unit = player;
                 }
@@ -582,9 +583,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
                 int32_t targets = 0;
                 uint32_t index = op < MATHOP_CHAIN_TARGETS_1_UPPER ? op - MATHOP_CHAIN_TARGETS_1 : op - MATHOP_CHAIN_TARGETS_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     targets = spell->m_effectChainTargets[index];
-                    Spell_C_ModifySpellValue(spell, targets, 17);
+                    Spell_C_ModifySpellValue(spell, targets, SPELLMOD_JUMP_TARGETS);
                 }
 
                 value = static_cast<float>(targets);
@@ -604,9 +605,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
                 } else {
                     uint32_t index = op < MATHOP_AURA_PERIOD_1_UPPER ? op - MATHOP_AURA_PERIOD_1 : op - MATHOP_AURA_PERIOD_1_UPPER;
 
-                    if (index < 3) {
+                    if (index < NUM_SPELL_EFFECTS) {
                         period = spell->m_effectAuraPeriod[index];
-                        Spell_C_ModifySpellValue(spell, period, 19);
+                        Spell_C_ModifySpellValue(spell, period, SPELLMOD_ACTIVATION_TIME);
                     }
                 }
 
@@ -617,7 +618,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_PROC_CHANCE:
             case MATHOP_PROC_CHANCE_UPPER: {
                 int32_t chance = spell->m_procChance;
-                Spell_C_ModifySpellValue(spell, chance, 18);
+                Spell_C_ModifySpellValue(spell, chance, SPELLMOD_CHANCE_OF_SUCCESS);
                 value = static_cast<float>(chance);
                 break;
             }
@@ -625,7 +626,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_PROC_CHARGES:
             case MATHOP_PROC_CHARGES_UPPER: {
                 int32_t charges = spell->m_procCharges;
-                Spell_C_ModifySpellValue(spell, charges, 4);
+                Spell_C_ModifySpellValue(spell, charges, SPELLMOD_CHARGES);
                 value = static_cast<float>(charges);
                 break;
             }
@@ -638,7 +639,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_POINTS_PER_COMBO_3_UPPER: {
                 uint32_t index = op < MATHOP_POINTS_PER_COMBO_1_UPPER ? op - MATHOP_POINTS_PER_COMBO_1 : op - MATHOP_POINTS_PER_COMBO_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     value = spell->m_effectPointsPerCombo[index];
                 }
 
@@ -663,9 +664,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_AMPLITUDE_3_UPPER: {
                 uint32_t index = op < MATHOP_AMPLITUDE_1_UPPER ? op - MATHOP_AMPLITUDE_1 : op - MATHOP_AMPLITUDE_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     float amplitude = spell->m_effectAmplitude[index];
-                    Spell_C_ModifySpellValue(spell, amplitude, 27);
+                    Spell_C_ModifySpellValue(spell, amplitude, SPELLMOD_VALUE_MULTIPLIER);
                     value = amplitude;
                 }
 
@@ -685,7 +686,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_CHAIN_AMPLITUDE_3_UPPER: {
                 uint32_t index = op < MATHOP_CHAIN_AMPLITUDE_1_UPPER ? op - MATHOP_CHAIN_AMPLITUDE_1 : op - MATHOP_CHAIN_AMPLITUDE_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     value = spell->m_effectChainAmplitude[index];
                 }
 
@@ -700,7 +701,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_MISC_VALUE_3_UPPER: {
                 uint32_t index = op < MATHOP_CHAIN_AMPLITUDE_1_UPPER ? op - MATHOP_CHAIN_AMPLITUDE_1 : op - MATHOP_CHAIN_AMPLITUDE_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     value = static_cast<float>(spell->m_effectMiscValue[index]);
                 }
 
@@ -794,17 +795,17 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
 
             case MATHOP_MAIN_HAND_SPEED:
             case MATHOP_MAIN_HAND_SPEED_UPPER:
-                value = static_cast<float>(player->m_unit->m_unitFieldBaseattacktime[0]) * 0.001f;
+                value = static_cast<float>(player->m_unit->m_unitFieldBaseattacktime[0]) * TIME_SECONDS_PER_MILLISECOND_FLOAT;
                 break;
 
             case MATHOP_OFF_HAND_SPEED:
             case MATHOP_OFF_HAND_SPEED_UPPER:
-                value = static_cast<float>(player->m_unit->m_unitFieldBaseattacktime[1]) * 0.001f;
+                value = static_cast<float>(player->m_unit->m_unitFieldBaseattacktime[1]) * TIME_SECONDS_PER_MILLISECOND_FLOAT;
                 break;
 
             case MATHOP_RANGED_SPEED:
             case MATHOP_RANGED_SPEED_UPPER:
-                value = static_cast<float>(player->m_unit->m_unitFieldRangedattacktime) * 0.001f;
+                value = static_cast<float>(player->m_unit->m_unitFieldRangedattacktime) * TIME_SECONDS_PER_MILLISECOND_FLOAT;
                 break;
 
             case MATHOP_LEVEL:
@@ -814,7 +815,7 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
 
             case MATHOP_HANDS:
             case MATHOP_HANDS_UPPER:
-                value = CGUnit_C::IsTwoHanded(player->GetVirtualItem(0, false)) ? 2.0f : 1.0f;
+                value = CGUnit_C::IsTwoHanded(player->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, false)) ? 2.0f : 1.0f;
                 break;
 
             case MATHOP_SPELL_POWER:
@@ -892,9 +893,9 @@ void MathState::GetVariableValue(uint32_t op, MathStack* stack, const SpellRec* 
             case MATHOP_BONUS_COEFFICIENT_3_UPPER: {
                 uint32_t index = op < MATHOP_BONUS_COEFFICIENT_1_UPPER ? op - MATHOP_BONUS_COEFFICIENT_1 : op - MATHOP_BONUS_COEFFICIENT_1_UPPER;
 
-                if (index < 3) {
+                if (index < NUM_SPELL_EFFECTS) {
                     float coefficient = spell->m_effectBonusCoefficient[index];
-                    Spell_C_ModifySpellValue(spell, coefficient, 24);
+                    Spell_C_ModifySpellValue(spell, coefficient, SPELLMOD_BONUS_MULTIPLIER);
                     value = coefficient;
                 }
 
@@ -924,7 +925,7 @@ float MathState::Evaluate(const SpellRec* spell, int32_t spellLevel, int32_t sca
     const int32_t* intArg = this->m_intArgs;
 
     for (uint32_t i = 0; i < this->m_numOps; i++) {
-        uint8_t op = this->m_ops[i];
+        MATHOP op = this->m_ops[i];
 
         if (op == MATHOP_SPELL) {
             if (!g_spellDB.GetRecord(QuestTextParser::Spell_C_SpellGetSpellIDForDifficulty(*intArg++), &loaded)) {

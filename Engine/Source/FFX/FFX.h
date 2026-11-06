@@ -16,6 +16,12 @@ class CTexture;
 struct CVar;
 
 namespace FFX {
+    enum SHADER_TEXCOORD : int32_t {
+        NORMALIZED_COORDS = 0,
+        RECTANGLE_COORDS = 1,
+        TEXCOORD_COUNT = 2,
+    };
+
     struct Tex {
         /* 0000 */ CTexture* m_texture;
         /* 0004 */ C2iVector m_texSize;
@@ -46,7 +52,7 @@ namespace FFX {
         /* 0004 */ Tex* m_inputs[8];
         /* 0024 */ Tex* m_output;
         /* 0028 */ EGxBlend m_blend;
-        /* 002C */ bool unk_002C;
+        /* 002C */ bool m_flip;
 
         virtual ~Pass();
         virtual bool Valid() = 0;

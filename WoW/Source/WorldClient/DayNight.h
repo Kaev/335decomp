@@ -74,6 +74,8 @@ struct DNOverrideSky : public TSHashObject<DNOverrideSky, HASHKEY_STRI> {
     /* 001C */ uint32_t m_animLengthMs;
     /* 0020 */ uint32_t m_lastTimeOfDay;
     /* 0024 */ uint32_t m_flags;
+
+    DNOverrideSky();
 };
 }
 
@@ -104,7 +106,7 @@ struct DNClouds {
     /* 0084 */ uint16_t m_nIndices;
     /* 0086 */ uint16_t m_nVerts;
     /* 0088 */ uint16_t m_animFrame;
-    /* 008A */ uint16_t unk_008A;
+    /* 008A */ uint16_t unused_008A;
     /* 008C */ float m_animTime;
     /* 0090 */ CTexture* m_textures [2];
 
@@ -138,8 +140,8 @@ struct DNGlare {
     /* 0030 */ float m_fade;
     /* 0034 */ float m_fadeTarget;
     /* 0038 */ uint32_t m_skipOcclusionOnce;
-    /* 003C */ float unk_003C[8];
-    /* 005C */ uint32_t unk_005C[4];
+    /* 003C */ float unused_003C[8];
+    /* 005C */ uint32_t unused_005C[4];
     /* 006C */ uint32_t m_occlusionPixels;
     /* 0070 */ DNKeyframe m_alphaCurve [4];
     /* 0090 */ float m_scaleMin;
@@ -196,10 +198,10 @@ struct DNPlanets {
     /* 0000 */ DayNight::DNPlanet m_sun;
     /* 0020 */ DayNight::DNPlanet m_moon;
     /* 0040 */ DayNight::DNPlanet m_moon2;
-    /* 0060 */ uint32_t unk_0060;
-    /* 0064 */ uint32_t unk_0064;
-    /* 0068 */ uint32_t unk_0068;
-    /* 006C */ uint32_t unk_006C;
+    /* 0060 */ uint32_t unused_0060;
+    /* 0064 */ uint32_t unused_0064;
+    /* 0068 */ uint32_t unused_0068;
+    /* 006C */ uint32_t unused_006C;
 };
 }
 
@@ -283,18 +285,35 @@ namespace DayNight {
 }
 
 struct SMOFog {
+    // 0.5.3 symbol names; the two-entry layout and blend flag match 3.3.5.
+    enum EFogs : int32_t {
+        FOG = 0,
+        UWFOG = 1, // underwater fog
+        NUM_FOGS = 2,
+    };
+
+    enum EFlags : int32_t {
+        F_IEBLEND = 0x1,
+    };
+
     struct Fog {
         /* 0000 */ float m_end;
         /* 0004 */ float m_startScalar;
         /* 0008 */ CImVector m_color;
     };
 
+    class Fogs {
+        public:
+        /* 0000 */ Fog m_fog[NUM_FOGS];
+
+        void Blend(const Fogs& fogs, float t);
+    };
+
     /* 0000 */ uint32_t m_flags;
     /* 0004 */ C3Vector m_position;
     /* 0010 */ float m_smallerRadius;
     /* 0014 */ float m_largerRadius;
-    /* 0018 */ Fog m_fog;
-    /* 0024 */ Fog m_underwaterFog;
+    /* 0018 */ Fogs m_fogs;
 };
 
 namespace DayNight {
@@ -303,10 +322,15 @@ namespace DayNight {
 
 namespace DayNight {
 struct AreaLightOverride {
+    enum STATE : int32_t {
+        FADE_IN = 1,
+        FADE_OUT = 2,
+    };
+
     /* 0000 */ uint32_t m_id;
     /* 0004 */ LightRec* m_light;
     /* 0008 */ float m_fade;
-    /* 000C */ int32_t m_state;
+    /* 000C */ STATE m_state;
     /* 0010 */ uint32_t m_lastTime;
     /* 0014 */ uint32_t m_duration;
 };

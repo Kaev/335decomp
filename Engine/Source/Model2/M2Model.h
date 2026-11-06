@@ -3,6 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "Engine/Source/Model2/Types.h"
+#include "Engine/Source/Gx/CGxVertexPNT0.h"
+#include "Engine/Source/Model2/Attachment.h"
 #include <cstring>
 #include "Engine/Source/Model2/M2Light.h"
 #include "Engine/Source/Model2/M2Shared.h"
@@ -76,13 +79,18 @@ class SModelBatchLessThan {
 
 class M2ModelCallback {
     public:
-    /* 0000 */ uint32_t m_type;
+    enum TYPE : uint32_t {
+        SEQUENCE = 0,
+        EVENT = 1,
+    };
+
+    /* 0000 */ TYPE m_type; // Selects M2SequenceCallback or M2EventCallback.
     /* 0004 */ CM2Model* m_model;
     /* 0008 */ uint32_t m_boneId;
     /* 000C */ void* m_callback;
     /* 0010 */ uint32_t m_id;
     /* 0014 */ uint32_t m_value;
-    /* 0018 */ uint32_t m_args [3];
+    /* 0018 */ uint32_t m_args [3]; // Sequence: index/start time in the first two words; event: world-position float bits.
     /* 0024 */ uint32_t m_time;
     /* 0028 */ uint64_t m_param;
 };
@@ -135,13 +143,21 @@ class M2ModelOptGeo {
 
 class CM2Model {
     public:
+    enum INSTANCE_FLAGS : uint32_t {
+        // Instance interpretation of raw creation flags; names describe current behavior.
+        // Bit 1 also makes attached children use their own lighting and scale.
+        INSTANCE_DISABLE_DEPTH_SORT_AND_CHILD_INHERITANCE = 0x1,
+        // Skip the shared-load callback; initialize when an instance consumer needs it.
+        INSTANCE_INITIALIZE_ON_DEMAND = 0x20,
+    };
+
     /* 0000 */ uint32_t m_refCount;
-    /* 0004 */ uint32_t m_flags;
+    /* 0004 */ uint32_t m_creationFlags;
     /* 0008 */ CM2Model** m_scenePrev;
     /* 000C */ CM2Model* m_sceneNext;
-    /* 0010 */ uint32_t m_fFlags;
+    /* 0010 */ uint32_t m_runtimeFlags;
     /* 0014 */ uint16_t m_animListHead;
-    /* 0016 */ uint16_t unk_0016;
+    /* 0016 */ uint16_t unused_0016;
     /* 0018 */ CM2Model** m_callbackPrev;
     /* 001C */ CM2Model* m_callbackNext;
     /* 0020 */ void (*m_loadedCallback)(CM2Model*, void*);
@@ -166,8 +182,8 @@ class CM2Model {
     /* 006C */ CM2Model* m_drawNext;
     /* 0070 */ int32_t* m_loops;
     /* 0074 */ uint32_t m_loopOrigin;
-    /* 0078 */ void* m_sequenceCallback;
-    /* 007C */ uint32_t unk_007C;
+    /* 0078 */ M2SequenceCallback m_sequenceCallback;
+    /* 007C */ uint32_t unused_007C;
     /* 0080 */ uint64_t m_sequenceCallbackParam;
     /* 0088 */ float m_scaleSq;
     /* 008C */ uint32_t m_lastEmitterTime;
@@ -183,7 +199,7 @@ class CM2Model {
     /* 00B4 */ C44Matrix m_worldTransform;
     /* 00F4 */ C44Matrix m_matrixF4;
     /* 0134 */ C44Matrix m_frameOfReferenceMatrix;
-    /* 0174 */ void* m_frameOfReference;
+    /* 0174 */ const C44Matrix* m_frameOfReference; // Borrowed frame matrix, shared with attached models and read by emitters.
     /* 0178 */ float m_fadeAlpha;
     /* 017C */ float m_baseAlpha;
     /* 0180 */ float m_diffuseTintR;
@@ -199,7 +215,7 @@ class CM2Model {
     /* 01B8 */ float unk_01B8;
     /* 01BC */ void (*m_drawCallback)(CM2Model*, const CM2Lighting*, void*);
     /* 01C0 */ void* m_drawArg;
-    /* 01C4 */ void* m_eventCallback;
+    /* 01C4 */ M2EventCallback m_eventCallback;
     /* 01C8 */ uint64_t m_eventCallbackParam;
     /* 01D0 */ M2ModelLight* m_lights;
     /* 01D4 */ CM2Lighting m_lighting;
@@ -220,14 +236,14 @@ class CM2Model {
     /* 02E0 */ void* m_hitTestOwner;
     /* 02E4 */ uint32_t m_hitTestGroup;
     /* 02E8 */ uint32_t m_handle;
-    /* 02EC */ uint32_t unk_02EC;
+    /* 02EC */ uint32_t unused_02EC;
 
     static void (*s_transformVertices[5])(CM2Model*, M2SkinSection*, uint8_t*, int32_t);
     static TSGrowableArray<M2ModelCallback> s_sequenceCallbacks;
     static TSGrowableArray<C3Vector> s_collisionPositions;
     static TSGrowableArray<uint32_t> s_collisionCodes;
 
-    static int32_t __stdcall SequenceCallback(void* callback, CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint32_t sequenceIndex, uint32_t startTime, uint64_t param);
+    static int32_t __stdcall SequenceCallback(M2SequenceCallback callback, CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint32_t sequenceIndex, uint32_t startTime, uint64_t param);
     static void RenderModelBatchesShadowMap(const CModelBatchList& untextured, const CModelBatchList& textured);
     static void RenderModelBatchListShadowMap(int32_t untextured, const CModelBatchList& list);
     static void TransformVertices_cpp(CM2Model* model, M2SkinSection* section, uint8_t* vertices, int32_t texCoord);
@@ -325,7 +341,7 @@ class CM2Model {
     uint32_t GetNumPrimitives();
     int32_t HasCamera(uint32_t id);
     void SetEmittersEnabled(int32_t enabled);
-    void* GetCameraByIndex(uint32_t index);
+    CCamera* GetCameraByIndex(uint32_t index); // Borrowed camera-service handle; the model retains ownership.
     uint32_t GetCurrentLightCount();
     uint32_t GetInstanceCountMax();
     int32_t HasLiveParticles();
@@ -336,11 +352,11 @@ class CM2Model {
     void ReplaceParticleColor(uint32_t id, CImVector color0, CImVector color1, CImVector color2);
     void ReplaceTexture(uint32_t type, CTexture* texture);
     void SetAnimating(int32_t animating);
-    void SetEventCallback(void* callback, uint64_t param);
+    void SetEventCallback(M2EventCallback callback, uint64_t param);
     void SetLightEnabled(uint32_t index, uint32_t enabled);
     void SetLoadedCallback(void (*callback)(CM2Model*, void*), void* arg);
     void SetRibbonsEnabled(uint32_t enabled);
-    void SetSequenceCallback(void* callback, uint64_t param);
+    void SetSequenceCallback(M2SequenceCallback callback, uint64_t param);
     void SetWorldTransform(const C44Matrix& matrix);
     void SetWorldTransform(const C3Vector& position, float rotation, float scale);
     void SetWorldTransform(const C3Vector& position, float rotation, float scale, const C3Vector& up, uint32_t flags);
@@ -465,7 +481,7 @@ class M2ModelParticle {
     /* 0084 */ uint8_t m_emitting;
     /* 0085 */ uint8_t m_active;
     /* 0086 */ uint8_t m_burstFired;
-    /* 0087 */ uint8_t unk_0087;
+    /* 0087 */ uint8_t unused_0087;
 
     M2ModelParticle();
 };

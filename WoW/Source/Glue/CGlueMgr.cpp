@@ -119,7 +119,7 @@ static const char* s_serverAlertTag = "SERVERALERT:";
 static const char* s_serverAlertTagBOM = "\xEF\xBB\xBFSERVERALERT:";
 
 // STATIC: 0x00AC4370
-int32_t CGlueMgr::s_unk_AC4370 = -1;
+int32_t CGlueMgr::s_displayedCharacterIndex = -1;
 
 // STATIC: 0x00AC3DC0
 static TSExplicitList<ConsoleString, offsetof(ConsoleString, m_link)> s_connectionStatus;
@@ -431,16 +431,16 @@ static bool CreateIntroScene(uint8_t classID, uint8_t raceID, C3Vector& position
             model->SetWorldTransform(transform);
 
             scene->SetTime(0);
-            model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 0, 1);
+            model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, 0, 1.0f, 0, 1);
             model->SetAnimating(1);
 
             C3Vector cameraPos;
             scene->Animate(cameraPos);
 
-            void* camera = model->GetCameraByIndex(0);
+            CCamera* camera = model->GetCameraByIndex(0);
 
             if (camera) {
-                DataMgrGetCoord(static_cast<CDataMgr*>(camera), 7, &position);
+                DataMgrGetCoord(reinterpret_cast<CDataMgr*>(camera), 7, &position);
                 model->Release();
                 scene->Release();
                 return true;
@@ -699,7 +699,7 @@ void CGlueMgr::Resume() {
     CGlueMgr::m_simpleTop->SetCursor(CGlueMgr::m_cursorMipBits);
 
     CGInputControl* control = CGInputControl::GetActive();
-    control->m_mouseModeFlags = 3;
+    control->m_mouseModeFlags = INPUT_MOUSE_MODE_FLAGS::INPUT_MOUSE_MODE_INITIAL_FLAGS;
     control->m_forceCursorOn = 0;
     control->UpdateMouseMode(1);
 
@@ -832,9 +832,9 @@ void CGlueMgr::UpdateCurrentScreen(const char* screen) {
     SStrCopy(CGlueMgr::m_currentScreen, screen, sizeof(CGlueMgr::m_currentScreen));
 
     if (!SStrCmpI(CGlueMgr::m_currentScreen, "charselect", STORM_MAX_STR)) {
-        EventRegisterEx(EVENT_ID_IDLE, CCharacterSelection::Idle, nullptr, 0.0f);
+        EventRegisterEx(EVENT_ID_IDLE, CCharacterSelection::Idle, nullptr, EVENT_PRIORITY_NORMAL);
     } else if (!SStrCmpI(CGlueMgr::m_currentScreen, "charcreate", STORM_MAX_STR)) {
-        EventRegisterEx(EVENT_ID_IDLE, CCharacterCreation::Idle, nullptr, 0.0f);
+        EventRegisterEx(EVENT_ID_IDLE, CCharacterCreation::Idle, nullptr, EVENT_PRIORITY_NORMAL);
     }
 }
 
@@ -857,7 +857,7 @@ int32_t CGlueMgr::ShowChangedOptionWarnings() {
 // VERIFY: 253dd4f3 auto
 // OFFSET: 0x004D84A0
 int32_t CGlueMgr::HandleBattlenetDisconnect() {
-    if (CGlueMgr::m_loginState != 5 || CGlueMgr::m_loginResult != 21 || CGlueMgr::m_showedDisconnect) {
+    if (CGlueMgr::m_loginState != LOGIN_STATE_FAILED || CGlueMgr::m_loginResult != LOGIN_DISCONNECTED || CGlueMgr::m_showedDisconnect) {
         return 0;
     }
 
@@ -1068,7 +1068,7 @@ void CGlueMgr::Initialize() {
     FrameXML_RegisterFactory("ModelFFX", CSimpleModelFFX::Create, false);
     CGlueMgr::Resume();
     CRealmList::Initialize();
-    EventRegisterEx(EVENT_ID_IDLE, CGlueMgr::Idle, nullptr, 0.0f);
+    EventRegisterEx(EVENT_ID_IDLE, CGlueMgr::Idle, nullptr, EVENT_PRIORITY_NORMAL);
     CGLCD::Initialize();
     CKBPage::Initialize();
     CKBSystem::Initialize();
@@ -1146,7 +1146,7 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
     int32_t complete = connection->PollStatus(op, &statusText, result, errorCode);
 
     if (CGlueMgr::m_idleState == IDLE_LOGIN_SERVER_LOGIN) {
-        if (CGlueMgr::m_loginState != 9) {
+        if (CGlueMgr::m_loginState != LOGIN_STATE_PIN_WAIT) {
             CGlueMgr::DisplayLoginStatus();
         }
 
@@ -1159,14 +1159,14 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
         }
 
         switch (CGlueMgr::m_loginState) {
-            case 5: {
+            case LOGIN_STATE_FAILED: {
                 ClientServices::LoginConnection()->Logoff();
                 CGlueMgr::m_idleState = IDLE_NONE;
                 CGlueMgr::m_showedDisconnect = 0;
                 return 1;
             }
 
-            case 6: {
+            case LOGIN_STATE_DOWNLOADFILE: {
                 const char* fileName = ClientServices::LoginConnection()->m_fileName;
 
                 if (!SStrCmpI(fileName, "Patch", STORM_MAX_STR)) {
@@ -1181,15 +1181,15 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
                 return 1;
             }
 
-            case 8: {
+            case LOGIN_STATE_PIN: {
                 FrameScript_SignalEvent(GLUE_EVENT_CLOSE_STATUS_DIALOG, nullptr);
                 const uint8_t* keyMap = ClientServices::LoginConnection()->GetKeyMap();
                 FrameScript_SignalEvent(GLUE_EVENT_PLAYER_ENTER_PIN, "%d%d%d%d%d%d%d%d%d%d", keyMap[0], keyMap[1], keyMap[2], keyMap[3], keyMap[4], keyMap[5], keyMap[6], keyMap[7], keyMap[8], keyMap[9]);
-                CGlueMgr::m_loginState = 9;
+                CGlueMgr::m_loginState = LOGIN_STATE_PIN_WAIT;
                 return 1;
             }
 
-            case 10: {
+            case LOGIN_STATE_MATRIX: {
                 uint32_t width;
                 uint32_t height;
                 uint32_t minDigits;
@@ -1200,21 +1200,21 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
 
                 CGlueMgr::m_matrixChallengeCount = challengeCount;
                 CGlueMgr::m_matrixRemaining = challengeCount;
-                CGlueMgr::m_loginState = 11;
+                CGlueMgr::m_loginState = LOGIN_STATE_MATRIX_WAIT;
 
                 FrameScript_SignalEvent(GLUE_EVENT_CLOSE_STATUS_DIALOG, nullptr);
                 FrameScript_SignalEvent(GLUE_EVENT_PLAYER_ENTER_MATRIX, "%d%d%d%d%b%d", width, height, minDigits, maxDigits, flipCoords, challengeCount);
                 return 1;
             }
 
-            case 12: {
-                CGlueMgr::m_loginState = 13;
+            case LOGIN_STATE_TOKEN: {
+                CGlueMgr::m_loginState = LOGIN_STATE_TOKEN_WAIT;
                 FrameScript_SignalEvent(GLUE_EVENT_CLOSE_STATUS_DIALOG, nullptr);
                 FrameScript_SignalEvent(GLUE_EVENT_PLAYER_ENTER_TOKEN, nullptr);
                 return 1;
             }
 
-            case 14: {
+            case LOGIN_STATE_CHECKINGVERSIONS: {
                 uint8_t versionChecksum[20];
                 ChecksumExecutables(ClientServices::LoginConnection()->GetVersionChallenge(), 16, versionChecksum);
                 ClientServices::LoginConnection()->ProveVersion(versionChecksum);
@@ -1268,7 +1268,7 @@ int32_t CGlueMgr::Idle(const void* data, void* param) {
     }
 
     if (idleState == IDLE_ACCOUNT_LOGIN) {
-        if (ClientServices::LoginConnection()->GetLoginServerType() == 1 && CGlueMgr::m_loginState == 5) {
+        if (ClientServices::LoginConnection()->GetLoginServerType() == 1 && CGlueMgr::m_loginState == LOGIN_STATE_FAILED) {
             CGlueMgr::DisplayLoginStatus();
             ClientServices::Connection()->Cancel(2);
             ClientServices::LoginConnection()->Logoff();
@@ -1630,7 +1630,7 @@ void CGlueMgr::ChangeRealm(REALM_INFO* realm) {
 
     ClientServices::SelectRealm(realm->m_realmName);
 
-    if (ClientServices::Connection()->unk_2F3C) {
+    if (ClientServices::Connection()->m_connected) {
         CGlueMgr::m_disconnectPending = 1;
         CGlueMgr::m_reconnect = 1;
         ClientServices::Connection()->Disconnect();
@@ -1785,7 +1785,7 @@ void CGlueMgr::LogConnectionStatus(const char* format, ...) {
 
     s_connectionStatusLock.Enter();
 
-    ConsoleString* string = s_connectionStatus.NewNode(2, 0, 0);
+    ConsoleString* string = s_connectionStatus.NewNode(TSLIST_LINK_BEFORE, 0, 0);
 
     va_list args;
     va_start(args, format);
@@ -1979,9 +1979,9 @@ void CGlueMgr::EnterWorld() {
         return;
     }
 
-    CGlueMgr::s_unk_AC4370 = CCharacterSelection::s_selectionIndex;
+    CGlueMgr::s_displayedCharacterIndex = CCharacterSelection::s_selectionIndex;
 
-    if (!ClientServices::Connection()->unk_2F3C) {
+    if (!ClientServices::Connection()->m_connected) {
         return;
     }
 
@@ -2509,49 +2509,49 @@ int32_t CGlueMgr::OnCharFactionChangeResult(void* param, NETMESSAGE msgId, uint3
     const char* text;
 
     switch (result) {
-        case 0:
+        case ResponseCodes::RESPONSE_SUCCESS:
             CCharacterSelection::UpdateCharacterInfo(guid, name, sexID, skinID, faceID, hairStyleID, hairColorID, facialHairStyleID, raceID);
             FrameScript_SignalEvent(GLUE_EVENT_CLOSE_STATUS_DIALOG, nullptr);
             CGlueMgr::SetScreen("charselect");
             return 1;
 
-        case 50:
-            text = FrameScript_GetText(ClientServices::GetErrorToken(50), -1, GENDER_NOT_APPLICABLE);
+        case ResponseCodes::CHAR_CREATE_NAME_IN_USE:
+            text = FrameScript_GetText(ClientServices::GetErrorToken(ResponseCodes::CHAR_CREATE_NAME_IN_USE), -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 61:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_IN_GUILD:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_STILL_IN_GUILD", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 62:
+        case ResponseCodes::CHAR_CREATE_RESTRICTED_RACECLASS:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_RACECLASS_RESTRICTED", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 63:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_CHOOSE_RACE:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_CHOOSE_RACE", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 64:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_ARENA_LEADER:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_ARENA_LEADER", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 65:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_DELETE_MAIL:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_DELETE_MAIL", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 66:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_SWAP_FACTION:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_SWAP_FACTION", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 67:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_RACE_ONLY:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_RACE_ONLY", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 68:
+        case ResponseCodes::CHAR_CREATE_CHARACTER_GOLD_LIMIT:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_GOLD_LIMIT", -1, GENDER_NOT_APPLICABLE);
             break;
 
-        case 69:
+        case ResponseCodes::CHAR_CREATE_FORCE_LOGIN:
             text = FrameScript_GetText("CHAR_FACTION_CHANGE_FORCE_LOGIN", -1, GENDER_NOT_APPLICABLE);
             break;
 

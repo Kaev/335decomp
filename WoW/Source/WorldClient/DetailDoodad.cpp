@@ -1,3 +1,4 @@
+#include "Engine/Source/Tempest/CMath.h"
 #include "DetailDoodad.h"
 #include <cmath>
 #include "Engine/Source/Base/Handle.h"
@@ -30,6 +31,7 @@
 #include "WoW/Source/WorldClient/MapObjGroup.h"
 #include "WoW/Source/WorldClient/Types.h"
 #include "WoW/Source/WorldClient/World.h"
+#include "Engine/Source/ShaderEffect/Types.h"
 
 // STATIC: 0x00D1C4C4
 static uint32_t s_indexBufferSize;
@@ -116,8 +118,8 @@ static void AcquireBuffers(uint32_t vertexCount, CGxBuf** vertexBuf, uint32_t in
         *vertexBuf = CDetailDoodad::s_freeGxBufs[count - 2];
         *indexBuf = CDetailDoodad::s_freeGxBufs[count - 1];
         CDetailDoodad::s_freeGxBufs.SetCount(count - 2);
-        (*vertexBuf)->unk_001C = 0;
-        (*indexBuf)->unk_001C = 0;
+        (*vertexBuf)->m_hasData = 0;
+        (*indexBuf)->m_hasData = 0;
     } else {
         *vertexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(CGxVertexPNCT), vertexCount);
         *indexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Index, sizeof(uint16_t), indexCount);
@@ -200,7 +202,7 @@ void CDetailDoodadInstBatch::FillIndices() {
     for (uint32_t i = 0; i < this->m_adds.Count(); i++) {
         CM2Model* model = CDetailDoodad::s_doodadList[this->m_adds[i].m_doodadId]->m_model;
 
-        if (!(model->m_fFlags & 1)) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
@@ -215,7 +217,7 @@ void CDetailDoodadInstBatch::FillIndices() {
 
     CGxBuf* buf = this->m_indexBuf;
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 039ae168 manual
@@ -320,7 +322,7 @@ void CDetailDoodadData::ModelLoadedCallback(CM2Model* model, void* arg) {
     CDetailDoodadData* data = static_cast<CDetailDoodadData*>(arg);
     CM2Model* doodadModel = data->m_model;
 
-    if (!(doodadModel->m_fFlags & 1)) {
+    if (!(doodadModel->m_runtimeFlags & 1)) {
         doodadModel->WaitForLoad(nullptr);
     }
 
@@ -350,14 +352,14 @@ void CDetailDoodadInstBatch::FillVertices() {
         CDetailDoodadData* data = CDetailDoodad::s_doodadList[add.m_doodadId];
         CM2Model* model = data->m_model;
 
-        if (!(model->m_fFlags & 1)) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
         M2Data* m2Data = model->m_shared->m_data;
         model = data->m_model;
 
-        if (!(model->m_fFlags & 1)) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
@@ -432,7 +434,7 @@ void CDetailDoodadInstBatch::FillVertices() {
 
     buf = this->m_vertexBuf;
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: a2c3ec0e manual
@@ -604,19 +606,19 @@ int32_t CDetailDoodad::InitializeRenderState() {
         return 1;
     }
 
-    GxRsSet(GxRs_ColorOp0, 0);
-    GxRsSet(GxRs_AlphaOp0, 0);
+    GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
     GxRsSet(GxRs_MatDiffuse, static_cast<int32_t>(0xFFFFFFFF));
     g_theGxDevicePtr->RsSet(GxRs_Texture1, CDetailDoodad::s_alphaRampTexture);
-    GxRsSet(GxRs_ColorOp1, 0);
-    GxRsSet(GxRs_AlphaOp1, 0);
+    GxRsSet(GxRs_ColorOp1, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp1, GxTexOp_Mod);
     GxRsSet(GxRs_TexGen1, 3);
     GxRsSet(GxRs_TextureShader1, 1);
 
     C44Matrix matrix;
     float dist = CWorld::detailDoodadDist;
     matrix.Scale(1.0f / (dist * 0.15f));
-    matrix.RotateAroundY(1.5707964f);
+    matrix.RotateAroundY(HALF_PI);
     matrix.Translate(C3Vector(0.0f, 0.0f, dist * -0.85f));
 
     CGxMatrixStack& stack = g_theGxDevicePtr->m_xforms[GxXform_Tex1];
@@ -661,7 +663,7 @@ void CDetailDoodadInst::AddDoodad(uint32_t id, const C3Vector& position, float r
     CDetailDoodadData* data = CDetailDoodad::s_doodadList[id];
     CM2Model* model = data->m_model;
 
-    if (!(model->m_fFlags & 1)) {
+    if (!(model->m_runtimeFlags & 1)) {
         model->WaitForLoad(nullptr);
     }
 
@@ -724,13 +726,13 @@ void CDetailDoodadInstBatch::Draw() {
         AcquireBuffers(this->m_vertexCount, &this->m_vertexBuf, this->m_indexCount, &this->m_indexBuf);
     }
 
-    if (!this->m_vertexBuf->unk_001C || !this->m_vertexBuf->unk_001D) {
+    if (!this->m_vertexBuf->m_hasData || !this->m_vertexBuf->m_valid) {
         this->FillVertices();
     }
 
     GxPrimVertexPtr(this->m_vertexBuf, GxVBF_PNCT);
 
-    if (!this->m_indexBuf->unk_001C || !this->m_indexBuf->unk_001D) {
+    if (!this->m_indexBuf->m_hasData || !this->m_indexBuf->m_valid) {
         this->FillIndices();
     }
 

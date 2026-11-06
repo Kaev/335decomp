@@ -1,4 +1,5 @@
 #include <cstdarg>
+#include "Engine/Source/Tempest/Color.h"
 #include <cstdint>
 #include <cstdio>
 #include <malloc.h>
@@ -58,7 +59,17 @@ static const COMMANDHANDLER s_consoleCommandHandlers[] = { ConsoleCommand_FontCo
 TSList<CONSOLELINE, TSGetLink<CONSOLELINE> > s_linelist;
 
 // STATIC: 0x00ADBBBC
-uint32_t s_colorArray[NUM_COLORTYPES] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFFFFFF00, 0xFFFFFFFF, 0xFFFFFFFF, 0x80FFFFFF, 0xC0000000 };
+CImVector s_colorArray[NUM_COLORTYPES] = {
+    { COLOR_WHITE_BGRA }, // DEFAULT_COLOR
+    { COLOR_WHITE_BGRA }, // INPUT_COLOR
+    { COLOR_GRAY_128_BGRA }, // ECHO_COLOR
+    { COLOR_RED_BGRA }, // ERROR_COLOR
+    { COLOR_YELLOW_BGRA }, // WARNING_COLOR
+    { COLOR_WHITE_BGRA }, // GLOBAL_COLOR
+    { COLOR_WHITE_BGRA }, // ADMIN_COLOR
+    { COLOR_WHITE_ALPHA_128_BGRA }, // HIGHLIGHT_COLOR
+    { COLOR_BLACK_ALPHA_192_BGRA }, // BACKGROUND_COLOR
+};
 
 // STATIC: 0x00CA1690
 static float s_caretpixheight;
@@ -114,11 +125,24 @@ static const char* s_completedCmd;
 // STATIC: 0x00CA198C
 HTEXTFONT s_textFont;
 
+enum CONSOLERESIZESTATE : int32_t {
+    CS_NONE = 0,
+    CS_STRETCH = 1,
+    NUM_CONSOLERESIZESTATES = 2,
+};
+
 // STATIC: 0x00CA1990
-static int32_t s_consoleResizeState;
+static CONSOLERESIZESTATE s_consoleResizeState;
+
+enum HIGHLIGHTSTATE : int32_t {
+    HS_NONE = 0,
+    HS_HIGHLIGHTING = 1,
+    HS_ENDHIGHLIGHT = 2,
+    NUM_HIGHLIGHTSTATES = 3,
+};
 
 // STATIC: 0x00CA1994
-static int32_t s_highlightState;
+static HIGHLIGHTSTATE s_highlightState;
 
 // STATIC: 0x00CA1998
 static float s_highlightHStart;
@@ -139,7 +163,7 @@ float s_charSpacing;
 static const char* s_consoleMessage;
 
 // STATIC: 0x00CA19B0
-float s_consoleHeight;
+float s_consoleHeight = s_consoleLines * s_fontHeight;
 
 // STATIC: 0x00CA19B4
 static SCritSect s_critsect;
@@ -158,7 +182,7 @@ void GenerateNodeString(CONSOLELINE* node) {
     }
 
     C3Vector position(0.0f, 0.0f, 1.0f);
-    GxuFontCreateString(font, reinterpret_cast<const char*>(node->m_buffer), s_fontHeight, position, 1.0f, s_fontHeight, 0.0f, node->m_fontPointer, GxVJ_Middle, GxHJ_Left, s_baseTextFlags, *reinterpret_cast<const CImVector*>(&s_colorArray[node->m_colorType]), s_charSpacing, 1.0f);
+    GxuFontCreateString(font, reinterpret_cast<const char*>(node->m_buffer), s_fontHeight, position, 1.0f, s_fontHeight, 0.0f, node->m_fontPointer, GxVJ_Middle, GxHJ_Left, s_baseTextFlags, s_colorArray[node->m_colorType], s_charSpacing, 1.0f);
 }
 
 // VERIFY: bc0f8159 auto
@@ -172,7 +196,7 @@ static void SetInputString(const char* text) {
 
     if (text && *text) {
         C3Vector position(0.0f, 0.0f, 1.0f);
-        GxuFontCreateString(TextBlockGetFontPtr(s_textFont), text, s_fontHeight, position, 1.0f, s_fontHeight, 0.0f, s_inputString, GxVJ_Middle, GxHJ_Left, s_baseTextFlags, *reinterpret_cast<const CImVector*>(&s_colorArray[INPUT_COLOR]), s_charSpacing, 1.0f);
+        GxuFontCreateString(TextBlockGetFontPtr(s_textFont), text, s_fontHeight, position, 1.0f, s_fontHeight, 0.0f, s_inputString, GxVJ_Middle, GxHJ_Left, s_baseTextFlags, s_colorArray[INPUT_COLOR], s_charSpacing, 1.0f);
     }
 }
 
@@ -196,7 +220,7 @@ static void ReserveInputSpace(CONSOLELINE* line, uint32_t chars) {
 // VERIFY: 8e2941b8 auto
 // OFFSET: 0x00763830
 static void ResetHighlight() {
-    s_highlightState = 0;
+    s_highlightState = HS_NONE;
     s_hRect.right = 0.0f;
     s_hRect.left = 0.0f;
     s_hRect.top = 0.0f;
@@ -237,8 +261,8 @@ static void UpdateHighlight() {
 // OFFSET: 0x007639A0
 static int32_t OnMouseUp(const void* data, void* param) {
     if (!EventIsKeyDown(s_consoleHotKey) && s_active) {
-        s_highlightState = 2;
-        s_consoleResizeState = 0;
+        s_highlightState = HS_ENDHIGHLIGHT;
+        s_consoleResizeState = CS_NONE;
     }
 
     return 1;
@@ -253,7 +277,7 @@ static int32_t OnMouseMove(const void* data, void* param) {
         return 1;
     }
 
-    if (s_consoleResizeState == 1) {
+    if (s_consoleResizeState == CS_STRETCH) {
         s_consoleHeight = 1.0f - mouse->m_y;
 
         if (s_consoleHeight < s_fontHeight) {
@@ -265,7 +289,7 @@ static int32_t OnMouseMove(const void* data, void* param) {
 
     s_highlightHEnd = mouse->m_x;
 
-    if (s_highlightState == 1) {
+    if (s_highlightState == HS_HIGHLIGHTING) {
         UpdateHighlight();
     }
 
@@ -424,7 +448,7 @@ static void DrawBackground() {
     GxRsSet(GxRs_BlendingMode, GxBlend_Alpha);
     GxUpdateAlphaRef(GxRs_AlphaRef);
 
-    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, reinterpret_cast<const CImVector*>(&s_colorArray[BACKGROUND_COLOR]), 0, nullptr, 0, nullptr, 0, nullptr, 0);
+    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, &s_colorArray[BACKGROUND_COLOR], 0, nullptr, 0, nullptr, 0, nullptr, 0);
     GxDrawLockedElements(GxPrim_TriangleStrip, 4, indices);
     GxPrimUnlockVertexPtrs();
 
@@ -449,7 +473,7 @@ static void DrawHighLight() {
     GxRsSet(GxRs_BlendingMode, GxBlend_Alpha);
     GxUpdateAlphaRef(GxRs_AlphaRef);
 
-    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, reinterpret_cast<const CImVector*>(&s_colorArray[HIGHLIGHT_COLOR]), 0, nullptr, 0, nullptr, 0, nullptr, 0);
+    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, &s_colorArray[HIGHLIGHT_COLOR], 0, nullptr, 0, nullptr, 0, nullptr, 0);
     GxDrawLockedElements(GxPrim_TriangleStrip, 4, indices);
     GxPrimUnlockVertexPtrs();
 
@@ -479,7 +503,7 @@ static void DrawCaret(const C3Vector& caretpos) {
     GxRsSet(GxRs_BlendingMode, GxBlend_Alpha);
     GxUpdateAlphaRef(GxRs_AlphaRef);
 
-    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, reinterpret_cast<const CImVector*>(&s_colorArray[INPUT_COLOR]), 0, nullptr, 0, nullptr, 0, nullptr, 0);
+    GxPrimLockVertexPtrs(4, position, sizeof(C3Vector), nullptr, 0, &s_colorArray[INPUT_COLOR], 0, nullptr, 0, nullptr, 0, nullptr, 0);
     GxDrawLockedElements(GxPrim_TriangleStrip, 4, indices);
     GxPrimUnlockVertexPtrs();
 
@@ -525,7 +549,7 @@ static CONSOLELINE* GetInputLine() {
         return head;
     }
 
-    CONSOLELINE* line = s_linelist.NewNode(1, 0, 0);
+    CONSOLELINE* line = s_linelist.NewNode(TSLIST_LINK_AFTER, 0, 0);
 
     line->m_charsalloc = 16;
     line->m_buffer = static_cast<uint8_t*>(SMemAlloc(line->m_charsalloc, __FILE__, __LINE__, 0));
@@ -704,7 +728,7 @@ static int32_t OnMouseDown(const void* data, void* param) {
 
     if (y >= height - s_fontHeight * 0.75f && s_consoleHeight >= y) {
         ResetHighlight();
-        s_consoleResizeState = 1;
+        s_consoleResizeState = CS_STRETCH;
 
         return 0;
     }
@@ -720,7 +744,7 @@ static int32_t OnMouseDown(const void* data, void* param) {
     }
 
     SStrCopy(s_copyText, reinterpret_cast<const char*>(line->m_buffer), sizeof(s_copyText));
-    s_highlightState = 1;
+    s_highlightState = HS_HIGHLIGHTING;
 
     int32_t lineIndex = static_cast<int32_t>((s_consoleHeight - y) / s_fontHeight - 1.0f);
     s_hRect.top = 1.0f - (s_consoleHeight - s_fontHeight * 0.75f - s_fontHeight - lineIndex * s_fontHeight);
@@ -864,11 +888,11 @@ void ConsoleWrite(const char* str, COLOR_T color) {
 
     s_critsect.Enter();
 
-    CONSOLELINE* node = s_linelist.NewNode(0, 0, 0);
+    CONSOLELINE* node = s_linelist.NewNode(TSLIST_NEWNODE_UNLINKED, 0, 0);
     CONSOLELINE* head = s_linelist.Head();
 
     if (head && head->m_inputpos) {
-        s_linelist.LinkNode(node, 1, head);
+        s_linelist.LinkNode(node, TSLIST_LINK_AFTER, head);
     } else {
         s_linelist.LinkToHead(node);
     }
@@ -920,7 +944,7 @@ void ConsolePrintf(const char* format, ...) {
 // VERIFY: d43d21f6 manual
 // OFFSET: 0x007658A0
 void ConsoleCommandExecute(const char* commandLine, int32_t addToHistory) {
-    if (s_execState == 1 || s_execState == 0 || s_execState == 2) {
+    if (s_execState == EXECMODE::EM_RECORDING || s_execState == EXECMODE::EM_PROMPTOVERWRITE || s_execState == EXECMODE::EM_APPEND) {
         if (!AddLineToExecFile(commandLine)) {
             return;
         }

@@ -6,7 +6,7 @@
 // VERIFY: 18cf53cd auto
 // OFFSET: 0x004F4A50
 void CMoveSpline::Skip(CDataStore* msg) {
-    uint32_t flags = 0;
+    uint32_t flags = SPLINEFLAG_NONE;
     msg->Get(flags);
 
     uint32_t faceSize = 0;
@@ -83,9 +83,9 @@ CDataStore& operator>>(CDataStore& msg, CMoveSpline& spline) {
 // VERIFY: d9fccc9a manual
 // OFFSET: 0x006F1240
 CMoveSpline& CMoveSpline::CopyFrom(const CMoveSpline& source) {
-    this->unk_0008 = source.unk_0008;
+    this->unknown_0008 = source.unknown_0008;
     this->m_face = source.m_face;
-    this->unk_001C = source.unk_001C;
+    this->unknown_001C = source.unknown_001C;
     this->m_flags = source.m_flags;
     this->m_timePassed = source.m_timePassed;
     this->m_start = source.m_start;

@@ -21,6 +21,26 @@ class CM2ModelHeap {
 
 class CM2Cache {
     public:
+    enum CACHE_FLAGS : uint32_t {
+        CACHE_NONE = 0,
+        CACHE_Z_FILL = 1,
+        CACHE_CLIP_PLANES = 2,
+        CACHE_ANIMATION_THREADS = 4,
+        CACHE_GPU_SHADERS = 8,
+        CACHE_BATCH_DOODADS = 0x20,
+        CACHE_SINGLE_BONE_SHARED_VERTICES = 0x40,
+        CACHE_BATCH_PARTICLES = 0x80,
+        CACHE_FORCE_ADDITIVE_PARTICLE_SORT = 0x100,
+        CACHE_RUNTIME_OPTIONS = 0x1A0,
+        CACHE_THREAD_RUNNING = 0x400,
+        CACHE_THREAD_EXIT_REQUESTED = 0x800,
+        CACHE_THREAD_STATE_MASK = 0xC00u,
+        CACHE_OPT_TIER1 = 0x2000,
+        CACHE_OPT_SHADER_SORT = 0x4000,
+        CACHE_OPT_TIER2 = 0x6000,
+        CACHE_OPT_TIER3_MASK = 0xE000,
+    };
+
     static uint32_t s_processorFeatures;
 
     static uint32_t STORMAPI ThreadProc(void* param);
@@ -36,8 +56,8 @@ class CM2Cache {
     /* 1010 */ HPROPCONTEXT m_propContext;
     /* 1014 */ void (*m_threadFunc)(void*);
     /* 1018 */ void* m_threadParam;
-    /* 101C */ char unk_101C [64];
-    /* 105C */ char unk_105C [64];
+    /* 101C */ char unused_101C [64];
+    /* 105C */ char unused_105C [64];
     /* 109C */ uint32_t m_updateTime;
     /* 10A0 */ TSExplicitList<CM2Shared, offsetof(CM2Shared, m_updateLink)> m_sharedUpdateList;
 

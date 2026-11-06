@@ -33,7 +33,7 @@ class CMapObjDef;
 class CMapObjGroup;
 struct SMOBatch;
 struct SMOLTile;
-union SMOLiquidVert;
+struct SMOLVert;
 struct SMOMaterial;
 struct SMOPoly;
 class VBBList;
@@ -60,16 +60,16 @@ struct BspQuery {
 };
 
 struct BspQuery_Segment : public BspQuery {
-    /* 0010 */ float* m_hitT;
-    /* 0014 */ float m_origHitT;
+    /* 0010 */ float* m_hitT; // Caller-owned hit parameter as a segment fraction.
+    /* 0014 */ float m_origHitT; // Initial caller limit before conversion to ray distance.
     /* 0018 */ C3Segment m_seg;
     /* 0030 */ C3Ray m_ray;
-    /* 0048 */ float m_oosegMag;
-    /* 004C */ float m_maxT;
+    /* 0048 */ float m_oosegMag; // Reciprocal segment length; converts normalized-ray hit distance to a segment fraction.
+    /* 004C */ float m_maxT; // Current hit limit in distance units along the normalized ray.
     /* 0050 */ SMOMaterial* m_materials;
-    /* 0054 */ int32_t unk_0054;
+    /* 0054 */ int32_t unused_0054;
     /* 0058 */ uint16_t m_faceIgnoreFlags;
-    /* 005A */ uint8_t unk_005A[2];
+    /* 005A */ uint8_t unused_005A[2];
 
     BspQuery_Segment(SMOPoly* faces, C3Vector* vertexList, uint16_t* indices, const C3Segment& seg, float* hitT, uint16_t faceIgnoreFlags, SMOMaterial* materials);
     void operator()(uint16_t face);
@@ -80,7 +80,7 @@ template <class T>
 struct BspQuery_Volume : public BspQuery {
     /* 0010 */ const T* m_volume;
     /* 0014 */ uint16_t m_faceIgnoreFlags;
-    /* 0016 */ uint8_t unk_0016[2];
+    /* 0016 */ uint8_t unused_0016[2];
 
     void operator()(uint16_t face);
     bool GetFaceIndicesUsingCache(const CAaBsp& aaBsp, const CAaBspNode* node);
@@ -133,6 +133,16 @@ class CMapObjOccluder {
 
 class CMapObjGroup {
     public:
+    // Runtime word at +0x198; separate from the WMO group file flags.
+    // Init clears only the low state nibble; Clear removes only LOADED.
+    enum RUNTIME_FLAGS : uint32_t {
+        LOADED = 1,
+        TRANS_VERTEX_ATTENUATION_HANDLED = 0x2,
+        ALL_BATCHES_OPAQUE = 0x4,
+        EXTENDED_VERTEX_FORMAT = 0x8,
+        RUNTIME_STATE_MASK = 0xF,
+    };
+
     bool QueryLighting(const C3Vector& point, uint16_t face, CImVector* color, uint8_t* flag);
     struct VertArray {
         /* 0000 */ TSLink<VertArray> m_link;
@@ -167,10 +177,10 @@ class CMapObjGroup {
     /* 005C */ uint16_t m_transparencyBatchesCount;
     /* 005E */ uint16_t m_intBatchCount;
     /* 0060 */ uint16_t m_extBatchCount;
-    /* 0062 */ uint8_t unk_0062[2];
-    /* 0064 */ CAaBsp m_cAaBspNodePtr1;
+    /* 0062 */ uint8_t unused_0062[2];
+    /* 0064 */ CAaBsp m_aaBsp;
     /* 00CC */ int32_t m_unkFlags;
-    /* 00D0 */ int32_t unk_00D0;
+    /* 00D0 */ int32_t unused_00D0;
     /* 00D4 */ int32_t m_minimapTag;
     /* 00D8 */ char* m_groupName;
     /* 00DC */ SMOPoly* m_polyList;
@@ -191,14 +201,14 @@ class CMapObjGroup {
     /* 011C */ C2iVector m_liquidTiles;
     /* 0124 */ C3Vector m_liquidCorner;
     /* 0130 */ uint16_t m_liquidMaterialId;
-    /* 0132 */ uint8_t unk_0132[2];
-    /* 0134 */ SMOLiquidVert* m_liquidVertexList;
+    /* 0132 */ uint8_t unused_0132[2];
+    /* 0134 */ SMOLVert* m_liquidVertexList;
     /* 0138 */ SMOLTile* m_liquidTileList;
     /* 013C */ float m_liquidHeight;
     /* 0140 */ float m_liquidMaxHeight;
     /* 0144 */ int32_t m_liquidType;
     /* 0148 */ int32_t m_numSharedTiles;
-    /* 014C */ int32_t unk_014C;
+    /* 014C */ int32_t unused_014C;
     /* 0150 */ int32_t m_polyListSize;
     /* 0154 */ int32_t m_indicesCount;
     /* 0158 */ int32_t m_stripIndexCount;
@@ -215,7 +225,7 @@ class CMapObjGroup {
     /* 0184 */ void* m_filePtr;
     /* 0188 */ int32_t m_fileSize;
     /* 018C */ CMapObj* m_parent;
-    /* 0190 */ float unk_0190;
+    /* 0190 */ float unused_0190;
     /* 0194 */ CAsyncObject* m_asyncObjPtr;
     /* 0198 */ uint32_t m_unkLoadedFlag;
     /* 019C */ uint32_t m_indexMin;
@@ -285,8 +295,8 @@ struct SMOGroupHeader {
     /* 0030 */ uint8_t m_fogIds [4];
     /* 0034 */ uint32_t m_groupLiquid;
     /* 0038 */ uint32_t m_uniqueID;
-    /* 003C */ uint32_t unk_003C;
-    /* 0040 */ uint32_t unk_0040;
+    /* 003C */ uint32_t unused_003C;
+    /* 0040 */ uint32_t unused_0040;
 };
 
 struct SMOLTile {
@@ -307,15 +317,18 @@ struct SMOWVert {
     /* 0004 */ float m_height;
 };
 
-union SMOLiquidVert {
-    /* 0000 */ SMOWVert m_waterVert;
-    /* 0000 */ SMOMVert m_magmaVert;
+// 0.5.3 symbol name; the two eight-byte views also match the 3.3.5 WMO reader.
+struct SMOLVert {
+    union {
+        /* 0000 */ SMOWVert m_waterVert;
+        /* 0000 */ SMOMVert m_magmaVert;
+    };
 };
 
 class VBBList_Block {
     public:
     /* 0000 */ TSLink<VBBList_Block> m_link;
-    /* 0008 */ float unk_0008;
+    /* 0008 */ float unused_0008;
     /* 000C */ uint32_t m_offset;
     /* 0010 */ uint32_t m_capacity;
     /* 0014 */ CGxPool* m_pool;
@@ -362,7 +375,7 @@ namespace World {
         static uint32_t nBatches;
         static uint32_t faceIndexCursor;
         static uint32_t indexCursor;
-        static uint32_t unk_CB7538;
+        static uint32_t matrixPoolCount;
         static uint16_t faceIndexPool[0x4000];
         static uint16_t indexPool[0xC000];
         static Batch batches[32];
@@ -376,10 +389,10 @@ namespace World {
 
 class WMOGroup {
     public:
-    /* 0000 */ uint8_t unk_0000[284];
-    /* 011C */ uint32_t unk_011C;
-    /* 0120 */ uint8_t unk_0120[24];
-    /* 0138 */ uint32_t unk_0138;
+    /* 0000 */ uint8_t unused_0000[284];
+    /* 011C */ uint32_t unused_011C;
+    /* 0120 */ uint8_t unused_0120[24];
+    /* 0138 */ uint32_t unused_0138;
 };
 
 // VERIFY: d3f8a7cc auto
@@ -407,14 +420,14 @@ void CAaBsp_Query_Segment<T>::GetFaceIndices(uint32_t nodeIndex, const C3Segment
         return;
     }
 
-    if (node->m_flags & 4) {
+    if (node->m_flags & CAaBspNode::Flag_Leaf) {
         this->CAaBsp_Query<T>::GetFaceIndices(node);
         return;
     }
 
-    uint32_t axis = node->m_flags & 3;
-    const float* segB = &seg.b.x;
-    const float* segT = &seg.t.x;
+    uint32_t axis = node->m_flags & CAaBspNode::Flag_AxisMask;
+    const float* segB = &seg.start.x;
+    const float* segT = &seg.end.x;
     const float* boxB = &box.b.x;
     const float* boxT = &box.t.x;
 
@@ -435,11 +448,11 @@ void CAaBsp_Query_Segment<T>::GetFaceIndices(uint32_t nodeIndex, const C3Segment
     float distT;
 
     if ((distB >= -0.0099999998f && distB <= 0.0099999998f) || ((distT = segT[axis] - node->m_planeDist) >= -0.0099999998f && distT <= 0.0099999998f)) {
-        if (node->m_posChild != 0xFFFF) {
+        if (node->m_posChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_posChild, seg, posBox);
         }
 
-        if (node->m_negChild != 0xFFFF) {
+        if (node->m_negChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_negChild, seg, negBox);
         }
 
@@ -447,7 +460,7 @@ void CAaBsp_Query_Segment<T>::GetFaceIndices(uint32_t nodeIndex, const C3Segment
     }
 
     if (distB > 0.0099999998f && distT > 0.0099999998f) {
-        if (node->m_posChild != 0xFFFF) {
+        if (node->m_posChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_posChild, seg, posBox);
         }
 
@@ -455,7 +468,7 @@ void CAaBsp_Query_Segment<T>::GetFaceIndices(uint32_t nodeIndex, const C3Segment
     }
 
     if (distB < -0.0099999998f && distT < -0.0099999998f) {
-        if (node->m_negChild != 0xFFFF) {
+        if (node->m_negChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_negChild, seg, negBox);
         }
 
@@ -466,27 +479,27 @@ void CAaBsp_Query_Segment<T>::GetFaceIndices(uint32_t nodeIndex, const C3Segment
     C3Segment part;
 
     if (distB <= 0.0f) {
-        if (node->m_negChild != 0xFFFF) {
-            part.b = seg.b;
-            part.t = split;
+        if (node->m_negChild != CAaBspNode::Flag_NoChild) {
+            part.start = seg.start;
+            part.end = split;
             this->GetFaceIndices(node->m_negChild, part, negBox);
         }
 
-        if (node->m_posChild != 0xFFFF) {
-            part.b = split;
-            part.t = seg.t;
+        if (node->m_posChild != CAaBspNode::Flag_NoChild) {
+            part.start = split;
+            part.end = seg.end;
             this->GetFaceIndices(node->m_posChild, part, posBox);
         }
     } else {
-        if (node->m_posChild != 0xFFFF) {
-            part.b = seg.b;
-            part.t = split;
+        if (node->m_posChild != CAaBspNode::Flag_NoChild) {
+            part.start = seg.start;
+            part.end = split;
             this->GetFaceIndices(node->m_posChild, part, posBox);
         }
 
-        if (node->m_negChild != 0xFFFF) {
-            part.b = split;
-            part.t = seg.t;
+        if (node->m_negChild != CAaBspNode::Flag_NoChild) {
+            part.start = split;
+            part.end = seg.end;
             this->GetFaceIndices(node->m_negChild, part, negBox);
         }
     }
@@ -498,12 +511,12 @@ template <class T>
 void CAaBsp_Query_AaBox<T>::GetFaceIndices(uint32_t nodeIndex, const CAaBox& query, const CAaBox& bounds) {
     const CAaBspNode* node = &this->m_aaBsp->m_nodes[nodeIndex];
 
-    if (node->m_flags & 4) {
+    if (node->m_flags & CAaBspNode::Flag_Leaf) {
         this->CAaBsp_Query<T>::GetFaceIndices(node);
         return;
     }
 
-    uint32_t axis = node->m_flags & 3;
+    uint32_t axis = node->m_flags & CAaBspNode::Flag_AxisMask;
     const float* queryB = &query.b.x;
     const float* queryT = &query.t.x;
     const float* boundsB = &bounds.b.x;
@@ -519,7 +532,7 @@ void CAaBsp_Query_AaBox<T>::GetFaceIndices(uint32_t nodeIndex, const CAaBox& que
     (&negBounds.t.x)[axis] = node->m_planeDist;
 
     if (node->m_planeDist < queryB[axis]) {
-        if (node->m_posChild != 0xFFFF) {
+        if (node->m_posChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_posChild, query, posBounds);
         }
 
@@ -527,20 +540,20 @@ void CAaBsp_Query_AaBox<T>::GetFaceIndices(uint32_t nodeIndex, const CAaBox& que
     }
 
     if (node->m_planeDist > queryT[axis]) {
-        if (node->m_negChild != 0xFFFF) {
+        if (node->m_negChild != CAaBspNode::Flag_NoChild) {
             this->GetFaceIndices(node->m_negChild, query, negBounds);
         }
 
         return;
     }
 
-    if (node->m_posChild != 0xFFFF) {
+    if (node->m_posChild != CAaBspNode::Flag_NoChild) {
         CAaBox part = query;
         (&part.b.x)[axis] = node->m_planeDist;
         this->GetFaceIndices(node->m_posChild, part, posBounds);
     }
 
-    if (node->m_negChild != 0xFFFF) {
+    if (node->m_negChild != CAaBspNode::Flag_NoChild) {
         CAaBox part = query;
         (&part.t.x)[axis] = node->m_planeDist;
         this->GetFaceIndices(node->m_negChild, part, negBounds);

@@ -1,4 +1,5 @@
 #include "PaperDollInfoFrame.h"
+#include "WoW/Common/ComponentCore/Types.h"
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/lua-5.1/src/lua.h"
 #include "WoW/Source/DB/DBClient/DBCacheInstances.h"
@@ -69,7 +70,7 @@ static int32_t Script_GetInventoryItemTexture(lua_State* L) {
             } else {
                 const CGItem_C* item = static_cast<const CGBag_C*>(unit->GetBag())->GetItemPointer(slot);
 
-                if (item && !(item->m_modelFlags & 0x10000)) {
+                if (item && !(item->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_DISABLED)) {
                     displayId = item->GetDisplayID();
                 }
             }
@@ -77,7 +78,7 @@ static int32_t Script_GetInventoryItemTexture(lua_State* L) {
 
         if (displayId) {
             char texture[260];
-            const char* path = ClientDBStringLookup(3);
+            const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
             SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(displayId));
             lua_pushstring(L, texture);
             return 1;
@@ -122,10 +123,10 @@ static int32_t Script_KeyRingButtonIDToInvSlotID(lua_State* L) {
 // VERIFY: eec95ec5 manual
 // OFFSET: 0x005EAC10
 static int32_t Script_OffhandHasWeapon(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
-    CGItem_C* item = player ? player->m_bag.GetItemPointer(16) : nullptr;
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
+    CGItem_C* item = player ? player->m_bag.GetItemPointer(INVSLOT_OFFHAND) : nullptr;
 
-    if (item && item->GetClassID() == 2) {
+    if (item && item->GetClassID() == ITEM_CLASS::ITEM_CLASS_WEAPON) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -151,12 +152,12 @@ static int32_t Script_GetInventoryAlertStatus(lua_State* L) {
 // VERIFY: cd7a1415 manual
 // OFFSET: 0x005EAE90
 static int32_t Script_HasWandEquipped(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && static_cast<uint32_t>(player->m_bag.m_numSlots) > 17 && player->m_bag.m_slots[17]) {
-        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(player->m_bag.m_slots[17], TYPEMASK_ITEM, __FILE__, __LINE__));
+    if (player && static_cast<uint32_t>(player->m_bag.m_numSlots) > INVSLOT_RANGED && player->m_bag.m_slots[INVSLOT_RANGED]) {
+        CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(player->m_bag.m_slots[INVSLOT_RANGED], TYPE_ITEM, __FILE__, __LINE__));
 
-        if (item && item->GetSubtypeID() == 19) {
+        if (item && item->GetSubtypeID() == ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_WAND) {
             lua_pushnumber(L, 1.0);
             return 1;
         }
@@ -216,10 +217,10 @@ static int32_t Script_IsInventoryItemLocked(lua_State* L) {
         return 0;
     }
 
-    CGPlayer_C* player = slot != -1 ? static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) : nullptr;
+    CGPlayer_C* player = slot != -1 ? static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) : nullptr;
     const CGItem_C* item = player ? static_cast<const CGBag_C*>(&player->m_bag)->GetItemPointer(slot) : nullptr;
 
-    if (item && (item->m_itemFlags & 1)) {
+    if (item && (item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_LOCKED)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -271,7 +272,7 @@ static int32_t Script_GetInventoryItemBroken(lua_State* L) {
     CGPlayer_C* unit = static_cast<CGPlayer_C*>(GetUnitFromName(unitName));
     CGItem_C* item;
 
-    if (!CGCharacterInfo::CanInspect(unit) || slot == -1 || !(item = unit->m_bag.GetItemPointer(slot)) || (item->m_item->m_itemFieldFlags & 0x8) || !item->m_item->m_itemFieldMaxdurability || item->GetDurability()) {
+    if (!CGCharacterInfo::CanInspect(unit) || slot == -1 || !(item = unit->m_bag.GetItemPointer(slot)) || (item->m_item->m_itemFieldFlags & ITEM_DFLAG_WRAPPED) || !item->m_item->m_itemFieldMaxdurability || item->GetDurability()) {
         lua_pushnil(L);
         return 1;
     }
@@ -318,7 +319,7 @@ static int32_t Script_GetInventoryItemCount(lua_State* L) {
         return 1;
     }
 
-    if (!(item->m_obj->m_type & TYPEMASK_CONTAINER)) {
+    if (!(item->m_obj->m_type & TYPE_CONTAINER)) {
         lua_pushnumber(L, item->m_item->m_itemFieldStackCount);
         return 1;
     }
@@ -335,7 +336,7 @@ static int32_t Script_GetInventoryItemCount(lua_State* L) {
             continue;
         }
 
-        if (!(rec->m_displayFlags & 0x4)) {
+        if (!(rec->m_displayFlags & ITEM_SUBCLASS_DISPLAY_FLAG_SHOW_CONTENTS_COUNT)) {
             break;
         }
 
@@ -385,9 +386,9 @@ static int32_t Script_CursorCanGoInSlot(lua_State* L) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if ((player && player->ValidateSlot(slot, CGGameUI::GetCursorItem())) || (slot == -1 && CGGameUI::m_cursorItemType == 9)) {
+    if ((player && player->ValidateSlot(slot, CGGameUI::GetCursorItem())) || (slot == -1 && CGGameUI::m_cursorItemType == UICURSOR_AMMO)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -399,7 +400,7 @@ static int32_t Script_CursorCanGoInSlot(lua_State* L) {
 // VERIFY: f4825e25 manual
 // OFFSET: 0x005EACA0
 static int32_t Script_GetWeaponEnchantInfo(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         lua_pushnil(L);
@@ -444,7 +445,7 @@ static int32_t Script_GetGuildInfo(lua_State* L) {
 
     CGUnit_C* unit = GetUnitFromName(lua_tolstring(L, 1, nullptr));
 
-    if (unit && (unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+    if (unit && (unit->m_obj->m_type & TYPE_PLAYER)) {
         CGPlayer_C* player = static_cast<CGPlayer_C*>(unit);
         int32_t guildId = player->m_player->m_playerGuildid;
 
@@ -606,7 +607,7 @@ static int32_t Script_GetInventoryItemsForSlot(lua_State* L) {
     }
 
     CGBag_C* inventory = player->GetBag();
-    ChrClassesRec* chrClass = g_chrClassesDB.GetRecord(player->m_unit->m_unitFieldBytes0[1]);
+    ChrClassesRec* chrClass = g_chrClassesDB.GetRecord(player->m_unit->m_classID);
 
     if (!chrClass) {
         return 0;
@@ -642,7 +643,7 @@ static int32_t Script_GetInventoryItemsForSlot(lua_State* L) {
     }
 
     for (uint32_t bagIndex = 0; bagIndex < 4; bagIndex++) {
-        CGObject_C* container = ClntObjMgrObjectPtr(GetBagAtIndex(bagIndex), TYPEMASK_CONTAINER, __FILE__, __LINE__);
+        CGObject_C* container = ClntObjMgrObjectPtr(GetBagAtIndex(bagIndex), TYPE_CONTAINER, __FILE__, __LINE__);
 
         if (!container) {
             continue;
@@ -689,7 +690,7 @@ static int32_t Script_GetInventoryItemsForSlot(lua_State* L) {
     }
 
     for (uint32_t bagIndex = 4; bagIndex < 11; bagIndex++) {
-        CGObject_C* container = ClntObjMgrObjectPtr(GetBagAtIndex(bagIndex), TYPEMASK_CONTAINER, __FILE__, __LINE__);
+        CGObject_C* container = ClntObjMgrObjectPtr(GetBagAtIndex(bagIndex), TYPE_CONTAINER, __FILE__, __LINE__);
 
         if (!container) {
             continue;
@@ -996,7 +997,7 @@ static int32_t Script_PickupBagFromSlot(lua_State* L) {
 // VERIFY: 6371d69b auto
 // OFFSET: 0x005EA930
 static int32_t Script_ShowInventorySellCursor(lua_State* L) {
-    if (Spell_C_IsTargeting() || CursorGetResetMode() != 1) {
+    if (Spell_C_IsTargeting() || CursorGetResetMode() != POINT_CURSOR) {
         return 0;
     }
 
@@ -1014,8 +1015,8 @@ static int32_t Script_ShowInventorySellCursor(lua_State* L) {
 
     CGItem_C* item = player->GetBag()->GetItemPointer(slot);
 
-    if (item && !(item->m_itemFlags & 0x1)) {
-        CursorSetMode(3);
+    if (item && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_LOCKED)) {
+        CursorSetMode(BUY_CURSOR);
     }
 
     return 0;
@@ -1039,7 +1040,7 @@ static int32_t Script_SetInventoryPortraitTexture(lua_State* L) {
 
     CGUnit_C* unit = GetUnitFromName(lua_tolstring(L, 2, nullptr));
 
-    if (!unit || !(unit->m_obj->m_type & TYPEMASK_PLAYER)) {
+    if (!unit || !(unit->m_obj->m_type & TYPE_PLAYER)) {
         return 0;
     }
 
@@ -1047,7 +1048,7 @@ static int32_t Script_SetInventoryPortraitTexture(lua_State* L) {
     CGItem_C* item = slot == -1 ? player->m_bag.FindItemOfType(CGCharacterInfo::GetActivePlayerAmmoID(player), 0) : player->m_bag.GetItemPointer(slot);
 
     if (item) {
-        const char* path = ClientDBStringLookup(3);
+        const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
         char buffer[260];
         SStrPrintf(buffer, sizeof(buffer), "%s%s%s", path, *path ? "\\" : "", item->GetInventoryArt());
         SetPortraitTexture(texture, buffer);

@@ -143,7 +143,7 @@ static bool IsDanceMoveAvailable(const DanceMovesRec* move, uint8_t race) {
 int32_t Packet_SMSG_STOP_DANCE(void* param, NETMESSAGE msgId, uint32_t time, CDataStore* msg) {
     WOWGUID guid;
     msg->Get(guid.m_guid);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         player->StopDance();
@@ -155,7 +155,7 @@ int32_t Packet_SMSG_STOP_DANCE(void* param, NETMESSAGE msgId, uint32_t time, CDa
 // VERIFY: 6a163f90 manual
 // OFFSET: 0x005758C0
 void CGDanceStudio::PlayDance(DanceCache* record, DANCE_REQUEST* request) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(request->m_guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(request->m_guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -203,7 +203,7 @@ static void DanceSequenceCallBack(int32_t id, const WOWGUID& guid, void* param, 
         WOWGUID none = WOWGUID();
         DanceCache* record = g_danceCache.GetRecord(id, none, nullptr, nullptr, false);
 
-        if (ClntObjMgrObjectPtr(request->m_guid, TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+        if (ClntObjMgrObjectPtr(request->m_guid, TYPE_PLAYER, __FILE__, __LINE__)) {
             CGDanceStudio::PlayDance(record, request);
         }
     }
@@ -228,7 +228,7 @@ int32_t Packet_SMSG_PLAY_DANCE(void* param, NETMESSAGE msgId, uint32_t time, CDa
     WOWGUID none = WOWGUID();
     DanceCache* record = g_danceCache.GetRecord(danceId, none, nullptr, nullptr, false);
 
-    if (record && record->unk_0098 == version) {
+    if (record && record->m_version == version) {
         DANCE_REQUEST request;
         request.m_danceId = danceId;
         InitializeRandomSeed(&request.m_seed, seed);
@@ -251,7 +251,7 @@ int32_t Packet_SMSG_PLAY_DANCE(void* param, NETMESSAGE msgId, uint32_t time, CDa
 // OFFSET: 0x00575BE0
 void CGDanceStudio::DisplayDance(DanceCache* record) {
     ConsoleWrite("Dance Loaded:", DEFAULT_COLOR);
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
@@ -266,7 +266,7 @@ void CGDanceStudio::DisplayDance(DanceCache* record) {
             SStrPrintf(text, sizeof(text), "%d) Move: %s Chance: %d%%", i + 1, move->m_internalName, i < record->m_dataCount ? record->m_data[i].m_chance : 0);
             COLOR_T color = DEFAULT_COLOR;
 
-            if (!IsDanceMoveAvailable(move, player->m_unit->m_unitFieldBytes0[0])) {
+            if (!IsDanceMoveAvailable(move, player->m_unit->m_raceID)) {
                 color = ERROR_COLOR;
             }
 

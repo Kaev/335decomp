@@ -4,9 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 #include "Engine/Source/Storm/H/stpl.h"
+#include "Engine/Source/Frame/Types.h"
 #include "Engine/Source/Tempest/CImVector.h"
 #include "WoW/Source/Net/Types.h"
 #include "WoW/Source/Object/WGUID.h"
+#include "WoW/Source/Object/ObjectClient/Types.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/AccountData.h"
 #include "WoW/Source/Ui/Types.h"
 
@@ -91,7 +93,7 @@ struct RaidInstanceInfo {
     /* 0010 */ uint32_t m_locked;
     /* 0014 */ uint32_t m_extended;
     /* 0018 */ uint32_t m_resetTime;
-    /* 001C */ uint32_t unk_001C;
+    /* 001C */ uint32_t unused_001C;
 };
 
 struct ChatConversation {
@@ -103,7 +105,7 @@ struct ChatConversation {
 struct PENDINGCHAT {
     /* 0000 */ TSLink<PENDINGCHAT> m_link;
     /* 0008 */ int32_t m_type;
-    /* 000C */ uint32_t unk_000C;
+    /* 000C */ uint32_t unused_000C;
     /* 0010 */ WOWGUID m_senderGuid;
     /* 0018 */ uint32_t m_senderUnk;
     /* 001C */ char* m_text;
@@ -111,15 +113,15 @@ struct PENDINGCHAT {
     /* 0024 */ char* m_targetName;
     /* 0028 */ uint32_t m_language;
     /* 002C */ int32_t m_queued;
-    /* 0030 */ int32_t unk_0030;
+    /* 0030 */ int32_t unused_0030;
     /* 0034 */ char m_channelName[128];
-    /* 00B4 */ uint32_t unk_00B4;
+    /* 00B4 */ uint32_t unused_00B4;
     /* 00B8 */ WOWGUID m_targetGuid;
     /* 00C0 */ char m_flags[5];
     /* 00C8 */ int32_t m_achievementID;
     /* 00CC */ bool m_isGM;
     /* 00D0 */ ChatConversation* m_conversation;
-    /* 00D4 */ uint32_t unk_00D4;
+    /* 00D4 */ uint32_t unused_00D4;
 
     PENDINGCHAT() : m_text(nullptr), m_senderName(nullptr), m_conversation(nullptr) {
     }
@@ -147,18 +149,30 @@ class SPAMCHECK : public TSHashObject<SPAMCHECK, HASHKEY_STR> {
     public:
     /* 0018 */ bool m_filtered;
     /* 001C */ char* m_filteredText;
+
+    ~SPAMCHECK();
 };
 
 class PROFANITYCHECK : public TSHashObject<PROFANITYCHECK, HASHKEY_STR> {
     public:
     /* 0018 */ bool m_filtered;
     /* 001C */ char* m_filteredText;
+
+    ~PROFANITYCHECK();
 };
 
 struct PENDINGUSERLIST : public TSLinkedNode<PENDINGUSERLIST> {
+    enum VOICE_FLAGS : int32_t {
+        VOICE_UNSQUELCHED = 0x10,
+        VOICE_MUTED_OR_SQUELCHED = 0x20,
+        VOICE_SESSION_MEMBER = 0x40,
+        VOICE_MEMBER_STATUS = 0x80,
+        BASE_FLAGS_MASK = 0xF,
+    };
+
     /* 0008 */ WOWGUID m_guid;
     /* 0010 */ uint8_t m_flags;
-    /* 0014 */ uint32_t unk_0014;
+    /* 0014 */ uint32_t unused_0014;
 };
 
 class ChatChannel {
@@ -175,16 +189,44 @@ class ChatChannel {
     /* 00A5 */ uint8_t m_unkA5;
 
     ChatChannel();
+    ~ChatChannel();
 };
 
 struct DisplayChannel {
+    enum TYPE : int32_t {
+        CHANNEL = 0,
+        BATTLEGROUND = 1,
+        PARTY = 2,
+        RAID = 3,
+        HEADER = 4,
+    };
+
+    enum HEADER_INDEX : int32_t {
+        NO_HEADER = -1,
+        GROUP_HEADER = 0,
+        WORLD_HEADER = 1,
+        CUSTOM_HEADER = 2,
+        NUM_HEADERS = 3,
+    };
+
+    enum : int32_t {
+        PARTY_INDEX = -1,
+        RAID_INDEX = -2,
+        BATTLEGROUND_INDEX = -3,
+    };
+
+    enum FLAGS : uint32_t {
+        NO_FLAGS = 0,
+        WORLD_CHANNEL = 1,
+    };
+
     /* 0000 */ int32_t m_channelIndex;
-    /* 0004 */ int32_t m_headerIndex;
-    /* 0008 */ int32_t m_type;
+    /* 0004 */ HEADER_INDEX m_headerIndex;
+    /* 0008 */ TYPE m_type;
     /* 000C */ int32_t m_collapsed;
     /* 0010 */ int32_t m_enabled;
     /* 0014 */ int32_t m_voiceEnabled;
-    /* 0018 */ uint32_t m_flags;
+    /* 0018 */ FLAGS m_flags;
     /* 001C */ int32_t m_count;
 };
 
@@ -240,10 +282,10 @@ class ChatWindowInfo {
     /* 00DC */ int32_t m_docked;
     /* 00E0 */ uint32_t m_shown;
     /* 00E4 */ int32_t m_unkE4;
-    /* 00E8 */ uint32_t m_unkE8;
-    /* 00EC */ float m_unkEC;
-    /* 00F0 */ float m_unkF0;
-    /* 00F4 */ uint8_t m_unkF4;
+    /* 00E8 */ FRAMEPOINT m_anchorPoint;
+    /* 00EC */ float m_xOffsetRatio; // Saved position ratios, not pixel offsets.
+    /* 00F0 */ float m_yOffsetRatio;
+    /* 00F4 */ uint8_t m_hasSavedLayout; // Gates saved position/dimensions; loading either record also sets it.
     /* 00F8 */ float m_width;
     /* 00FC */ float m_height;
 
@@ -263,7 +305,7 @@ struct ChatRecord {
     /* 17B0 */ uint32_t m_unk17B0;
     /* 17B4 */ uint32_t m_lineID;
     /* 17B8 */ uint32_t m_time;
-    /* 17BC */ uint32_t unk_17BC;
+    /* 17BC */ uint32_t unused_17BC;
 };
 
 struct ChatColorInfo {
@@ -277,12 +319,99 @@ int32_t Packet_SMSG_LOG_XPGAIN(void* param, NETMESSAGE msgId, uint32_t time, CDa
 
 class CGChat {
     public:
+    enum LOG_TYPE : int32_t {
+        CHAT_LOG = 0,
+        COMBAT_LOG = 1,
+        NUM_LOG_TYPES = 2,
+    };
+
+    enum CHANNEL_NOTIFY : int32_t {
+        JOINED = 0,
+        LEFT = 1,
+        YOU_JOINED = 2,
+        YOU_LEFT = 3,
+        WRONG_PASSWORD = 4,
+        NOT_MEMBER = 5,
+        NOT_MODERATOR = 6,
+        PASSWORD_CHANGED = 7,
+        OWNER_CHANGED = 8,
+        PLAYER_NOT_FOUND = 9,
+        NOT_OWNER = 10,
+        CHANNEL_OWNER = 11,
+        FLAGS_CHANGED = 12,
+        ANNOUNCEMENTS_ON = 13,
+        ANNOUNCEMENTS_OFF = 14,
+        MODERATION_ON = 15,
+        MODERATION_OFF = 16,
+        MUTED = 17,
+        PLAYER_KICKED = 18,
+        BANNED = 19,
+        PLAYER_BANNED = 20,
+        PLAYER_UNBANNED = 21,
+        PLAYER_NOT_BANNED = 22,
+        PLAYER_ALREADY_MEMBER = 23,
+        INVITE = 24,
+        INVITE_WRONG_FACTION = 25,
+        WRONG_FACTION = 26,
+        INVALID_NAME = 27,
+        NOT_MODERATED = 28,
+        PLAYER_INVITED = 29,
+        PLAYER_INVITE_BANNED = 30,
+        THROTTLED = 31,
+        NOT_IN_AREA = 32,
+        NOT_IN_LFG = 33,
+        VOICE_ON = 34,
+        VOICE_OFF = 35,
+        VOICE_ON_SILENT = 36,
+    };
+
+    enum INSTANCE_RESET_FAILURE : int32_t {
+        GENERIC = 0,
+        OFFLINE = 1,
+        ZONING = 2,
+    };
+
+    enum COMPLAINT_PRIORITY : uint32_t {
+        WHISPER_OR_BATTLENET = 0,
+        CHANNEL_NONZERO = 1,
+        CHANNEL_ZERO = 2,
+        BATTLEGROUND_LEADER = 3,
+        BATTLEGROUND = 4,
+        RAID_LEADER = 5,
+        RAID_WARNING = 6,
+        RAID = 7,
+        PARTY_LEADER = 8,
+        PARTY = 9,
+        YELL = 10,
+        SAY = 11,
+        EMOTE = 12,
+        AFK = 13,
+        DND = 14,
+        UNSUPPORTED = 0xFFFFFFFF,
+    };
+
+    enum RAID_INSTANCE_MESSAGE : int32_t {
+        WARNING_HOURS = 1,
+        WARNING_MINUTES = 2,
+        WARNING_MINUTES_SOON = 3,
+        WELCOME = 4,
+        EXPIRED = 5,
+    };
+
+    enum CHANNEL_MEMBER_FLAGS : int32_t {
+        OWNER = 0x1,
+        MODERATOR = 0x2,
+        VOICE = 0x4,
+        SPEAK = 0x10,
+        OWNER_OR_MODERATOR = 0x3,
+    };
+
     static void InformTargetIcon(WOWGUID setter, WOWGUID target, int32_t index);
     static void JoiningParty(bool raid, int32_t pvp);
     static void SaveChatSettings();
     static void ZoneUpdate();
     static void ProcessPendingChatQueue();
-    static void LogReactionChanged(int32_t faction, int32_t reaction);
+    static void LogReactionChanged(int32_t faction, UNIT_REACTION reaction);
     static void LogFactionChanged(int32_t faction, int32_t delta, int32_t generic, float bonus);
     static void EnterWorld();
     static void InitializeGame();
@@ -440,7 +569,7 @@ extern uint32_t s_activeVoiceChannel;
 
 extern uint32_t s_numSavedInstances;
 
-extern uint8_t s_collapsedHeaders[3];
+extern uint8_t s_collapsedHeaders[DisplayChannel::HEADER_INDEX::NUM_HEADERS];
 
 extern ChatWindowInfo s_chatWindows[10];
 
@@ -450,9 +579,9 @@ extern ChatColorInfo s_chatColors[CHAT_MSG_MAX];
 
 extern TSGrowableArray<ChatColorInfo> s_channelColors;
 
-extern int32_t s_chatLogging[2];
+extern int32_t s_chatLogging[CGChat::LOG_TYPE::NUM_LOG_TYPES];
 
-extern HSLOG s_chatLog[2];
+extern HSLOG s_chatLog[CGChat::LOG_TYPE::NUM_LOG_TYPES];
 
 extern const ChatColorInfo s_chatTypeInfo[CHAT_MSG_MAX];
 

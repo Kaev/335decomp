@@ -75,13 +75,13 @@ C3Vector LightningObject::GetCasterPosition(CGUnit_C* unit, uint32_t attachment,
     position.y = base.y;
     position.z = unit->m_scale * unit->m_height * 0.75f + base.z;
 
-    if (model && model->IsLoaded(0, 0) && (model->m_fFlags & 0x8000)) {
-        if (attachment != 0xFFFFFFFF && unit->HasAttachmentForEffect(attachment, raw)) {
+    if (model && model->IsLoaded(0, 0) && (model->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID)) {
+        if (attachment != MODEL_ATTACHMENT_ID::ATTACH_NONE && unit->HasAttachmentForEffect(attachment, raw)) {
             return unit->GetAttachmentPositionForEffect(attachment, offset, raw);
         }
 
-        if (model->HasEvent(0x4C534324)) {
-            return offset * model->GetEventWorldTransform(0x4C534324);
+        if (model->HasEvent(M2_EVENT_ID::MissileReleaseLeft_CSL)) {
+            return offset * model->GetEventWorldTransform(M2_EVENT_ID::MissileReleaseLeft_CSL);
         }
 
         if (offset.x != 0.0f || offset.y != 0.0f || offset.z != 0.0f) {
@@ -104,18 +104,18 @@ C3Vector LightningObject::GetImpactPosition(CGUnit_C* unit, uint32_t spellId) {
     SpellRec spell;
 
     if (!g_spellDB.GetRecord(spellId, &spell)) {
-        if (model->IsLoaded(0, 0) && (model->m_fFlags & 0x8000) && model->HasAttachment(34)) {
-            return model->GetAttachmentPosition(34);
+        if (model->IsLoaded(0, 0) && (model->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID) && model->HasAttachment(MODEL_ATTACHMENT_ID::ATTACH_TORSOSPELL)) {
+            return model->GetAttachmentPosition(MODEL_ATTACHMENT_ID::ATTACH_TORSOSPELL);
         }
 
         return position;
     }
 
     SpellVisualRec buffer;
-    const SpellVisualRec* visual = (unit->m_obj->m_type & TYPEMASK_UNIT) ? unit->GetAppropriateSpellVisual(&spell, buffer, 0, 0) : GetSpellVisual(&spell);
-    int32_t raw = visual->m_flags & 0x200;
+    const SpellVisualRec* visual = (unit->m_obj->m_type & TYPE_UNIT) ? unit->GetAppropriateSpellVisual(&spell, buffer, 0, 0) : GetSpellVisual(&spell);
+    int32_t raw = visual->m_flags & SPELL_VISUAL_FLAG_RAW_ATTACHMENT_IDS;
 
-    if (model->IsLoaded(0, 0) && (model->m_fFlags & 0x8000) && unit->HasAttachmentForEffect(visual->m_missileDestinationAttachment, raw)) {
+    if (model->IsLoaded(0, 0) && (model->m_runtimeFlags & M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID) && unit->HasAttachmentForEffect(visual->m_missileDestinationAttachment, raw)) {
         position.x = visual->m_missileImpactOffset[0];
         position.y = -visual->m_missileImpactOffset[1];
         position.z = visual->m_missileImpactOffset[2];
@@ -150,10 +150,10 @@ bool LightningObject::Tick(uint32_t time) {
             continue;
         }
 
-        CGObject_C* source = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[bolt.m_source] }, TYPEMASK_OBJECT, __FILE__, __LINE__));
-        CGObject_C* target = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[bolt.m_target] }, TYPEMASK_OBJECT, __FILE__, __LINE__));
-        CGUnit_C* sourceUnit = source && (source->m_obj->m_type & TYPEMASK_UNIT) ? static_cast<CGUnit_C*>(source) : nullptr;
-        CGUnit_C* targetUnit = target && (target->m_obj->m_type & TYPEMASK_UNIT) ? static_cast<CGUnit_C*>(target) : nullptr;
+        CGObject_C* source = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[bolt.m_source] }, TYPE_OBJECT, __FILE__, __LINE__));
+        CGObject_C* target = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[bolt.m_target] }, TYPE_OBJECT, __FILE__, __LINE__));
+        CGUnit_C* sourceUnit = source && (source->m_obj->m_type & TYPE_UNIT) ? static_cast<CGUnit_C*>(source) : nullptr;
+        CGUnit_C* targetUnit = target && (target->m_obj->m_type & TYPE_UNIT) ? static_cast<CGUnit_C*>(target) : nullptr;
 
         if ((this->m_flags & 0x1) || (time >= bolt.m_startTime && time < bolt.m_endTime)) {
             C3Vector sourcePos(0.0f, 0.0f, 0.0f);
@@ -191,15 +191,15 @@ bool LightningObject::Tick(uint32_t time) {
             CLightning* lightning = s_lightningManager->GetTempPtr(bolt.m_lightning);
 
             if (source && lightning) {
-                if (lightning->m_flags & 0x10) {
+                if (lightning->m_flags & CLightning::RUNTIME_FLAGS::FLAG_SOURCE_ENDPOINT) {
                     source->ConnectToLightningThisFrame(this->m_spellId, -1);
                 }
 
                 if (target) {
-                    if (lightning->m_flags & 0x20) {
+                    if (lightning->m_flags & CLightning::RUNTIME_FLAGS::FLAG_DESTINATION_ENDPOINT) {
                         target->ConnectToLightningThisFrame(this->m_spellId, -1);
                     }
-                } else if (lightning->m_flags & 0x20) {
+                } else if (lightning->m_flags & CLightning::RUNTIME_FLAGS::FLAG_DESTINATION_ENDPOINT) {
                     source->ConnectToLightningThisFrame(this->m_spellId, bolt.m_attachment);
                 }
             }
@@ -381,14 +381,14 @@ void LightningObject::InitializeBolts(CGObject_C* caster, const WOWGUID* targets
             continue;
         }
 
-        CGObject_C* object = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[i + 1] }, TYPEMASK_OBJECT, __FILE__, __LINE__));
+        CGObject_C* object = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(WOWGUID{ this->m_targets[i + 1] }, TYPE_OBJECT, __FILE__, __LINE__));
 
         if (!object) {
             continue;
         }
 
         for (CEffect* effect = object->m_effectList; effect; effect = effect->m_next) {
-            if (effect->m_spellId == this->m_spellId && (effect->m_flags & 0x40000)) {
+            if (effect->m_spellId == this->m_spellId && (effect->m_flags & CEffect::EFFECT_FLAGS::EFFECT_LIGHTNING_CONNECTION)) {
                 effect->InitLightningEndpoint();
             }
         }
@@ -422,7 +422,7 @@ void SpellVisualsBlizzardSetFrameOfReference(BlizzardObject* object, const C44Ma
 void SpellVisualsComputeMountTransitionJumpVec(const MountTransitionObject* transition, C3Vector* jump) {
     *jump = transition->m_jumpVector;
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(transition->m_unitGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(transition->m_unitGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit || !unit->m_mountTransitionEffect) {
         return;
@@ -435,7 +435,7 @@ void SpellVisualsComputeMountTransitionJumpVec(const MountTransitionObject* tran
     }
 
     C3Vector world = model->GetWorldPosition();
-    C3Vector attach = model->GetAttachmentPosition(0);
+    C3Vector attach = model->GetAttachmentPosition(MODEL_ATTACHMENT_ID::ATTACH_SHIELD);
     jump->x = attach.x - world.x;
     jump->y = attach.y - world.y;
     jump->z = attach.z - world.z;
@@ -459,7 +459,7 @@ uint32_t SpellVisualsGetModelAttachRecCount(uint32_t kitId) {
 // VERIFY: d05aaf9b auto
 // OFFSET: 0x007FBE00
 MountTransitionObject* SpellVisualsStartMountTransition(CGUnit_C* unit) {
-    MountTransitionObject* transition = s_mountTransitions.NewNode(2, 0, 0);
+    MountTransitionObject* transition = s_mountTransitions.NewNode(TSLIST_LINK_BEFORE, 0, 0);
 
     if (!transition) {
         return nullptr;
@@ -509,7 +509,7 @@ void LightningObject::CreateFromSpell(CGObject_C* caster, CEffect* effect, uint3
             targetOffset.x = visual->m_missileImpactOffset[0];
             targetOffset.y = -visual->m_missileImpactOffset[1];
             targetOffset.z = visual->m_missileImpactOffset[2];
-            raw = visual->m_flags & 0x200;
+            raw = visual->m_flags & SPELL_VISUAL_FLAG_RAW_ATTACHMENT_IDS;
         }
     }
 
@@ -531,7 +531,7 @@ void LightningObject::CreateFromSpell(CGObject_C* caster, CEffect* effect, uint3
     uint32_t offset = 0;
 
     do {
-        LightningObject* object = s_lightningObjects.NewNode(2, 0, 0);
+        LightningObject* object = s_lightningObjects.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         object->m_targets.SetCount(count + 1);
         object->m_bolts.SetCount(count);
         object->m_targets[0] = caster->m_obj->m_guid.m_guid;
@@ -760,7 +760,7 @@ Shard::~Shard() {
 // VERIFY: 58b50d0a auto
 // OFFSET: 0x007F9D80
 static void ShardAnimEventCallback(CM2Model* model, uint32_t boneId, uint32_t eventId, uint32_t data, const C3Vector* position, uint32_t time, uint64_t param) {
-    if ((++s_shardEventCount & 3) == 0 && eventId == 0x444E5324) {
+    if ((++s_shardEventCount & 3) == 0 && eventId == M2_EVENT_ID::PlaySoundKit_SND) {
         SI2::PlaySoundKit(data, position, nullptr, nullptr, 0, nullptr, 1, 0);
     }
 }
@@ -776,10 +776,10 @@ static void ShardSequenceCallback(CM2Model* model, uint32_t boneId, uint32_t seq
 // VERIFY: c8180770 manual
 // OFFSET: 0x007FB4B0
 BlizzardObject::BlizzardObject() : m_entity(nullptr), m_shardAccum(0.0f), m_hasFrame(0) {
-    this->unk_0128[0] = 0.0f;
-    this->unk_0128[1] = 0.0f;
-    this->unk_0128[3] = 0.0f;
-    this->unk_0128[2] = 0.0f;
+    this->unused_0128[0] = 0.0f;
+    this->unused_0128[1] = 0.0f;
+    this->unused_0128[3] = 0.0f;
+    this->unused_0128[2] = 0.0f;
 }
 
 // VERIFY: 429896ff manual
@@ -826,7 +826,7 @@ void BlizzardObject::Render(int32_t visible) {
 
         if (!shard->m_started) {
             shard->m_started = 1;
-            shard->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
+            shard->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, 0, 1.0f, 1, 1);
         }
 
         shard->m_model->SetAnimating(1);
@@ -835,15 +835,15 @@ void BlizzardObject::Render(int32_t visible) {
         uint32_t flag = visible & 1;
 
         if (parent) {
-            model->m_fFlags = (model->m_fFlags & ~0x80u) | (flag << 7);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x80u) | (flag << 7);
         } else {
-            model->m_fFlags = (model->m_fFlags & ~0x8u) | (flag << 3);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x8u) | (flag << 3);
         }
 
         if (parent) {
-            model->m_fFlags = (model->m_fFlags & ~0x20000u) | (flag << 17);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x20000u) | (flag << 17);
         } else {
-            model->m_fFlags = (model->m_fFlags & ~0x10000u) | (flag << 16);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x10000u) | (flag << 16);
         }
 
         position = shard->m_position;
@@ -853,7 +853,7 @@ void BlizzardObject::Render(int32_t visible) {
         }
 
         model = shard->m_model;
-        model->m_fFlags |= 0x8000;
+        model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         C44Matrix& transform = model->m_worldTransform;
         transform.a0 = 1.0f;
         transform.a1 = 0.0f;
@@ -898,7 +898,7 @@ void BlizzardObject::Init(const C3Vector* position, const char* modelName, float
     transform.d0 = position->x;
     transform.d1 = position->y;
     transform.d2 = position->z;
-    this->m_entity = CMap::ObjectCreate(nullptr, BlizzardObject::WorldObjectRender, this, 0, 0, 0xE);
+    this->m_entity = CMap::ObjectCreate(nullptr, BlizzardObject::WorldObjectRender, this, 0, 0, (MAP_OBJECT_CREATE_FLAG_NO_BLOB_SHADOW | MAP_OBJECT_CREATE_FLAG_ALWAYS_ANIMATE | MAP_OBJECT_CREATE_FLAG_LINK_MULTIPLE_WMO_GROUPS));
     CAaSphere sphere;
     sphere.r = radius;
     sphere.c = C3Vector(0.0f, 0.0f, 0.0f);
@@ -963,8 +963,8 @@ bool BlizzardObject::Update() {
         }
 
         shard->m_model = World::s_m2Scene->CreateModel(this->m_modelName, 0);
-        shard->m_model->SetEventCallback(reinterpret_cast<void*>(&ShardAnimEventCallback), 0);
-        shard->m_model->SetSequenceCallback(reinterpret_cast<void*>(&ShardSequenceCallback), reinterpret_cast<uintptr_t>(shard));
+        shard->m_model->SetEventCallback(&ShardAnimEventCallback, 0);
+        shard->m_model->SetSequenceCallback(&ShardSequenceCallback, reinterpret_cast<uintptr_t>(shard));
         uint32_t now = FrameTime::s_curTimeMs;
         int32_t delay = static_cast<int32_t>(CRandom::ufloat_(g_rndSeed) * 255.0f);
         shard->m_startTime = now + 2 * delay;
@@ -980,7 +980,7 @@ bool BlizzardObject::Update() {
 // VERIFY: 4afc8cf8 auto
 // OFFSET: 0x007FA6A0
 int32_t MountTransitionObject::UpdateCharacterData() {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -993,32 +993,32 @@ int32_t MountTransitionObject::UpdateCharacterData() {
         mountModel = unit->m_mountTransitionEffect->m_model;
     }
 
-    if (!model || !model->IsLoaded(0, 0) || !mountModel || !mountModel->IsLoaded(0, 0) || !mountModel->HasAttachment(0)) {
+    if (!model || !model->IsLoaded(0, 0) || !mountModel || !mountModel->IsLoaded(0, 0) || !mountModel->HasAttachment(MODEL_ATTACHMENT_ID::ATTACH_SHIELD)) {
         return 0;
     }
 
-    this->m_attachPivot = mountModel->GetAttachmentPivot(0);
+    this->m_attachPivot = mountModel->GetAttachmentPivot(MODEL_ATTACHMENT_ID::ATTACH_SHIELD);
     M2BoneSequenceInfo info;
     model->GetBoneSequenceInfo(0xFFFFFFFF, info);
     float rate = 1.0f / static_cast<float>(info.m_endTime - info.m_startTime);
     this->m_animRate = rate;
     uint32_t anim = unit->GetCurrentTorsoAnimId();
-    uint32_t riseStart = model->GetEventSequenceTime(anim, 0x42545324);
-    uint32_t riseEnd = model->GetEventSequenceTime(anim, 0x45545324);
+    uint32_t riseStart = model->GetEventSequenceTime(anim, M2_EVENT_ID::MountTransitionBegin_STB);
+    uint32_t riseEnd = model->GetEventSequenceTime(anim, M2_EVENT_ID::MountTransitionEnd_STE);
     this->m_riseStart = static_cast<float>(riseStart) * rate;
     this->m_riseEnd = rate * static_cast<float>(riseEnd);
     this->m_riseRate = 1.0f / (this->m_riseEnd - this->m_riseStart);
 
-    if (mountModel->HasEvent(0x42545324)) {
-        this->m_eventPivot = mountModel->GetEventPivot(0x42545324);
+    if (mountModel->HasEvent(M2_EVENT_ID::MountTransitionBegin_STB)) {
+        this->m_eventPivot = mountModel->GetEventPivot(M2_EVENT_ID::MountTransitionBegin_STB);
     }
 
     C44Matrix world = unit->m_worldModel->m_worldTransform;
     this->m_eventPivot *= world;
     world = unit->m_worldModel->m_worldTransform;
     this->m_jumpVector = *reinterpret_cast<const C3Vector*>(&world.d0) - this->m_eventPivot;
-    uint32_t jumpStart = mountModel->GetEventSequenceTime(127, 0x42545324);
-    uint32_t jumpEnd = mountModel->GetEventSequenceTime(127, 0x45545324);
+    uint32_t jumpStart = mountModel->GetEventSequenceTime(127, M2_EVENT_ID::MountTransitionBegin_STB);
+    uint32_t jumpEnd = mountModel->GetEventSequenceTime(127, M2_EVENT_ID::MountTransitionEnd_STE);
     this->m_jumpStart = static_cast<float>(jumpStart) * rate;
     this->m_jumpEnd = rate * static_cast<float>(jumpEnd);
     this->m_jumpRate = this->m_jumpEnd - this->m_jumpStart;
@@ -1038,9 +1038,9 @@ int32_t MountTransitionObject::UpdateCharacterData() {
 // OFFSET: 0x007FB7F0
 bool MountTransitionObject::Tick() {
     uint32_t now = OsGetAsyncTimeMs();
-    float elapsed = static_cast<float>(now - this->m_lastTime) * 0.001f;
+    float elapsed = static_cast<float>(now - this->m_lastTime) * TIME_SECONDS_PER_MILLISECOND_FLOAT;
     this->m_lastTime = now;
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_unitGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return false;

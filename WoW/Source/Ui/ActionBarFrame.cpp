@@ -12,6 +12,7 @@
 #include "WoW/Source/DB/Rec/OverrideSpellDataRec.h"
 #include "WoW/Source/DB/Rec/SpellRec.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Object/ItemStats.h"
 #include "WoW/Source/Object/ObjectClient/Item_C.h"
 #include "WoW/Source/Object/ObjectClient/Player_C.h"
@@ -30,16 +31,16 @@
 #include "WoW/Source/DB/Rec/SummonPropertiesRec.h"
 
 // STATIC: 0x00C1DC98
-int32_t CGActionBar::m_slotNoMana[144];
+int32_t CGActionBar::m_slotNoMana[CGActionBar::NUM_ACTION_SLOTS];
 
 // STATIC: 0x00C1DED8
-int32_t CGActionBar::m_slotUsable[144];
+int32_t CGActionBar::m_slotUsable[CGActionBar::NUM_ACTION_SLOTS];
 
 // STATIC: 0x00C1E118
-int32_t CGActionBar::m_slotItemCount[144];
+int32_t CGActionBar::m_slotItemCount[CGActionBar::NUM_ACTION_SLOTS];
 
 // STATIC: 0x00C1E358
-uint32_t CGActionBar::m_slotActions[144];
+uint32_t CGActionBar::m_slotActions[CGActionBar::NUM_ACTION_SLOTS];
 
 // STATIC: 0x00C1E59C
 int32_t CGActionBar::m_bonusBarOffset;
@@ -60,7 +61,7 @@ void CGActionBar::HideGrid() {
 // OFFSET: 0x005648A0
 int32_t CGActionBar::IsMacro(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    return action && (action & 0xF0000000) == 0x40000000;
+    return action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO;
 }
 
 // VERIFY: 4dbd4b01 manual
@@ -68,8 +69,8 @@ int32_t CGActionBar::IsMacro(uint32_t slot) {
 uint32_t CGActionBar::GetMacroID(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x40000000) {
-        return action & 0xBFFFFFFF;
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) {
+        return action & ACTION_MASK::ACTION_MASK_MACRO_ID;
     }
 
     return 0;
@@ -79,21 +80,21 @@ uint32_t CGActionBar::GetMacroID(uint32_t slot) {
 // OFFSET: 0x005A7890
 int32_t CGActionBar::IsItem(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    return action && (action & 0xF0000000) == 0x80000000;
+    return action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_ITEM;
 }
 
 // VERIFY: 2927bc93 auto
 // OFFSET: 0x005A78C0
 int32_t CGActionBar::IsPetAction(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    return action && (action & 0xF0000000) == 0x10000000;
+    return action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_PET_ACTION;
 }
 
 // VERIFY: ac5a6409 auto
 // OFFSET: 0x005A78F0
 int32_t CGActionBar::IsEquipmentSet(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    return action && (action & 0xF0000000) == 0x20000000;
+    return action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_EQUIPMENT_SET;
 }
 
 // VERIFY: b18cab5c auto
@@ -101,8 +102,8 @@ int32_t CGActionBar::IsEquipmentSet(uint32_t slot) {
 int32_t CGActionBar::GetEquipmentSetID(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x20000000) {
-        return action & 0xDFFFFFFF;
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_EQUIPMENT_SET) {
+        return action & ACTION_MASK::ACTION_MASK_EQUIPMENT_SET_ID;
     }
 
     return -1;
@@ -111,7 +112,7 @@ int32_t CGActionBar::GetEquipmentSetID(uint32_t slot) {
 // VERIFY: e56c7d55 auto
 // OFFSET: 0x005A7A40
 int32_t CGActionBar::HasMacro(uint32_t slot) {
-    return CGUIMacros::GetMacroIndexByID(CGActionBar::m_slotActions[slot] & 0xBFFFFFFF) != -1;
+    return CGUIMacros::GetMacroIndexByID(CGActionBar::m_slotActions[slot] & ACTION_MASK::ACTION_MASK_MACRO_ID) != -1;
 }
 
 // VERIFY: 6f49ff29 auto
@@ -123,14 +124,14 @@ int32_t CGActionBar::GetItem(uint32_t slot) {
 
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x40000000 && CGActionBar::HasMacro(slot)) {
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO && CGActionBar::HasMacro(slot)) {
         return CGActionBar::GetMacroItem(slot);
     }
 
     action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x80000000) {
-        return action & 0x7FFFFFFF;
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_ITEM) {
+        return action & ACTION_MASK::ACTION_MASK_ITEM_ID;
     }
 
     return 0;
@@ -143,7 +144,7 @@ CGItem_C* CGActionBar::FindUseEnchantItemPtr(int32_t itemId) {
         return nullptr;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return nullptr;
@@ -169,13 +170,13 @@ int32_t CGActionBar::GetSpell(uint32_t slot, int32_t& petSpell) {
 
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x40000000 && CGActionBar::HasMacro(slot)) {
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO && CGActionBar::HasMacro(slot)) {
         return CGActionBar::GetMacroSpell(slot, petSpell);
     }
 
     action = CGActionBar::m_slotActions[slot];
 
-    if (action && !(action & 0xF0000000)) {
+    if (action && !(action & ACTION_MASK::ACTION_MASK_TAG)) {
         return action;
     }
 
@@ -187,7 +188,7 @@ int32_t CGActionBar::GetSpell(uint32_t slot, int32_t& petSpell) {
         int32_t spellId = CGActionBar::GetPetActionSpell(slot);
         SpellRec spell;
 
-        if (!g_spellDB.GetRecord(spellId, &spell) || !(spell.m_attributesExB & 0x40000)) {
+        if (!g_spellDB.GetRecord(spellId, &spell) || !(spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_REQ_DEAD_PET)) {
             petSpell = 1;
         }
 
@@ -200,7 +201,7 @@ int32_t CGActionBar::GetSpell(uint32_t slot, int32_t& petSpell) {
 // VERIFY: 356cf1ff manual
 // OFFSET: 0x005A95E0
 int32_t CGActionBar::ActionHasRange(uint32_t slot) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
@@ -212,7 +213,7 @@ int32_t CGActionBar::ActionHasRange(uint32_t slot) {
         return 0;
     }
 
-    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : ClntObjMgrGetActivePlayerObj();
+    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : ClntObjMgrGetActivePlayerObj();
 
     if (!caster) {
         return 0;
@@ -239,7 +240,7 @@ int32_t CGActionBar::IsAttackAction(uint32_t slot) {
     SpellRec spell;
     int32_t petSpell;
 
-    if (g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell) && spell.m_effect[0] == 78) {
+    if (g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell) && spell.m_effect[0] == SPELL_EFFECT_ATTACK) {
         return 1;
     }
 
@@ -256,7 +257,7 @@ int32_t CGActionBar::IsRangedAttackAction(uint32_t slot) {
     SpellRec spell;
     int32_t petSpell;
 
-    if (g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell) && (spell.m_attributes & 0x2) && (spell.m_attributesExB & 0x20)) {
+    if (g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell) && (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) && (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_AUTO_REPEAT)) {
         return 1;
     }
 
@@ -267,13 +268,13 @@ int32_t CGActionBar::IsRangedAttackAction(uint32_t slot) {
 // OFFSET: 0x005A9E20
 int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
     noMana = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
     }
 
-    int16_t overrideId = static_cast<int16_t>(player->m_player->m_playerFieldBytes2);
+    int16_t overrideId = static_cast<int16_t>(player->m_player->m_overrideSpellsID);
     OverrideSpellDataRec* overrideRec = nullptr;
 
     if (overrideId) {
@@ -283,7 +284,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
     int32_t itemId = CGActionBar::GetItem(slot);
 
     if (itemId) {
-        if (!CGActionBar::m_slotItemCount[slot] || Spell_C_NeedsCooldownEvent(itemId) || (overrideRec && !(overrideRec->m_flags & 0x1))) {
+        if (!CGActionBar::m_slotItemCount[slot] || Spell_C_NeedsCooldownEvent(itemId) || (overrideRec && !(overrideRec->m_flags & OVERRIDE_SPELL_DATA_FLAG_ALLOW_ITEMS))) {
             return 0;
         }
 
@@ -293,7 +294,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
         if (stats) {
             MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
 
-            if (map && map->m_instanceType == 4 && !(stats->m_flags[0] & 0x200000)) {
+            if (map && map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD && !(stats->m_flags[0] & ITEM_STATIC_FLAGS::ITEM_FLAG_IGNORE_DEFAULT_ARENA_RESTRICTIONS)) {
                 CGItem_C* item = CGActionBar::FindUseEnchantItemPtr(itemId);
                 int32_t charges;
                 uint32_t cooldown;
@@ -320,7 +321,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
     if (CGActionBar::IsAttackAction(slot) || CGActionBar::IsRangedAttackAction(slot)) {
         attack = 1;
 
-        if (overrideRec && !(overrideRec->m_flags & 0x2)) {
+        if (overrideRec && !(overrideRec->m_flags & OVERRIDE_SPELL_DATA_FLAG_ALLOW_ATTACKS)) {
             return 0;
         }
     } else {
@@ -329,7 +330,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
 
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x20000000) {
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_EQUIPMENT_SET) {
         if (!CGEquipmentManager::CanUseEquipmentSets(false)) {
             return 0;
         }
@@ -340,7 +341,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
             return 0;
         }
 
-        if (player->m_unit->m_unitFieldFlags & 0x100000) {
+        if (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) {
             return 1;
         }
     }
@@ -349,14 +350,14 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
     int32_t spellId = CGActionBar::GetSpell(slot, petSpell);
 
     if (spellId) {
-        if (!itemId && !attack && overrideRec && !(overrideRec->m_flags & 0x4) && !Spell_C_IsOverride(spellId, overrideRec)) {
+        if (!itemId && !attack && overrideRec && !(overrideRec->m_flags & OVERRIDE_SPELL_DATA_FLAG_ALLOW_NON_OVERRIDE_SPELLS) && !Spell_C_IsOverride(spellId, overrideRec)) {
             return 0;
         }
 
         CGUnit_C* caster;
 
         if (petSpell) {
-            caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+            caster = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
         } else {
             caster = player;
         }
@@ -401,7 +402,7 @@ int32_t CGActionBar::UpdateUsableAction(uint32_t slot, int32_t& noMana) {
     }
 
     if (attack) {
-        return !(player->m_unit->m_unitFieldFlags & 0x20000) && !(player->m_player->m_playerFlags & 0x1000000);
+        return !(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PACIFIED) && !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_DISABLE_ATTACKS);
     }
 
     if (CGActionBar::IsItem(slot) || (CGActionBar::IsMacro(slot) && CGActionBar::HasMacro(slot))) {
@@ -444,7 +445,7 @@ void CGActionBar::UpdateUsable() {
 // OFFSET: 0x005A80E0
 int32_t CGActionBar::GetPetActionSpell(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    uint32_t index = action && (action & 0xF0000000) == 0x10000000 ? action & 0xEFFFFFFF : 0;
+    uint32_t index = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_PET_ACTION ? action & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX : 0;
 
     if (!CGPetInfo::GetPet(0) || index >= sizeof(CGPetInfo::m_actions) / sizeof(CGPetInfo::m_actions[0])) {
         return 0;
@@ -456,13 +457,13 @@ int32_t CGActionBar::GetPetActionSpell(uint32_t slot) {
         return 0;
     }
 
-    uint32_t type = (petAction >> 24) & 0x3F;
+    uint32_t kind = (petAction >> 24) & PetAction::PackingMasks::KIND_VALUE_MASK;
 
-    if (type != 1 && type - 8 > 9) {
+    if (kind != PetAction::Kind::SPELL && kind - PetAction::Kind::UNKNOWN_8 > (PetAction::Kind::UNKNOWN_17 - PetAction::Kind::UNKNOWN_8)) {
         return 0;
     }
 
-    return petAction & 0xFFFFFF;
+    return petAction & PetAction::PackingMasks::ID_MASK;
 }
 
 // VERIFY: 1b3f1725 auto
@@ -488,7 +489,7 @@ int32_t CGActionBar::GetItemSpell(uint32_t slot) {
 // OFFSET: 0x005A89F0
 int32_t CGActionBar::GetMacroSpell(uint32_t slot, int32_t& petSpell) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    uint32_t id = action && (action & 0xF0000000) == 0x40000000 ? action & 0xBFFFFFFF : 0;
+    uint32_t id = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO ? action & ACTION_MASK::ACTION_MASK_MACRO_ID : 0;
     MACRONODE* macro = CGUIMacros::GetMacroByID(id);
 
     if (!macro) {
@@ -507,7 +508,7 @@ int32_t CGActionBar::GetMacroSpell(uint32_t slot, int32_t& petSpell) {
 // OFFSET: 0x005A7860
 int32_t CGActionBar::IsSpell(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    return action && !(action & 0xF0000000);
+    return action && !(action & ACTION_MASK::ACTION_MASK_TAG);
 }
 
 // VERIFY: 9a0d1665 auto
@@ -539,11 +540,11 @@ void CGActionBar::ShowGrid() {
 // VERIFY: efb36ab0 auto
 // OFFSET: 0x005A7AE0
 static int32_t GetMultiCastTotemCategory(int32_t slot) {
-    if (slot < 132 || slot >= sizeof(CGActionBar::m_slotActions) / sizeof(CGActionBar::m_slotActions[0])) {
+    if (slot < CGActionBar::MULTICAST_ACTION_FIRST || slot >= sizeof(CGActionBar::m_slotActions) / sizeof(CGActionBar::m_slotActions[0])) {
         return 0;
     }
 
-    switch ((slot - 132) % 4) {
+    switch ((slot - CGActionBar::MULTICAST_ACTION_FIRST) % 4) {
         case 0:
             return 4;
         case 1:
@@ -579,7 +580,7 @@ uint32_t CGActionBar::GetMultiCastSlotMaskForTotemCategory(int32_t category) {
 // VERIFY: 48490470 manual
 // OFFSET: 0x005A7BC0
 int32_t IsMultiCastSpellForSlot(int32_t slot, const SpellRec* spell, int32_t* category) {
-    int32_t totem = (spell->m_attributesExG & 0x20) ? 1 : 0;
+    int32_t totem = (spell->m_attributesExG & SPELL_ATTR7::SPELL_ATTR7_CAN_BE_MULTI_CAST) ? 1 : 0;
     *category = GetMultiCastTotemCategory(slot);
 
     if (!totem || !*category) {
@@ -606,23 +607,23 @@ void CGActionBar::UpdateSelection() {
 int32_t CGActionBar::HasAction(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x40000000 && CGUIMacros::GetMacroIndexByID(action & 0xBFFFFFFF) == -1) {
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO && CGUIMacros::GetMacroIndexByID(action & ACTION_MASK::ACTION_MASK_MACRO_ID) == -1) {
         return 0;
     }
 
     action = CGActionBar::m_slotActions[slot];
 
-    if (!action || (action & 0xF0000000) != 0x10000000) {
+    if (!action || (action & ACTION_MASK::ACTION_MASK_TAG) != ACTION_TAG::ACTION_TAG_PET_ACTION) {
         return action != 0;
     }
 
-    PetAction* petAction = GetPetAction((slot - 120) & 0xEFFFFFFF);
+    PetAction* petAction = GetPetAction((slot - 120) & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX);
 
     if (!petAction || !petAction->m_data) {
         return 0;
     }
 
-    if (((petAction->m_data >> 24) & 0x3F) - 6 <= 1) {
+    if (((petAction->m_data >> 24) & PetAction::PackingMasks::KIND_VALUE_MASK) - PetAction::Kind::MODE <= (PetAction::Kind::ORDER - PetAction::Kind::MODE)) { // Kinds 6 and 7: pet mode or command.
         return 1;
     }
 
@@ -632,7 +633,7 @@ int32_t CGActionBar::HasAction(uint32_t slot) {
 // VERIFY: 08b2d00e manual
 // OFFSET: 0x005A84D0
 const char* CGActionBar::GetAttackTexture() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return nullptr;
@@ -658,13 +659,13 @@ const char* CGActionBar::GetAttackTexture() {
 
     CGBag_C* bag = player->GetBag();
     WOWGUID guid = 15 < static_cast<uint32_t>(bag->m_numSlots) ? bag->m_slots[15] : WOWGUID();
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
     if (!item) {
         return "Interface\\Buttons\\Spell-Reset";
     }
 
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
 
     // STATIC: 0x00C1E5A8
     static char s_texture[260];
@@ -676,25 +677,25 @@ const char* CGActionBar::GetAttackTexture() {
 // VERIFY: 26633ab9 manual
 // OFFSET: 0x005A85E0
 const char* CGActionBar::GetRangedTexture() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return nullptr;
     }
 
-    if (player->m_unit->m_unitFieldFlags2 & 0x400) {
+    if (player->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_DISARM_RANGED) {
         return nullptr;
     }
 
     CGBag_C* bag = player->GetBag();
     WOWGUID guid = 17 < static_cast<uint32_t>(bag->m_numSlots) ? bag->m_slots[17] : WOWGUID();
-    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(guid, TYPE_ITEM, __FILE__, __LINE__));
 
-    if (!item || item->GetSubtypeID() == 16) {
+    if (!item || item->GetSubtypeID() == ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_THROWN) {
         return nullptr;
     }
 
-    const char* path = ClientDBStringLookup(3);
+    const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
 
     // STATIC: 0x00C1E6B0
     static char s_texture[260];
@@ -706,7 +707,7 @@ const char* CGActionBar::GetRangedTexture() {
 // VERIFY: 36690456 manual
 // OFFSET: 0x005A8A60
 int32_t CGActionBar::CalculateItemCount(int32_t itemId) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -790,7 +791,7 @@ const char* CGActionBar::GetTexture(int32_t slot) {
     }
 
     // STATIC: 0x00C1E8BC
-    static const char* s_iconPath = ClientDBStringLookup(3);
+    static const char* s_iconPath = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
 
     // STATIC: 0x00C1E7B8
     static char s_texture[260];
@@ -823,7 +824,7 @@ const char* CGActionBar::GetTexture(int32_t slot) {
         int32_t petSpell;
 
         if (g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell)) {
-            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(petSpell ? CGPetInfo::GetPet(0) : ClntObjMgrGetActivePlayer(), TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(petSpell ? CGPetInfo::GetPet(0) : ClntObjMgrGetActivePlayer(), TYPE_UNIT, __FILE__, __LINE__));
             SpellIconRec* icon = g_spellIconDB.GetRecord(Spell_C_IsActiveSpell(&spell, unit) && spell.m_activeIconID ? spell.m_activeIconID : spell.m_spellIconID);
 
             if (icon) {
@@ -848,28 +849,28 @@ const char* CGActionBar::GetTexture(int32_t slot) {
         return nullptr;
     }
 
-    PetAction* action = GetPetAction((slot - 120) & 0xEFFFFFFF);
+    PetAction* action = GetPetAction((slot - 120) & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX);
 
     if (!action || !action->m_data) {
         return nullptr;
     }
 
-    switch ((action->m_data >> 24) & 0x3F) {
-        case 1:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 15:
-        case 16:
-        case 17: {
+    switch ((action->m_data >> 24) & PetAction::PackingMasks::KIND_VALUE_MASK) {
+        case PetAction::Kind::SPELL:
+        case PetAction::Kind::UNKNOWN_8:
+        case PetAction::Kind::UNKNOWN_9:
+        case PetAction::Kind::UNKNOWN_10:
+        case PetAction::Kind::UNKNOWN_11:
+        case PetAction::Kind::UNKNOWN_12:
+        case PetAction::Kind::UNKNOWN_13:
+        case PetAction::Kind::UNKNOWN_14:
+        case PetAction::Kind::UNKNOWN_15:
+        case PetAction::Kind::UNKNOWN_16:
+        case PetAction::Kind::UNKNOWN_17: {
             SpellRec spell;
 
-            if (g_spellDB.GetRecord(action->m_data & 0xFFFFFF, &spell)) {
-                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+            if (g_spellDB.GetRecord(action->m_data & PetAction::PackingMasks::ID_MASK, &spell)) {
+                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
                 SpellIconRec* icon = g_spellIconDB.GetRecord(Spell_C_IsActiveSpell(&spell, unit) && spell.m_activeIconID ? spell.m_activeIconID : spell.m_spellIconID);
 
                 if (icon) {
@@ -879,11 +880,11 @@ const char* CGActionBar::GetTexture(int32_t slot) {
 
             return nullptr;
         }
-        case 6:
-            SStrPrintf(s_texture, sizeof(s_texture), "PET_%s_TEXTURE", CGPetInfo::GetModeToken(action->m_data & 0xFFFFFF));
+        case PetAction::Kind::MODE:
+            SStrPrintf(s_texture, sizeof(s_texture), "PET_%s_TEXTURE", CGPetInfo::GetModeToken(action->m_data & PetAction::PackingMasks::ID_MASK));
             return FrameScript_GetText(s_texture, -1, GENDER_NOT_APPLICABLE);
-        case 7:
-            SStrPrintf(s_texture, sizeof(s_texture), "PET_%s_TEXTURE", CGPetInfo::GetOrdersToken(action->m_data & 0xFFFFFF));
+        case PetAction::Kind::ORDER:
+            SStrPrintf(s_texture, sizeof(s_texture), "PET_%s_TEXTURE", CGPetInfo::GetOrdersToken(action->m_data & PetAction::PackingMasks::ID_MASK));
             return FrameScript_GetText(s_texture, -1, GENDER_NOT_APPLICABLE);
     }
 
@@ -911,31 +912,31 @@ int32_t CGActionBar::IsCurrentAction(int32_t slot) {
     int32_t petSpell;
 
     if (CGActionBar::IsPetAction(slot)) {
-        PetAction* action = GetPetAction((slot - 120) & 0xEFFFFFFF);
+        PetAction* action = GetPetAction((slot - 120) & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX);
 
         if (!action || !action->m_data) {
             return 0;
         }
 
-        uint32_t id = action->m_data & 0xFFFFFF;
+        uint32_t id = action->m_data & PetAction::PackingMasks::ID_MASK;
 
-        switch ((action->m_data >> 24) & 0x3F) {
-            case 6:
+        switch ((action->m_data >> 24) & PetAction::PackingMasks::KIND_VALUE_MASK) {
+            case PetAction::Kind::MODE:
                 return CGPetInfo::GetPetMode() == id;
-            case 7:
+            case PetAction::Kind::ORDER:
                 if ((CGPetInfo::m_petMode >> 8) == id || (id == 2 && CGPetInfo::m_attackingTarget)) {
                     return 1;
                 }
-            case 8:
-            case 9:
-            case 10:
-            case 11:
-            case 12:
-            case 13:
-            case 14:
-            case 15:
-            case 16:
-            case 17:
+            case PetAction::Kind::UNKNOWN_8:
+            case PetAction::Kind::UNKNOWN_9:
+            case PetAction::Kind::UNKNOWN_10:
+            case PetAction::Kind::UNKNOWN_11:
+            case PetAction::Kind::UNKNOWN_12:
+            case PetAction::Kind::UNKNOWN_13:
+            case PetAction::Kind::UNKNOWN_14:
+            case PetAction::Kind::UNKNOWN_15:
+            case PetAction::Kind::UNKNOWN_16:
+            case PetAction::Kind::UNKNOWN_17:
                 return Spell_C_IsCurrentSpell(CGActionBar::GetSpell(slot, petSpell));
         }
 
@@ -985,9 +986,9 @@ void CGActionBar::RemoveMacroActions(uint32_t macroId) {
         return;
     }
 
-    for (uint32_t slot = 0; slot < 144; slot++) {
+    for (uint32_t slot = 0; slot < CGActionBar::NUM_ACTION_SLOTS; slot++) {
         uint32_t action = CGActionBar::m_slotActions[slot];
-        uint32_t id = action && (action & 0xF0000000) == 0x40000000 ? action & 0xBFFFFFFF : 0;
+        uint32_t id = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO ? action & ACTION_MASK::ACTION_MASK_MACRO_ID : 0;
 
         if (id == macroId) {
             CGActionBar::RemoveAction(slot);
@@ -1002,9 +1003,9 @@ void CGActionBar::RemoveEquipmentSet(uint32_t id) {
         return;
     }
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         uint32_t action = CGActionBar::m_slotActions[i];
-        uint32_t set = action && (action & 0xF0000000) == 0x20000000 ? action & 0xDFFFFFFF : static_cast<uint32_t>(-1);
+        uint32_t set = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_EQUIPMENT_SET ? action & ACTION_MASK::ACTION_MASK_EQUIPMENT_SET_ID : static_cast<uint32_t>(-1);
 
         if (set == id) {
             CGActionBar::RemoveAction(i);
@@ -1019,15 +1020,15 @@ void CGActionBar::SetAction(int32_t slot, uint32_t action, int32_t sendToServer,
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || player->unk_1954) {
+    if (!player || player->m_actionButtonsPending) {
         return;
     }
 
-    if (silent && (action & 0xF0000000) == 0x80000000) {
+    if (silent && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_ITEM) {
         WOWGUID none = { 0 };
-        g_itemDBCache.GetRecord(action & 0x7FFFFFFF, none, ItemStatsCallback, nullptr, true);
+        g_itemDBCache.GetRecord(action & ACTION_MASK::ACTION_MASK_ITEM_ID, none, ItemStatsCallback, nullptr, true);
     }
 
     if (CGActionBar::IsMacro(slot)) {
@@ -1038,8 +1039,8 @@ void CGActionBar::SetAction(int32_t slot, uint32_t action, int32_t sendToServer,
         }
     }
 
-    if ((action & 0xF0000000) == 0x40000000) {
-        MACRONODE* macro = CGUIMacros::GetMacroByID(action & 0xBFFFFFFF);
+    if ((action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) {
+        MACRONODE* macro = CGUIMacros::GetMacroByID(action & ACTION_MASK::ACTION_MASK_MACRO_ID);
 
         if (macro) {
             macro->IncrementActionBarCount();
@@ -1071,18 +1072,18 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
         return;
     }
 
-    if (!CGGameUI::CanPerformAction(14)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION)) {
         CGGameUI::ClearCursor(1, 1);
         return;
     }
 
     int32_t cursorSpell = CGGameUI::GetCursorSpell();
-    int32_t itemId = CGGameUI::m_cursorItemType == 7 ? CGGameUI::GetCursorVirtualItem() : 0;
+    int32_t itemId = CGGameUI::m_cursorItemType == UICURSOR_ACTIONBAR ? CGGameUI::GetCursorVirtualItem() : 0;
     CGItem_C* item = nullptr;
     int32_t cursorMacro = CGGameUI::m_cursorMacro;
 
     if (!itemId && CGGameUI::GetCursorItem()) {
-        item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPEMASK_ITEM, __FILE__, __LINE__));
+        item = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPE_ITEM, __FILE__, __LINE__));
 
         if (item) {
             itemId = item->m_obj->m_entryID;
@@ -1093,7 +1094,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
     SpellRec spell;
     int32_t haveSpell = 0;
 
-    if (slot >= 132) {
+    if (slot >= CGActionBar::MULTICAST_ACTION_FIRST) {
         if (cursorSpell) {
             haveSpell = g_spellDB.GetRecord(cursorSpell, &spell);
 
@@ -1123,14 +1124,14 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
             return;
         }
 
-        if (spell.m_attributes & 0x40) {
+        if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE) {
             CGGameUI::DisplayError(ERR_PASSIVE_ABILITY);
             return;
         }
 
         if (CGActionBar::IsItem(slot)) {
             ItemRec* rec = g_itemDB.GetRecord(CGActionBar::GetItem(slot));
-            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, 7, 0);
+            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, UICURSOR_ACTIONBAR, 0);
         } else if (CGActionBar::IsSpell(slot)) {
             int32_t spellId = CGActionBar::GetSpell(slot, petSpell);
 
@@ -1168,7 +1169,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
         }
 
         if (!CGItem_C::GetUseSpell(itemId) && ((!item && !(item = CGActionBar::FindUseEnchantItemPtr(itemId))) || !item->GetEnchantmentSpell(0))) {
-            if (!itemRec->m_inventoryType || itemRec->m_inventoryType == 18) {
+            if ((itemRec->m_inventoryType == INVTYPE_NON_EQUIP) || itemRec->m_inventoryType == INVTYPE_BAG) {
                 return;
             }
         }
@@ -1182,7 +1183,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
             }
 
             ItemRec* rec = g_itemDB.GetRecord(slotItem);
-            CGGameUI::SetCursorVirtualItem(slotItem, rec ? rec->m_displayInfoID : 0, slot, 7, 0);
+            CGGameUI::SetCursorVirtualItem(slotItem, rec ? rec->m_displayInfoID : 0, slot, UICURSOR_ACTIONBAR, 0);
         } else if (CGActionBar::IsSpell(slot)) {
             CGGameUI::SetCursorSpell(CGActionBar::GetSpell(slot, petSpell));
         } else if (CGActionBar::IsMacro(slot) && CGActionBar::HasMacro(slot)) {
@@ -1200,11 +1201,11 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
             CGGameUI::ClearCursor(1, 1);
         }
 
-        action = itemId | 0x80000000;
+        action = itemId | ACTION_TAG::ACTION_TAG_ITEM;
     } else if (cursorMacro) {
         if (CGActionBar::IsItem(slot)) {
             ItemRec* rec = g_itemDB.GetRecord(CGActionBar::GetItem(slot));
-            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, 7, 0);
+            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, UICURSOR_ACTIONBAR, 0);
         } else if (CGActionBar::IsSpell(slot)) {
             CGGameUI::SetCursorSpell(CGActionBar::GetSpell(slot, petSpell));
         } else if (CGActionBar::IsMacro(slot) && CGActionBar::HasMacro(slot)) {
@@ -1229,7 +1230,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
             CGGameUI::ClearCursor(1, 1);
         }
 
-        action = cursorMacro | 0x40000000;
+        action = cursorMacro | ACTION_TAG::ACTION_TAG_MACRO;
     } else {
         if (cursorSet < 0) {
             return;
@@ -1237,7 +1238,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
 
         if (CGActionBar::IsItem(slot)) {
             ItemRec* rec = g_itemDB.GetRecord(CGActionBar::GetItem(slot));
-            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, 7, 0);
+            CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), rec ? rec->m_displayInfoID : 0, slot, UICURSOR_ACTIONBAR, 0);
         } else if (CGActionBar::IsSpell(slot)) {
             CGGameUI::SetCursorSpell(CGActionBar::GetSpell(slot, petSpell));
         } else if (CGActionBar::IsMacro(slot) && CGActionBar::HasMacro(slot)) {
@@ -1262,7 +1263,7 @@ void CGActionBar::PutActionInSlot(int32_t slot) {
             CGGameUI::ClearCursor(1, 1);
         }
 
-        action = cursorSet | 0x20000000;
+        action = cursorSet | ACTION_TAG::ACTION_TAG_EQUIPMENT_SET;
     }
 
     CGActionBar::SetAction(slot, action, 1, 0);
@@ -1286,7 +1287,7 @@ void CGActionBar::UpdateMultiCastBar() {
             } else if (totems && totems->m_count) {
                 int32_t spellId = totems->m_data[0];
 
-                for (int32_t slot = i + 132; slot < static_cast<int32_t>(sizeof(CGActionBar::m_slotActions) / sizeof(CGActionBar::m_slotActions[0])); slot += 4) {
+                for (int32_t slot = i + CGActionBar::MULTICAST_ACTION_FIRST; slot < static_cast<int32_t>(sizeof(CGActionBar::m_slotActions) / sizeof(CGActionBar::m_slotActions[0])); slot += 4) {
                     if (!CGActionBar::HasAction(slot)) {
                         CGActionBar::SetAction(slot, spellId, 1, 1);
                     }
@@ -1311,7 +1312,7 @@ void CGActionBar::UseAction(int32_t slot, const WOWGUID& target, const char* but
         return;
     }
 
-    if (!CGUIBindings::s_bindings->m_keyStateOverride && (slot < 120 || slot >= 132) && (CGGameUI::GetCursorSpell() || CGGameUI::GetCursorItem() || CGGameUI::m_cursorMacro || CGGameUI::GetCursorVirtualItemOfType(7) || CGGameUI::m_cursorEquipmentSet >= 0)) {
+    if (!CGUIBindings::s_bindings->m_keyStateOverride && (slot < 120 || slot >= CGActionBar::MULTICAST_ACTION_FIRST) && (CGGameUI::GetCursorSpell() || CGGameUI::GetCursorItem() || CGGameUI::m_cursorMacro || CGGameUI::GetCursorVirtualItemOfType(UICURSOR_ACTIONBAR) || CGGameUI::m_cursorEquipmentSet >= 0)) {
         CGActionBar::PutActionInSlot(slot);
         return;
     }
@@ -1348,7 +1349,7 @@ void CGActionBar::UseAction(int32_t slot, const WOWGUID& target, const char* but
                 WOWGUID container;
                 uint32_t itemSlot = 0;
 
-                if ((((flags & 0x20) && (item = player->m_bag.FindItemOfType(itemId, container, itemSlot, 32)) != nullptr) || (item = player->m_bag.FindItemOfType(itemId, container, itemSlot, 128)) != nullptr) && !(item->m_itemFlags & 0x1)) {
+                if ((((flags & 0x20) && (item = player->m_bag.FindItemOfType(itemId, container, itemSlot, 32)) != nullptr) || (item = player->m_bag.FindItemOfType(itemId, container, itemSlot, 128)) != nullptr) && !(item->m_itemFlags & CGItem_C::ITEM_CLIENT_FLAGS::ITEM_CLIENT_LOCKED)) {
                     player->AutoEquipItem(container, itemSlot, 0);
                 }
 
@@ -1373,7 +1374,7 @@ void CGActionBar::UseAction(int32_t slot, const WOWGUID& target, const char* but
     } else if (CGActionBar::IsEquipmentSet(slot)) {
         CGEquipmentManager::EquipSet(CGActionBar::GetEquipmentSetID(slot));
     } else if (CGActionBar::IsPetAction(slot)) {
-        PetAction* petAction = GetPetAction(action & 0xEFFFFFFF);
+        PetAction* petAction = GetPetAction(action & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX);
 
         if (petAction && petAction->m_data) {
             WOWGUID none = { 0 };
@@ -1407,7 +1408,7 @@ static int32_t FormHasActionBar(const SpellShapeshiftFormRec* form) {
 // OFFSET: 0x005A83C0
 void CGActionBar::UpdateBonusBar() {
     int32_t offset = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         if (CGActionBar::m_tempPageActiveFlags) {
@@ -1461,7 +1462,7 @@ void CGActionBar::InitializeGame() {
 // VERIFY: 8aaa3eee manual
 // OFFSET: 0x005AA4E0
 void CGActionBar::UpdateAttackAction() {
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         if (CGActionBar::IsAttackAction(i)) {
             int32_t noMana;
             CGActionBar::m_slotUsable[i] = CGActionBar::UpdateUsableAction(i, noMana);
@@ -1474,7 +1475,7 @@ void CGActionBar::UpdateAttackAction() {
 // VERIFY: 360c7e77 manual
 // OFFSET: 0x005AA550
 void CGActionBar::UpdateRangedAttackAction() {
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         if (CGActionBar::IsRangedAttackAction(i)) {
             int32_t noMana;
             CGActionBar::m_slotUsable[i] = CGActionBar::UpdateUsableAction(i, noMana);
@@ -1487,7 +1488,7 @@ void CGActionBar::UpdateRangedAttackAction() {
 // VERIFY: 7f087db2 manual
 // OFFSET: 0x005A8470
 int32_t IsStackableAucItem(uint32_t slot) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
@@ -1499,11 +1500,11 @@ int32_t IsStackableAucItem(uint32_t slot) {
 // VERIFY: e7c2b372 manual
 // OFFSET: 0x005A88B0
 int32_t CGActionBar::IsEquippedAction(uint32_t slot) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -1512,7 +1513,7 @@ int32_t CGActionBar::IsEquippedAction(uint32_t slot) {
     int32_t itemId = CGActionBar::GetItem(slot);
     ItemRec* item = g_itemDB.GetRecord(itemId);
 
-    if (!item || !item->m_inventoryType) {
+    if (!item || (item->m_inventoryType == INVTYPE_NON_EQUIP)) {
         return 0;
     }
 
@@ -1526,7 +1527,7 @@ int32_t CGActionBar::IsEquippedAction(uint32_t slot) {
 // VERIFY: 20f78ef5 manual
 // OFFSET: 0x005A9360
 int32_t CGActionBar::IsConsumableAction(uint32_t slot) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
@@ -1535,7 +1536,7 @@ int32_t CGActionBar::IsConsumableAction(uint32_t slot) {
     ItemStats_C* stats = g_itemDBCache.GetRecord(itemId, requester, nullptr, nullptr, false);
 
     if (stats) {
-        if (stats->m_inventoryType == 24 || stats->m_inventoryType == 25) {
+        if (stats->m_inventoryType == INVTYPE_AMMO || stats->m_inventoryType == INVTYPE_THROWN) {
             return 1;
         }
 
@@ -1554,7 +1555,7 @@ int32_t CGActionBar::IsConsumableAction(uint32_t slot) {
         return 0;
     }
 
-    for (int32_t i = 0; i < 8; i++) {
+    for (int32_t i = 0; i < NUM_SPELL_REAGENTS; i++) {
         if (spell.m_reagent[i] && spell.m_reagentCount[i] > 0) {
             return 1;
         }
@@ -1576,7 +1577,7 @@ void CGActionBar::OnAuraChanged(int32_t spellId) {
         return;
     }
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         int32_t petSpell;
 
         if (CGActionBar::GetSpell(i, petSpell) == spellId && !petSpell) {
@@ -1590,8 +1591,8 @@ void CGActionBar::OnAuraChanged(int32_t spellId) {
 uint32_t CGActionBar::GetSlotSpellAction(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
 
-    if (action && (action & 0xF0000000) == 0x10000000) {
-        return action & 0xEFFFFFFF;
+    if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_PET_ACTION) {
+        return action & ACTION_MASK::ACTION_MASK_PET_ACTION_INDEX;
     }
 
     return 0;
@@ -1629,7 +1630,7 @@ void CGActionBar::UpdateOverrideSpellBar() {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
     OverrideSpellDataRec* rec;
 
-    if (player && (rec = g_overrideSpellDataDB.GetRecord(static_cast<int16_t>(player->m_player->m_playerFieldBytes2))) && HasOverrideSpellData(rec)) {
+    if (player && (rec = g_overrideSpellDataDB.GetRecord(static_cast<int16_t>(player->m_player->m_overrideSpellsID))) && HasOverrideSpellData(rec)) {
         CGActionBar::UpdateTemporaryActionBar(&GetOverrideSpell, rec);
         CGActionBar::m_tempPageActiveFlags |= 0x4;
     } else {
@@ -1640,7 +1641,7 @@ void CGActionBar::UpdateOverrideSpellBar() {
 // VERIFY: a5c3e3b2 auto
 // OFFSET: 0x005AAB90
 void CGActionBar::RemoveMacro(int32_t spellId) {
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         int32_t petSpell;
 
         if (CGActionBar::GetSpell(i, petSpell) != spellId) {
@@ -1649,8 +1650,8 @@ void CGActionBar::RemoveMacro(int32_t spellId) {
 
         uint32_t action = CGActionBar::m_slotActions[i];
 
-        if (action && (action & 0xF0000000) == 0x40000000) {
-            CGUIMacros::GetMacroByID(action & 0xBFFFFFFF)->FindSpellID();
+        if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) {
+            CGUIMacros::GetMacroByID(action & ACTION_MASK::ACTION_MASK_MACRO_ID)->FindSpellID();
         }
 
         CGActionBar::RemoveAction(i);
@@ -1664,9 +1665,9 @@ void CGActionBar::UpdateEquipmentSet(uint32_t id) {
         return;
     }
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         uint32_t action = CGActionBar::m_slotActions[i];
-        uint32_t set = action && (action & 0xF0000000) == 0x20000000 ? action & 0xDFFFFFFF : static_cast<uint32_t>(-1);
+        uint32_t set = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_EQUIPMENT_SET ? action & ACTION_MASK::ACTION_MASK_EQUIPMENT_SET_ID : static_cast<uint32_t>(-1);
 
         if (set == id) {
             int32_t noMana;
@@ -1680,13 +1681,13 @@ void CGActionBar::UpdateEquipmentSet(uint32_t id) {
 // VERIFY: d191a5f1 manual
 // OFFSET: 0x005AAA90
 void CGActionBar::RemoveAction(uint32_t slot) {
-    if (static_cast<int32_t>(slot) < 0 || slot >= 144) {
+    if (static_cast<int32_t>(slot) < 0 || slot >= CGActionBar::NUM_ACTION_SLOTS) {
         return;
     }
 
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || player->unk_1954) {
+    if (!player || player->m_actionButtonsPending) {
         return;
     }
 
@@ -1709,9 +1710,9 @@ void CGActionBar::UpdateMacro(uint32_t macroId) {
         return;
     }
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         uint32_t action = CGActionBar::m_slotActions[i];
-        uint32_t id = action && (action & 0xF0000000) == 0x40000000 ? action & 0xBFFFFFFF : 0;
+        uint32_t id = action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO ? action & ACTION_MASK::ACTION_MASK_MACRO_ID : 0;
 
         if (id != macroId) {
             continue;
@@ -1763,11 +1764,11 @@ void CGActionBar::UpdateTemporaryActionBar(int32_t (*getSpell)(uint32_t index, c
 // VERIFY: c3611dc4 manual
 // OFFSET: 0x005A8D30
 void CGActionBar::UpdateUsablePower() {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     SpellRec spell;
     int32_t changed = 0;
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         if (!CGActionBar::m_slotUsable[i]) {
             continue;
         }
@@ -1777,7 +1778,7 @@ void CGActionBar::UpdateUsablePower() {
         int32_t spellId = CGActionBar::GetSpell(i, petSpell);
 
         if (spellId && g_spellDB.GetRecord(spellId, &spell)) {
-            CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : player;
+            CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : player;
 
             if (caster) {
                 noMana = !Spell_C_HaveSpellPower(caster, &spell);
@@ -1810,7 +1811,7 @@ static int32_t GetFormPresetSpell(uint32_t index, const void* data) {
 // VERIFY: 82a1fae7 manual
 // OFFSET: 0x005ABAC0
 void CGActionBar::UpdateShapeShiftBar() {
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     SpellShapeshiftFormRec* form;
 
     if (player && (form = g_spellShapeshiftFormDB.GetRecord(player->GetShapeshiftForm())) && FormHasActionBar(form)) {
@@ -1824,7 +1825,7 @@ void CGActionBar::UpdateShapeShiftBar() {
 // VERIFY: 3645420e manual
 // OFFSET: 0x005A9470
 int32_t CGActionBar::IsAutoRepeatAction(uint32_t slot) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
@@ -1837,7 +1838,7 @@ int32_t CGActionBar::IsAutoRepeatAction(uint32_t slot) {
 // VERIFY: 7fa85525 manual
 // OFFSET: 0x005A94C0
 int32_t CGActionBar::HasValidTarget(uint32_t slot, WOWGUID target, int32_t* inRange) {
-    if (slot > 143) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1)) {
         return 0;
     }
 
@@ -1856,7 +1857,7 @@ int32_t CGActionBar::HasValidTarget(uint32_t slot, WOWGUID target, int32_t* inRa
         }
     }
 
-    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : ClntObjMgrGetActivePlayerObj();
+    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : ClntObjMgrGetActivePlayerObj();
     uint8_t result;
 
     if (caster && Spell_C_RangeCheckSelected(caster, &spell, target, &result, false, nullptr)) {
@@ -1876,11 +1877,11 @@ void CGActionBar::UpdateItem(int32_t itemId) {
 
     int32_t count = CGActionBar::CalculateItemCount(itemId);
 
-    for (uint32_t i = 0; i < 144; i++) {
+    for (uint32_t i = 0; i < CGActionBar::NUM_ACTION_SLOTS; i++) {
         uint32_t action = CGActionBar::m_slotActions[i];
 
-        if (action && (action & 0xF0000000) == 0x40000000) {
-            MACRONODE* macro = CGUIMacros::GetMacroByID(action & 0xBFFFFFFF);
+        if (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) {
+            MACRONODE* macro = CGUIMacros::GetMacroByID(action & ACTION_MASK::ACTION_MASK_MACRO_ID);
 
             if (macro && macro->m_spellID < 0) {
                 macro->FindSpellID();
@@ -1918,13 +1919,13 @@ void CGActionBar::UpdateItem(int32_t itemId) {
                 if (stats) {
                     uint32_t index = 0;
 
-                    while (stats->m_spellTrigger[index] != 6) {
-                        if (++index >= 5) {
+                    while (stats->m_spellTrigger[index] != ITEM_SPELL_TRIGGER::ITEM_SPELL_TRIGGER_LEARN_SPELL) {
+                        if (++index >= NUM_ITEM_SPELLS) {
                             break;
                         }
                     }
 
-                    if (index < 5) {
+                    if (index < NUM_ITEM_SPELLS) {
                         uint32_t spellId = stats->m_spellId[index];
 
                         if (spellId && spellId <= static_cast<uint32_t>(g_spellDB.m_maxID) && (s_knownSpellBits.m_bits.m_data[spellId >> 5] & (1 << (spellId & 0x1F)))) {
@@ -2002,11 +2003,11 @@ bool CGActionBar::IsEquipmentSetValid(int32_t setId) {
 // VERIFY: 82e513fa manual
 // OFFSET: 0x005ABE70
 void CGActionBar::PickupAction(uint32_t slot) {
-    if (slot > 143 || !CGGameUI::CanPerformAction(14) || (slot >= 120 && slot < 132)) {
+    if (slot > (CGActionBar::NUM_ACTION_SLOTS - 1) || !CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION) || (slot >= 120 && slot < CGActionBar::MULTICAST_ACTION_FIRST)) {
         return;
     }
 
-    if (CGGameUI::GetCursorSpell() || CGGameUI::GetCursorItem() || CGGameUI::m_cursorMacro || CGGameUI::GetCursorVirtualItemOfType(7) || CGGameUI::m_cursorEquipmentSet >= 0) {
+    if (CGGameUI::GetCursorSpell() || CGGameUI::GetCursorItem() || CGGameUI::m_cursorMacro || CGGameUI::GetCursorVirtualItemOfType(UICURSOR_ACTIONBAR) || CGGameUI::m_cursorEquipmentSet >= 0) {
         CGActionBar::PutActionInSlot(slot);
         return;
     }
@@ -2018,7 +2019,7 @@ void CGActionBar::PickupAction(uint32_t slot) {
     if (CGActionBar::IsItem(slot)) {
         ItemRec* rec = g_itemDB.GetRecord(CGActionBar::GetItem(slot));
         int32_t displayId = rec ? rec->m_displayInfoID : 0;
-        CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), displayId, slot, 7, 0);
+        CGGameUI::SetCursorVirtualItem(CGActionBar::GetItem(slot), displayId, slot, UICURSOR_ACTIONBAR, 0);
         CGActionBar::RemoveAction(slot);
     } else if (CGActionBar::IsSpell(slot)) {
         int32_t petSpell;
@@ -2046,7 +2047,7 @@ void CGActionBar::ShutdownGame() {
 // OFFSET: 0x005A7A90
 int32_t CGActionBar::GetMacroItem(uint32_t slot) {
     uint32_t action = CGActionBar::m_slotActions[slot];
-    uint32_t macroId = (action && (action & 0xF0000000) == 0x40000000) ? action & 0xBFFFFFFF : 0;
+    uint32_t macroId = (action && (action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) ? action & ACTION_MASK::ACTION_MASK_MACRO_ID : 0;
     MACRONODE* macro = CGUIMacros::GetMacroByID(macroId);
 
     if (macro) {
@@ -2063,7 +2064,7 @@ void CGActionBar::ReplaceSpell(int32_t oldSpell, int32_t newSpell) {
     int32_t found = g_spellDB.GetRecord(newSpell, &newRec);
     int32_t newRank = found ? CGSpellBook::GetSpellProgressionRank(&newRec) : 0;
 
-    for (uint32_t slot = 0; slot < 144; slot++) {
+    for (uint32_t slot = 0; slot < CGActionBar::NUM_ACTION_SLOTS; slot++) {
         int32_t petSpell;
         int32_t spellId = CGActionBar::GetSpell(slot, petSpell);
 
@@ -2090,10 +2091,10 @@ void CGActionBar::ReplaceSpell(int32_t oldSpell, int32_t newSpell) {
             continue;
         }
 
-        if (!(action & 0xF0000000)) {
+        if (!(action & ACTION_MASK::ACTION_MASK_TAG)) {
             CGActionBar::SetAction(slot, newSpell, 1, 0);
-        } else if ((action & 0xF0000000) == 0x40000000) {
-            CGUIMacros::GetMacroByID(action & 0xBFFFFFFF)->m_spellID = newSpell;
+        } else if ((action & ACTION_MASK::ACTION_MASK_TAG) == ACTION_TAG::ACTION_TAG_MACRO) {
+            CGUIMacros::GetMacroByID(action & ACTION_MASK::ACTION_MASK_MACRO_ID)->m_spellID = newSpell;
         }
     }
 }
@@ -2107,15 +2108,15 @@ void CGActionBar::UpdateCritter(int32_t critter) {
 
     SpellRec spell;
 
-    for (uint32_t slot = 0; slot < 144; slot++) {
+    for (uint32_t slot = 0; slot < CGActionBar::NUM_ACTION_SLOTS; slot++) {
         int32_t petSpell;
 
         if (!g_spellDB.GetRecord(CGActionBar::GetSpell(slot, petSpell), &spell)) {
             continue;
         }
 
-        for (uint32_t i = 0; i < 3; i++) {
-            if (spell.m_effect[i] == 28 && g_summonPropertiesDB.GetRecord(spell.m_effectMiscValueB[0]) && spell.m_effectMiscValue[i] == critter) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+            if (spell.m_effect[i] == SPELL_EFFECT_SUMMON && g_summonPropertiesDB.GetRecord(spell.m_effectMiscValueB[0]) && spell.m_effectMiscValue[i] == critter) {
                 int32_t noMana;
                 CGActionBar::m_slotUsable[slot] = CGActionBar::UpdateUsableAction(slot, noMana);
                 CGActionBar::m_slotNoMana[slot] = noMana;

@@ -23,7 +23,7 @@ void FVBBList::Initialize(EGxPoolTarget target, EGxPoolUsage usage, uint32_t ite
     this->m_pool = g_theGxDevicePtr->PoolCreate(target, usage, blockCount * this->m_blockSize, GxPoolHintBit_Unk2, target ? "FVBBList_idx" : "FVBBList_vtx");
 
     for (uint32_t i = 0; i < blockCount; i++) {
-        Block* block = this->m_blocks.NewNode(2, 0, 0);
+        Block* block = this->m_blocks.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         block->m_buf = g_theGxDevicePtr->BufCreate(this->m_pool, itemSize, itemCount, i * this->m_blockSize);
     }
 }
@@ -56,7 +56,7 @@ FVBBList::Block* FVBBList::AllocBlock(Block** owner) {
     Block* block = this->m_blocks.Head();
     block->m_link.Unlink();
     this->m_usedBlocks.LinkToTail(block);
-    block->m_buf->unk_001C = 0;
+    block->m_buf->m_hasData = 0;
     block->m_owner = owner;
     return block;
 }
@@ -69,16 +69,16 @@ void FVBBList::AcquireBlock(Block** owner) {
         Block* newest = this->m_usedBlocks.Head();
 
         for (Block* block = this->m_usedBlocks.Head(); block; block = this->m_usedBlocks.Next(block)) {
-            if (block->unk_0008 < oldest->unk_0008) {
+            if (block->m_lastUsedFrame < oldest->m_lastUsedFrame) {
                 oldest = block;
             }
 
-            if (block->unk_0008 > newest->unk_0008) {
+            if (block->m_lastUsedFrame > newest->m_lastUsedFrame) {
                 newest = block;
             }
         }
 
-        if (newest->unk_0008 - oldest->unk_0008 <= 10) {
+        if (newest->m_lastUsedFrame - oldest->m_lastUsedFrame <= 10) {
             return;
         }
 

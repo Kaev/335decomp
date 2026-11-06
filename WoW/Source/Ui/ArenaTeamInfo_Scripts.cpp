@@ -95,7 +95,7 @@ static int32_t Script_GetArenaTeam(lua_State* L) {
 
     lua_checkstack(L, 22);
     uint32_t index = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, 1)) - 1);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     uint32_t* info = player && index < 3 ? &player->m_player->m_playerFieldArenaTeamInfo11[index * 7] : nullptr;
     ArenaTeam* team = index < 3 ? &CGArenaTeamInfo::m_arenaTeams[index] : nullptr;
     ArenaTeamCache* cache = nullptr;
@@ -246,41 +246,41 @@ static int32_t Script_SortArenaTeamRoster(lua_State* L) {
         return 0;
     }
 
-    int32_t column = 0;
+    int32_t column = CGArenaTeamInfo::SORT_COLUMN::COLUMN_NAME;
     const char* type = lua_tolstring(L, 1, nullptr);
 
     if (!SStrCmpI(type, "name", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(0);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_NAME);
         return 0;
     }
 
     if (!SStrCmpI(type, "class", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(1);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_CLASS);
         return 0;
     }
 
     if (!SStrCmpI(type, "played", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(2);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_WEEK_GAMES);
         return 0;
     }
 
     if (!SStrCmpI(type, "won", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(3);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_WEEK_WINS);
         return 0;
     }
 
     if (!SStrCmpI(type, "seasonplayed", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(4);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_SEASON_GAMES);
         return 0;
     }
 
     if (!SStrCmpI(type, "seasonwon", STORM_MAX_STR)) {
-        CGArenaTeamInfo::SortRoster(5);
+        CGArenaTeamInfo::SortRoster(CGArenaTeamInfo::SORT_COLUMN::COLUMN_SEASON_WINS);
         return 0;
     }
 
     if (!SStrCmpI(type, "rating", STORM_MAX_STR)) {
-        column = 6;
+        column = CGArenaTeamInfo::SORT_COLUMN::COLUMN_PERSONAL_RATING;
     }
 
     CGArenaTeamInfo::SortRoster(column);

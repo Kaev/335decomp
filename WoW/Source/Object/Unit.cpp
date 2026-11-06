@@ -1,30 +1,146 @@
 #include "Unit.h"
+#include "WoW/Source/Object/Types.h"
 #include "WoW/Source/Object/CMoveSpline.h"
 #include "WoW/Source/Object/Movement.h"
 #include "WoW/Source/Object/Object.h"
 
 // STATIC: 0x00AC49D8
-const uint32_t CGUnit::s_mirrorFieldIndices[123] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11,
-    0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21,
-    0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31,
-    0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3D, 0x3F, 0x40, 0x41, 0x42, 0x43, 0x44,
-    0x45, 0x46, 0x47, 0x48, 0x49, 0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51, 0x52, 0x5D, 0x5E, 0x5F, 0x60,
-    0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x70,
-    0x71, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F, 0x80, 0x81, 0x82,
-    0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8E,
+const uint32_t CGUnit::s_mirrorFieldIndices[CGUnit::NUM_MIRROR_FIELDS] = {
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHARM,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHARM + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_SUMMON,
+    CGUnitData::FIELD_ID::UNIT_FIELD_SUMMON + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CRITTER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CRITTER + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHARMEDBY,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHARMEDBY + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_SUMMONEDBY,
+    CGUnitData::FIELD_ID::UNIT_FIELD_SUMMONEDBY + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_TARGET,
+    CGUnitData::FIELD_ID::UNIT_FIELD_TARGET + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHANNEL_OBJECT,
+    CGUnitData::FIELD_ID::UNIT_FIELD_CHANNEL_OBJECT + 1,
+    CGUnitData::FIELD_ID::UNIT_CHANNEL_SPELL,
+    CGUnitData::FIELD_ID::UNIT_FIELD_BYTES_0,
+    CGUnitData::FIELD_ID::UNIT_FIELD_HEALTH,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER7,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXHEALTH,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXPOWER7,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_LEVEL,
+    CGUnitData::FIELD_ID::UNIT_FIELD_FACTIONTEMPLATE,
+    CGUnitData::FIELD_ID::UNIT_VIRTUAL_ITEM_SLOT_ID,
+    CGUnitData::FIELD_ID::UNIT_VIRTUAL_ITEM_SLOT_ID + 1,
+    CGUnitData::FIELD_ID::UNIT_VIRTUAL_ITEM_SLOT_ID + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_FLAGS,
+    CGUnitData::FIELD_ID::UNIT_FIELD_FLAGS_2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_AURASTATE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_BASEATTACKTIME,
+    CGUnitData::FIELD_ID::UNIT_FIELD_BASEATTACKTIME + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RANGEDATTACKTIME,
+    CGUnitData::FIELD_ID::UNIT_FIELD_DISPLAYID,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MOUNTDISPLAYID,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MINDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MINOFFHANDDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXOFFHANDDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_BYTES_1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_PETNUMBER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_PET_NAME_TIMESTAMP,
+    CGUnitData::FIELD_ID::UNIT_FIELD_PETEXPERIENCE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_PETNEXTLEVELEXP,
+    CGUnitData::FIELD_ID::UNIT_DYNAMIC_FLAGS,
+    CGUnitData::FIELD_ID::UNIT_NPC_FLAGS,
+    CGUnitData::FIELD_ID::UNIT_NPC_EMOTESTATE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_STAT0,
+    CGUnitData::FIELD_ID::UNIT_FIELD_STAT1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_STAT2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_STAT3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_STAT4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCES + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSPOSITIVE + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RESISTANCEBUFFMODSNEGATIVE + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_BYTES_2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_ATTACK_POWER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_ATTACK_POWER_MODS,
+    CGUnitData::FIELD_ID::UNIT_FIELD_ATTACK_POWER_MULTIPLIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RANGED_ATTACK_POWER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RANGED_ATTACK_POWER_MODS,
+    CGUnitData::FIELD_ID::UNIT_FIELD_RANGED_ATTACK_POWER_MULTIPLIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MINRANGEDDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXRANGEDDAMAGE,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MODIFIER + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 1,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 2,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 3,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 4,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 5,
+    CGUnitData::FIELD_ID::UNIT_FIELD_POWER_COST_MULTIPLIER + 6,
+    CGUnitData::FIELD_ID::UNIT_FIELD_MAXHEALTHMODIFIER,
+    CGUnitData::FIELD_ID::UNIT_FIELD_HOVERHEIGHT,
+    CGUnitData::FIELD_ID::UNIT_END,
 };
 
 // VERIFY: af22e65c auto
 // OFFSET: 0x004F52D0
-uint32_t CGUnit::MirrorIndexFromFieldIndex(uint32_t fieldIndex) {
+uint32_t CGUnit::GetSavedIndexFromDataIndex(uint32_t fieldIndex, uint32_t unused_count, uint32_t unused_local) {
     for (uint32_t i = 0; i < sizeof(s_mirrorFieldIndices) / sizeof(s_mirrorFieldIndices[0]); i++) {
         if (s_mirrorFieldIndices[i] == fieldIndex) {
             return i;
         }
     }
 
-    return 142;
+    return CGUnit::MIRROR_INDEX_NOT_FOUND;
 }
 
 // VERIFY: 2461627f manual
@@ -32,15 +148,15 @@ uint32_t CGUnit::MirrorIndexFromFieldIndex(uint32_t fieldIndex) {
 bool CGUnit::CanSwim() const {
     uint32_t flags = this->m_unit->m_unitFieldFlags;
 
-    if (flags & 0x4000) {
+    if (flags & UNIT_FLAGS::UNIT_FLAG_CANNOT_SWIM) {
         return false;
     }
 
-    if ((flags & 0x8) || (flags & 0x800) || (flags & 0x10)) {
+    if ((flags & UNIT_FLAGS::UNIT_FLAG_PLAYER_CONTROLLED) || (flags & UNIT_FLAGS::UNIT_FLAG_PET_IN_COMBAT) || (flags & UNIT_FLAGS::UNIT_FLAG_EVADING_HOME)) {
         return true;
     }
 
-    return (flags >> 15) & 1;
+    return flags & UNIT_FLAGS::UNIT_FLAG_CAN_SWIM;
 }
 
 // VERIFY: a616de1f manual
@@ -52,35 +168,35 @@ int32_t CGUnit::CanPlayEmote(uint32_t emoteFlags, int32_t targeted, int32_t* sta
         return 0;
     }
 
-    if ((emoteFlags & 0x1) && this->m_unit->m_unitFieldBytes1[0]) {
+    if ((emoteFlags & 0x1) && (this->m_unit->m_standState != UNIT_STANDING)) {
         return 0;
     }
 
-    if ((emoteFlags & 0x80) && (this->m_movement->m_flags & 0x200000)) {
+    if ((emoteFlags & 0x80) && (this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING)) {
         return 0;
     }
 
     if (emoteFlags & 0x8000) {
         CMoveSpline* spline = this->m_movement->m_spline;
 
-        if (spline && !(spline->m_flags & 0x400) && (spline->m_flags & 0x2000)) {
+        if (spline && !(spline->m_flags & SPLINEFLAG_NO_SPLINE) && (spline->m_flags & SPLINEFLAG_FLYING)) {
             return 0;
         }
 
-        if (this->m_movement->m_flags & 0x2000000) {
+        if (this->m_movement->m_flags & MOVEMENTFLAG_FLYING) {
             return 0;
         }
     }
 
     if (!(emoteFlags & 0x200)) {
-        uint8_t standState = this->m_unit->m_unitFieldBytes1[0];
+        uint8_t standState = this->m_unit->m_standState;
 
-        if (standState == 3 || standState == 7) {
+        if (standState == UNIT_SLEEPING || standState == UNIT_DEAD) {
             return 0;
         }
     }
 
-    if ((emoteFlags & 0x4000) && (this->m_movement->m_flags & 0xC010FF)) {
+    if ((emoteFlags & 0x4000) && (this->m_movement->m_flags & MOVEMENTFLAG_ACTIVE_MASK)) {
         *standUp = 1;
     }
 
@@ -144,7 +260,7 @@ int32_t CGUnit::HasAuraState(int32_t state) const {
 int32_t CGUnit::IsOnFlyingSpline() const {
     CMoveSpline* spline = this->m_movement->m_spline;
 
-    if (spline && !(spline->m_flags & 0x400) && (spline->m_flags & 0x2000)) {
+    if (spline && !(spline->m_flags & SPLINEFLAG_NO_SPLINE) && (spline->m_flags & SPLINEFLAG_FLYING)) {
         return 1;
     }
 
@@ -155,7 +271,7 @@ int32_t CGUnit::IsOnFlyingSpline() const {
 // OFFSET: 0x005F9810
 int32_t CGUnit::IsOnSpline() const {
     CMoveSpline* spline = this->m_movement->m_spline;
-    return spline && !(spline->m_flags & 0x400);
+    return spline && !(spline->m_flags & SPLINEFLAG_NO_SPLINE);
 }
 
 // VERIFY: ea2cbe01 auto
@@ -167,20 +283,20 @@ int32_t CGUnit::IsJumping() const {
 // VERIFY: 4e64bda0 auto
 // OFFSET: 0x005FA9E0
 int32_t CGUnit::CanMove() const {
-    return this->m_unit->m_unitFieldHealth > 0 && !(this->m_movement->m_flags & 0x100A00) && this->m_unit->m_unitFieldBytes1[0] != 7;
+    return this->m_unit->m_unitFieldHealth > 0 && !(this->m_movement->m_flags & (MOVEMENTFLAG_ONTRANSPORT | MOVEMENTFLAG_ROOT | MOVEMENTFLAG_PENDING_ROOT)) && this->m_unit->m_standState != UNIT_DEAD;
 }
 
 // VERIFY: 68641d42 auto
 // OFFSET: 0x004D4240
-uint32_t CGUnit::DescriptorToMirrorOffset(uint32_t offset, uint32_t a2, uint32_t a3, uint32_t base) {
+uint32_t CGUnit::DescriptorToMirrorOffset(uint32_t offset, uint32_t size, uint32_t local, uint32_t base) {
     int32_t objectFields = CGObject::TotalFieldsSaved();
-    return (offset & 3) + 4 * (objectFields + MirrorIndexFromFieldIndex((offset - base) >> 2));
+    return (offset & 3) + 4 * (objectFields + GetSavedIndexFromDataIndex((offset - base) >> 2, (size + 3) >> 2, local));
 }
 
 // VERIFY: 93ca7f49 auto
 // OFFSET: 0x004F52C0
-int32_t CGUnit::TotalFields() {
-    return CGObject::TotalFieldsSaved() + 123;
+int32_t CGUnit::TotalFieldsSaved() {
+    return CGObject::TotalFieldsSaved() + CGUnit::NUM_MIRROR_FIELDS;
 }
 
 // VERIFY: 65e96d9b auto
@@ -191,7 +307,7 @@ float CGUnit::GetFacing(float facing) const {
 
 // VERIFY: 5712b6fb manual
 // OFFSET: 0x004F5300
-float __stdcall CGUnit::GetPowerRegenBase(int32_t powerType, uint8_t inCombat) {
+float __stdcall CGUnit::GetPowerRegenBase(POWER_TYPE powerType, uint8_t inCombat) {
     static float s_regen[7][2] = {
         { 0.0f, 0.0f },
         { -12.5f, 0.0f },
@@ -207,7 +323,7 @@ float __stdcall CGUnit::GetPowerRegenBase(int32_t powerType, uint8_t inCombat) {
 
 // VERIFY: 5dbc6590 auto
 // OFFSET: 0x004F5390
-float CGUnit::GetPowerRegen(int32_t powerType, bool inCombat) const {
+float CGUnit::GetPowerRegen(POWER_TYPE powerType, bool inCombat) const {
     if (inCombat) {
         return CGUnit::GetPowerRegenBase(powerType, 1) + this->m_unit->m_unitFieldPowerRegenInterruptedFlatModifier[powerType];
     }
@@ -218,7 +334,7 @@ float CGUnit::GetPowerRegen(int32_t powerType, bool inCombat) const {
 // VERIFY: 90149eb1 manual
 // OFFSET: 0x004F7250
 bool CGUnit::IsPossessedBy(const WOWGUID& guid) const {
-    return (this->m_unit->m_unitFieldFlags & 0x1000000) && *this->GetCharmerOrCreatorGuid() == guid;
+    return (this->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_POSSESSED) && *this->GetCharmerOrCreatorGuid() == guid;
 }
 
 // VERIFY: 3c755101 auto
@@ -236,8 +352,8 @@ bool CGUnit::HasSummoner() const {
 // VERIFY: 00a60867 manual
 // OFFSET: 0x004F5F80
 bool CGUnit::IsGuildMaster() const {
-    uint32_t flags = this->m_unit->m_unitNpcFlags;
-    return (flags & 0x40000) && (flags & 0x80000);
+    uint32_t npcFlags = this->m_unit->m_unitNpcFlags;
+    return (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_PETITIONER) && (npcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_TABARD_DESIGNER);
 }
 
 // VERIFY: 124e37fd auto
@@ -289,8 +405,8 @@ int32_t CGUnit::GetQuestGreenRange() const {
 // VERIFY: 467ea880 manual
 // OFFSET: 0x00716190
 bool CGUnit::IsSitting() const {
-    uint8_t standState = this->m_unit->m_unitFieldBytes1[0];
-    return standState == 1 || (standState >= 4 && standState <= 6);
+    uint8_t standState = this->m_unit->m_standState;
+    return standState == UNIT_SITTING || (standState >= UNIT_FIRSTCHAIRSIT && standState <= UNIT_FIRSTCHAIRSIT + UNIT_NUMCHAIRSTATES - 1);
 }
 
 // VERIFY: 01cf0dc8 auto

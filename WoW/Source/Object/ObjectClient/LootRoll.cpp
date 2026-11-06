@@ -4,6 +4,7 @@
 #include "WoW/Source/Ui/Types.h"
 #include "WoW/Source/DB/DBClient/DBCacheInstances.h"
 #include "WoW/Source/Object/ItemStats.h"
+#include "WoW/Source/Object/Types.h"
 #include "WoW/Source/WowServices/WDataStore.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
 #include "WoW/Source/Net/Types.h"
@@ -83,7 +84,7 @@ void LootRoll(int32_t id, int32_t rollType, bool confirmed) {
             continue;
         }
 
-        if (roll->unk_0042) {
+        if (roll->m_finished) {
             return;
         }
 
@@ -97,7 +98,7 @@ void LootRoll(int32_t id, int32_t rollType, bool confirmed) {
                         FrameScript_SignalEvent(SCRIPT_EVENT_CONFIRM_DISENCHANT_ROLL, "%d%d", roll->m_id, 3);
                         return;
                     }
-                } else if (stats->m_bonding == 1) {
+                } else if (stats->m_bonding == ITEM_BINDING::ITEM_BINDING_ON_PICKUP) {
                     FrameScript_SignalEvent(SCRIPT_EVENT_CONFIRM_LOOT_ROLL, "%d%d", roll->m_id, rollType);
                     return;
                 }
@@ -112,10 +113,10 @@ void LootRoll(int32_t id, int32_t rollType, bool confirmed) {
             msg.Put(static_cast<uint8_t>(rollType));
             msg.Finalize();
             ClientServices::Send2(&msg);
-            roll->unk_0030 = 1;
+            roll->unknown_0030 = 1;
             FrameScript_SignalEvent(SCRIPT_EVENT_CANCEL_LOOT_ROLL, "%d", roll->m_id);
             s_numShownLootRolls--;
-            roll->unk_0042 = 1;
+            roll->m_finished = 1;
             LootRollShowPending();
         }
 
@@ -148,7 +149,7 @@ void CloseAllLootRolls() {
     while (roll) {
         PendingLootRoll* next = s_pendingLootRolls.Next(roll);
 
-        if (!roll->unk_0042) {
+        if (!roll->m_finished) {
             WDataStore msg;
             msg.Put(static_cast<uint32_t>(CMSG_LOOT_ROLL));
             msg.Put(roll->m_lootGuid.m_guid);
@@ -209,7 +210,7 @@ int32_t LootRollMasterList(CDataStore* msg) {
 // VERIFY: 62fad677 manual
 // OFFSET: 0x006FA7A0
 static void LootRollCalculateReasons(PendingLootRoll* roll, const ItemStats_C* stats) {
-    roll->unk_0051 = 0;
+    roll->unknown_0051 = 0;
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
     bool invalid = !player->m_bag.ItemCountValid(roll->m_itemId, stats, roll->m_count, false);
     uint8_t mask = roll->m_voteMask;
@@ -219,7 +220,7 @@ static void LootRollCalculateReasons(PendingLootRoll* roll, const ItemStats_C* s
     } else if (invalid) {
         roll->m_reasonNeed = 2;
     } else {
-        roll->m_reasonNeed = static_cast<uint8_t>(((stats->m_flags[1] >> 6) & 0x4) | 0x1);
+        roll->m_reasonNeed = (stats->m_flags[1] & ITEM_STATIC_FLAGS2::ITEM_FLAG2_CAN_ONLY_ROLL_GREED) ? 5 : 1;
     }
 
     roll->m_reasonGreed = ~(mask >> 1) & 0x2;
@@ -396,12 +397,12 @@ int32_t LootRollStart(CDataStore* msg) {
         return 1;
     }
 
-    PendingLootRoll* roll = s_pendingLootRolls.NewNode(2, 0, 0);
+    PendingLootRoll* roll = s_pendingLootRolls.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     roll->m_lootGuid = lootGuid;
     roll->m_id = s_nextLootRollId++;
-    roll->unk_0030 = 0;
+    roll->unknown_0030 = 0;
     roll->m_showPending = 0;
-    roll->unk_0042 = 0;
+    roll->m_finished = 0;
     msg->Get(roll->m_slot);
     msg->Get(roll->m_itemId);
     msg->Get(roll->m_randomSuffix);
@@ -435,7 +436,7 @@ static void AllPassedStats(PendingLootRoll* roll, const ItemStats_C* stats) {
     SStrPrintf(text, sizeof(text), FrameScript_GetText("LOOT_ROLL_ALL_PASSED", -1, GENDER_NOT_APPLICABLE), CGTooltip::GetItemHyperlinkString(roll->m_itemId, stats->m_quality, 0, roll->m_randomPropertyId, roll->m_randomSuffix));
     CGChat::AddChatMessage(text, 27, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
 
-    if (!roll->unk_0042) {
+    if (!roll->m_finished) {
         FrameScript_SignalEvent(SCRIPT_EVENT_CANCEL_LOOT_ROLL, "%d", roll->m_id);
         s_numShownLootRolls--;
     }
@@ -482,7 +483,7 @@ int32_t LootRollAllPassed(CDataStore* msg) {
         roll->m_id = -1;
         roll->m_randomPropertyId = randomPropertyId;
         roll->m_randomSuffix = randomSuffix;
-        roll->unk_0042 = 1;
+        roll->m_finished = 1;
         roll->m_rollType = 0;
     }
 
@@ -523,7 +524,7 @@ static void WonStatsAndName(const NameCache* name, PendingLootRoll* roll, const 
 
     CGChat::AddChatMessage(text, 27, nullptr, 0, nullptr, nullptr, nullptr, WOWGUID(), 0, WOWGUID(), 0, false, nullptr);
 
-    if (!roll->unk_0042) {
+    if (!roll->m_finished) {
         FrameScript_SignalEvent(SCRIPT_EVENT_CANCEL_LOOT_ROLL, "%d", roll->m_id);
         s_numShownLootRolls--;
     }
@@ -597,7 +598,7 @@ int32_t LootRollWon(CDataStore* msg) {
         roll->m_id = -1;
         roll->m_randomPropertyId = randomPropertyId;
         roll->m_randomSuffix = randomSuffix;
-        roll->unk_0042 = 1;
+        roll->m_finished = 1;
         roll->m_rollType = 0;
     }
 

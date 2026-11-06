@@ -112,6 +112,7 @@
 #include "WoW/Source/WowSvcs/WowSvcsClient/ClientServices.h"
 #include "WoW/Source/WowSvcs/WowSvcsClient/FriendList.h"
 #include "WoW/Source/WowSysMessageOutput.h"
+#include "GameVersion.h"
 
 namespace {
 
@@ -264,7 +265,7 @@ static uint32_t s_unk_B2FA10;
 static char s_installLocation[1024];
 
 // STATIC: 0x00C5DE90
-bool g_hasIsoLocale[12];
+bool g_hasIsoLocale[NUM_DB_LOCALES];
 
 // STATIC: 0x00C5DE9C
 int32_t s_locale;
@@ -654,7 +655,7 @@ static void CheckAvailableLocales(char* locale) {
         return;
     }
 
-    for (int32_t i = 0; i < 12; i++) {
+    for (int32_t i = 0; i < NUM_DB_LOCALES; i++) {
         char path[1024];
         g_hasIsoLocale[i] = false;
 
@@ -668,8 +669,8 @@ static void CheckAvailableLocales(char* locale) {
 
     int32_t index = LocaleNameToIndex(locale);
 
-    for (int32_t i = 0; i < 12 && !g_hasIsoLocale[index]; i++) {
-        index = (index + 1) % 12;
+    for (int32_t i = 0; i < NUM_DB_LOCALES && !g_hasIsoLocale[index]; i++) {
+        index = (index + 1) % NUM_DB_LOCALES;
     }
 
     SStrCopy(locale, g_localeNames[index], STORM_MAX_STR);
@@ -866,7 +867,7 @@ static void LoadMFIL(const char* file) {
         InitOggDecompression();
     }
 
-    SFile::SetStreamingStatus(s_streamingDiag & 1, (s_streamingDiag >> 1) & 1, (s_streamingDiag >> 2) & 1, (s_streamingDiag >> 3) & 1, 12340);
+    SFile::SetStreamingStatus(s_streamingDiag & 1, (s_streamingDiag >> 1) & 1, (s_streamingDiag >> 2) & 1, (s_streamingDiag >> 3) & 1, GAME_BUILD);
 }
 
 // VERIFY: 4b6c1aaa auto
@@ -881,7 +882,7 @@ void StartupReport(bool firstRun) {
     Blizzard::Streaming::FileManifest::SetSpeedTest(speedTest);
     StartupReportSetSpeedTest(speedTest);
     Tracker::SetLocale(CVar::Lookup("locale")->m_stringValue.m_str);
-    Tracker::SetBuildnum(12340);
+    Tracker::SetBuildnum(GAME_BUILD);
     StartupReportSendTelemetry(true, firstRun);
     World::SetFrameCntCallback(StartupReportFrameCallback);
 }
@@ -1165,47 +1166,47 @@ static void LogZoneInfo(CGObject_C* object, char* buffer, uint32_t size) {
 // VERIFY: 4c651ee9 manual
 // OFFSET: 0x00404B80
 int32_t STORMAPI WowLogHeader(char* buffer, uint32_t bufferchars) {
-    SStrPrintf(buffer, bufferchars, "WoWBuild: %d\r\n", 12340);
+    SStrPrintf(buffer, bufferchars, "WoWBuild: %d\r\n", GAME_BUILD);
 
     if (ClntObjMgrIsValid(0)) {
-        CGObject_C* player = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__);
+        CGObject_C* player = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__);
 
         if (player && SMemIsValidPointer(player, sizeof(CGPlayer_C), 0)) {
             LogRealmInfo(buffer, bufferchars);
             LogZoneInfo(player, buffer, bufferchars);
             LogObjectInfo(player, "Local Player", buffer, bufferchars);
 
-            CGObject_C* object = ClntObjMgrObjectPtr(static_cast<CGPlayer_C*>(player)->m_combat.m_attacking, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            CGObject_C* object = ClntObjMgrObjectPtr(static_cast<CGPlayer_C*>(player)->m_combat.m_attacking, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Attacking Target", buffer, bufferchars);
             }
 
-            object = ClntObjMgrObjectPtr(CGGameUI::m_currentObjectTrack, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            object = ClntObjMgrObjectPtr(CGGameUI::m_currentObjectTrack, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Current Object Track", buffer, bufferchars);
             }
 
-            object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            object = ClntObjMgrObjectPtr(CGGameUI::m_interactTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Interact Target", buffer, bufferchars);
             }
 
-            object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            object = ClntObjMgrObjectPtr(CGGameUI::m_lockedTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Locked Target", buffer, bufferchars);
             }
 
-            object = ClntObjMgrObjectPtr(CGGameUI::m_lastEnemyTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+            object = ClntObjMgrObjectPtr(CGGameUI::m_lastEnemyTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Last Enemy Target", buffer, bufferchars);
             }
 
-            object = ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPEMASK_ITEM, __FILE__, __LINE__);
+            object = ClntObjMgrObjectPtr(CGGameUI::GetCursorItem(), TYPE_ITEM, __FILE__, __LINE__);
 
             if (object) {
                 LogObjectInfo(object, "Cursor Item", buffer, bufferchars);
@@ -1259,7 +1260,7 @@ void ClientInitializeGame(uint32_t mapId, C3Vector position) {
         SetClientInitialized(0);
     }
 
-    g_theGxDevicePtr->MasterEnableSet(GxMasterEnable_Fog, 1);
+    g_theGxDevicePtr->MasterEnableSet(GxMasterEnable_Fog, Gx_Enable);
 
     if (World::s_weather) {
         World::s_weather->Reset();
@@ -1446,7 +1447,7 @@ static void OpenArchives() {
 
                 char title[256];
                 SStrCopy(title, "Missing or corrupted data", STORM_MAX_STR);
-                OsGuiMessageBox(OsGuiGetWindow(2), 0, message, title);
+                OsGuiMessageBox(OsGuiGetWindow(OSGUI_WINDOW_TYPE_FRONT), OSGUI_MESSAGE_STYLE_OK, message, title);
                 StormExit(SErrGetLastError());
             }
         }
@@ -1757,10 +1758,7 @@ bool InitializeGlobal() {
 
     g_startup_StringsDB.Load(__FILE__, __LINE__);
 
-    Startup_StringsRec* title = g_startup_StringsDB.GetRecord(1);
-    char windowTitle[260];
-    SStrCopy(windowTitle, title ? title->m_message : "World of Warcraft", STORM_MAX_STR);
-    ConsoleDeviceInitialize(windowTitle, 1, 1);
+    ConsoleDeviceInitialize(CLIENT_NAME, 1, 1);
 
     OsIMEInitialize();
     g_rndSeed.SetSeed(OsGetAsyncTimeMs());
@@ -1793,7 +1791,7 @@ void BeginCloseGame() {
     if (s_closeErrorStringId) {
         Startup_StringsRec* title = g_startup_StringsDB.GetRecord(1);
         Startup_StringsRec* message = g_startup_StringsDB.GetRecord(s_closeErrorStringId);
-        OsGuiMessageBox(nullptr, 0, message ? message->m_message : "Unknown Error", title ? title->m_message : "World of Warcraft");
+        OsGuiMessageBox(nullptr, OSGUI_MESSAGE_STYLE_OK, message ? message->m_message : "Unknown Error", title ? title->m_message : "World of Warcraft");
     }
 }
 
@@ -1819,7 +1817,7 @@ int32_t CommonMain() {
         SRegSaveValue("World of Warcraft\\Client", "SendErrorLogs", 0, 1);
     }
 
-    SErrSetLogTitleString("World of WarCraft (build 12340)");
+    SErrSetLogTitleString("World of WarCraft (build " GAME_BUILD_STRING ")");
     SErrSetLogCallback(WowLogHeader);
 
     if (sendErrorLogs) {
@@ -1923,32 +1921,32 @@ int32_t Packet_SMSG_TRANSFER_ABORTED(void* param, NETMESSAGE msgId, uint32_t tim
         char token[64];
 
         switch (reason) {
-            case 1:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_ERROR:
                 text = FrameScript_GetText("TRANSFER_ABORT_ERROR", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 2:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_MAX_PLAYERS:
                 text = FrameScript_GetText("TRANSFER_ABORT_MAX_PLAYERS", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 3:
-            case 12:
-            case 13:
-            case 14:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_NOT_FOUND:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_UNKNOWN_12:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_UNKNOWN_13:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_UNKNOWN_14:
                 text = FrameScript_GetText("TRANSFER_ABORT_NOT_FOUND", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 4:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_TOO_MANY_INSTANCES:
                 text = FrameScript_GetText("TRANSFER_ABORT_TOO_MANY_INSTANCES", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 6:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_ZONE_IN_COMBAT:
                 text = FrameScript_GetText("TRANSFER_ABORT_ZONE_IN_COMBAT", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 7: {
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_INSUFFICIENT_EXPANSION: {
                 uint8_t expansion;
                 msg->Get(expansion);
                 SStrPrintf(token, sizeof(token), "TRANSFER_ABORT_INSUF_EXPAN_LVL%d", expansion);
                 text = FrameScript_GetText(token, -1, GENDER_NOT_APPLICABLE);
                 break;
             }
-            case 8: {
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_DIFFICULTY: {
                 uint8_t difficulty;
                 msg->Get(difficulty);
                 MapDifficultyRec* entry = GetMapDifficultyEntryByMapIdAndDifficulty(map->m_id, difficulty, nullptr);
@@ -1961,7 +1959,7 @@ int32_t Packet_SMSG_TRANSFER_ABORTED(void* param, NETMESSAGE msgId, uint32_t tim
 
                 break;
             }
-            case 9: {
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_UNIQUE_MESSAGE: {
                 uint8_t message;
                 msg->Get(message);
                 char messageToken[64];
@@ -1969,16 +1967,16 @@ int32_t Packet_SMSG_TRANSFER_ABORTED(void* param, NETMESSAGE msgId, uint32_t tim
                 text = FrameScript_GetText(messageToken, -1, GENDER_NOT_APPLICABLE);
                 break;
             }
-            case 10:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_TOO_MANY_REALM_INSTANCES:
                 text = FrameScript_GetText("TRANSFER_ABORT_TOO_MANY_REALM_INSTANCES", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 11:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_NEED_GROUP:
                 text = FrameScript_GetText("TRANSFER_ABORT_NEED_GROUP", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 15:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_REALM_ONLY:
                 text = FrameScript_GetText("TRANSFER_ABORT_REALM_ONLY", -1, GENDER_NOT_APPLICABLE);
                 break;
-            case 16:
+            case TRANSFER_ABORT_REASON::TRANSFER_ABORT_MAP_NOT_ALLOWED:
                 text = FrameScript_GetText("TRANSFER_ABORT_MAP_NOT_ALLOWED", -1, GENDER_NOT_APPLICABLE);
                 break;
         }
@@ -2012,9 +2010,9 @@ int32_t STORMAPI SendErrorLog(uint32_t errorcode, const char* description, const
 // VERIFY: b4bcd439 manual
 // OFFSET: 0x00404EE0
 static void ClientBeginTaxiBenchmarkMode() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x20000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_TAXI_BENCHMARK)) {
         return;
     }
 
@@ -2041,7 +2039,7 @@ static void ClientEndTaxiBenchmarkMode(int32_t silent) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || player->IsDeadOrGhost()) {
         return;
@@ -2060,17 +2058,17 @@ static void ClientEndTaxiBenchmarkMode(int32_t silent) {
 // VERIFY: 79999d66 manual
 // OFFSET: 0x00405130
 void ClientUpdateTaxiBenchmarkMode() {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
     }
 
     if (s_clientTaxiBenchIsOnTaxi) {
-        if (!(player->m_unit->m_unitFieldFlags & 0x100000) || !(player->m_player->m_playerFlags & 0x20000)) {
+        if (!(player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_TAXI_BENCHMARK)) {
             ClientEndTaxiBenchmarkMode(0);
         }
-    } else if ((player->m_unit->m_unitFieldFlags & 0x100000) && (player->m_player->m_playerFlags & 0x20000)) {
+    } else if ((player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_TAXI_BENCHMARK)) {
         ClientBeginTaxiBenchmarkMode();
     }
 
@@ -2172,7 +2170,7 @@ int32_t Packet_SMSG_PLAYED_TIME(void* param, NETMESSAGE msgId, uint32_t time, CD
     WOWGUID guid = ClntObjMgrGetActivePlayer();
 
     if (guid) {
-        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player) {
             player->SetPlayedTime(total);

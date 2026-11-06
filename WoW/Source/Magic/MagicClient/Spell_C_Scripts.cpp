@@ -1,4 +1,6 @@
+#include "WoW/Source/Magic/Types.h"
 #include "Spell_C.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include <cstdint>
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/FrameScript/FrameScript_Object.h"
@@ -28,7 +30,7 @@ static int32_t Script_SpellIsTargeting(lua_State* L) {
 // VERIFY: 2d5e9a32 auto
 // OFFSET: 0x007FDD10
 static int32_t Script_SpellCanTargetItem(lua_State* L) {
-    if (s_targetingSpell && (s_needTargets & 0x4010)) {
+    if (s_targetingSpell && (s_needTargets & SPELL_TARGET_TYPE::TARGET_FLAG_ITEM_SELECTION_MASK)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -40,7 +42,7 @@ static int32_t Script_SpellCanTargetItem(lua_State* L) {
 // VERIFY: caa8802f manual
 // OFFSET: 0x007FDD60
 static int32_t Script_SpellCanTargetGlyph(lua_State* L) {
-    if (s_targetingSpell && (s_needTargets & 0x20000)) {
+    if (s_targetingSpell && (s_needTargets & SPELL_TARGET_TYPE::TARGET_FLAG_GLYPH_SLOT)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -52,7 +54,7 @@ static int32_t Script_SpellCanTargetGlyph(lua_State* L) {
 // VERIFY: 537b33f9 manual
 // OFFSET: 0x00802270
 static int32_t Script_CannotBeResurrected(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && (player->m_auraEffectMask[314 / 8] & (1 << (314 % 8)))) {
         lua_pushnumber(L, 1.0);
@@ -66,7 +68,7 @@ static int32_t Script_CannotBeResurrected(lua_State* L) {
 // VERIFY: 7914559b manual
 // OFFSET: 0x008007E0
 static int32_t Script_SpellTargetItem(lua_State* L) {
-    if (!CGGameUI::CanPerformAction(2) || !s_targetingSpell || !(s_needTargets & 0x4010)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_CAST_SPELL) || !s_targetingSpell || !(s_needTargets & SPELL_TARGET_TYPE::TARGET_FLAG_ITEM_SELECTION_MASK)) {
         return 0;
     }
 
@@ -101,13 +103,13 @@ static int32_t Script_SpellTargetUnit(lua_State* L) {
         return luaL_error(L, "Usage: SpellTargetUnit(\"unit\")");
     }
 
-    if (!CGGameUI::CanPerformAction(2) || !s_targetingSpell) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_CAST_SPELL) || !s_targetingSpell) {
         return 0;
     }
 
     CGUnit_C* unit = GetUnitFromName(lua_tolstring(L, 1, nullptr));
 
-    if (unit && (unit->m_obj->m_type & TYPEMASK_UNIT)) {
+    if (unit && (unit->m_obj->m_type & TYPE_UNIT)) {
         WOWGUID guid = unit->m_obj->m_guid;
         Spell_C_TargetUnitByGuid(guid);
         return 0;
@@ -116,7 +118,7 @@ static int32_t Script_SpellTargetUnit(lua_State* L) {
     SpellRec spell;
     PendingSpellCast* cast = s_targetingSpell;
     g_spellDB.GetRecord(cast->m_data.m_spellId, &spell);
-    Spell_C_SpellFailed(cast, &spell, 97, -1, -1, false);
+    Spell_C_SpellFailed(cast, &spell, SPELL_FAILED_OUT_OF_RANGE, -1, -1, false);
     return 0;
 }
 
@@ -141,11 +143,11 @@ static int32_t Script_SpellCanTargetUnit(lua_State* L) {
 // VERIFY: a88df190 auto
 // OFFSET: 0x00809E30
 static int32_t Script_SpellStopTargeting(lua_State* L) {
-    if (CGGameUI::CanPerformAction(2)) {
+    if (CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_CAST_SPELL)) {
         bool targeting = s_targetingSpell != nullptr;
 
         if (s_targetingSpell) {
-            Spell_C_CancelSpell(s_targetingSpell, true, true, 27);
+            Spell_C_CancelSpell(s_targetingSpell, true, true, SpellCastResult::SPELL_FAILED_DONT_REPORT);
         }
 
         if (targeting) {
@@ -161,7 +163,7 @@ static int32_t Script_SpellStopTargeting(lua_State* L) {
 // VERIFY: 0e0daa18 manual
 // OFFSET: 0x00809EA0
 static int32_t Script_SpellStopCasting(lua_State* L) {
-    if (!CGGameUI::CanPerformAction(2)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_CAST_SPELL)) {
         lua_pushnil(L);
         return 1;
     }
@@ -231,7 +233,7 @@ static int32_t Script_CancelUnitBuff(lua_State* L) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player && player->m_obj->m_guid == info.m_guid) {
         int32_t slot = static_cast<int32_t>(player->GetSortedAuraSlot(info.m_index, info.m_name, info.m_rank, info.m_filter));
@@ -242,7 +244,7 @@ static int32_t Script_CancelUnitBuff(lua_State* L) {
 
         SpellRec spell;
 
-        if (g_spellDB.GetRecord(player->GetAuraSpellId(slot), &spell) && ((player->GetAuraFlags(slot) & 0x10) || (spell.m_attributesEx & 0x4))) {
+        if (g_spellDB.GetRecord(player->GetAuraSpellId(slot), &spell) && ((player->GetAuraFlags(slot) & AURA_FLAG_CANCELABLE) || (spell.m_attributesEx & SPELL_ATTR1::SPELL_ATTR1_IS_CHANNELLED))) {
             Spell_C_CancelAura(&spell, player, slot);
         }
 
@@ -250,9 +252,9 @@ static int32_t Script_CancelUnitBuff(lua_State* L) {
     }
 
     CGInputControl* input = CGInputControl::GetActive();
-    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* mover = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (!input || !mover || !input->IsVehicleSeatFlagSet(0x2000000)) {
+    if (!input || !mover || !input->IsVehicleSeatFlagSet(VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_CAN_EXIT)) {
         return 0;
     }
 
@@ -265,8 +267,8 @@ static int32_t Script_CancelUnitBuff(lua_State* L) {
     SpellRec spell;
 
     if (g_spellDB.GetRecord(mover->GetAuraSpellId(slot), &spell)) {
-        for (uint32_t i = 0; i < 3; i++) {
-            if (spell.m_effectAura[i] == 236) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+            if (spell.m_effectAura[i] == SPELL_AURA_CONTROL_VEHICLE) {
                 mover->VehicleExit();
                 break;
             }

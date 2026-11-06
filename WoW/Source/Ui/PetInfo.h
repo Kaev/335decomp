@@ -11,6 +11,46 @@ struct lua_State;
 
 class PetAction {
     public:
+    // Descriptive six-bit kind IDs. 8..17 are spell-like in dispatch but their
+    // individual meanings are unproved; ten action slots do not establish names.
+    enum Kind : int32_t {
+        SPELL = 1,
+        MODE = 6,
+        ORDER = 7,
+        UNKNOWN_8 = 8,
+        UNKNOWN_9 = 9,
+        UNKNOWN_10 = 10,
+        UNKNOWN_11 = 11,
+        UNKNOWN_12 = 12,
+        UNKNOWN_13 = 13,
+        UNKNOWN_14 = 14,
+        UNKNOWN_15 = 15,
+        UNKNOWN_16 = 16,
+        UNKNOWN_17 = 17,
+    };
+
+    // Existing full-word tag tests/constructors use this encoded representation.
+    // These tags exclude ID and autocast bits; reuse the separate packing masks.
+    enum PackedKind : int32_t {
+        PACKED_SPELL = 0x1000000,
+        PACKED_MODE = 0x06000000,
+        PACKED_ORDER = 0x07000000,
+    };
+
+    // Packed ID/kind boundaries and autocast bits; kind IDs remain a separate domain.
+    enum PackingMasks : uint32_t {
+        ID_MASK = 0xffffff,
+        KIND_MASK = 0x3f000000,
+        IDENTITY_MASK = 0x3fffffff,
+        ATTRIBUTES_MASK = 0xff000000,
+        KIND_VALUE_MASK = 0x3f,
+    };
+
+    enum AutocastFlags : uint32_t {
+        AUTOCAST_ENABLED = 0x40000000,
+        AUTOCAST_ALLOWED = 0x80000000,
+    };
+
     /* 0000 */ uint32_t m_data;
 
     void SetAutocast(bool enable);

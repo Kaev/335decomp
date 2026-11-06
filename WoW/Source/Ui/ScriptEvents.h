@@ -13,7 +13,7 @@ struct lua_State;
 struct UniqueSignal {
     /* 0000 */ WOWGUID m_guid;
     /* 0008 */ int32_t m_signal;
-    /* 000C */ uint32_t unk_000C;
+    /* 000C */ uint32_t unused_000C;
 };
 
 struct ScriptAuraInfo {
@@ -50,7 +50,7 @@ void Script_SendUniqueSignal(int32_t signal);
 void Script_SendUniqueSignalToAllUnits(int32_t signal);
 void Script_SendUniqueSignals();
 
-void Script_SendUnitSpellSignal(const WOWGUID& guid, uint8_t castCount, const SpellRec* spell, int32_t signal);
+void Script_SendUnitSpellSignal(const WOWGUID& guid, uint8_t castCount, const SpellRec* spell, SCRIPT_EVENT signal);
 void ScriptEventsRegisterUnit(CGUnit_C* unit);
 void ScriptEventsUnregisterUnit(CGUnit_C* unit);
 

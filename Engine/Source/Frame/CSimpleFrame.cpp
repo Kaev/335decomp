@@ -196,7 +196,7 @@ CSimpleFrame::CSimpleFrame(CSimpleFrame* parent) {
     this->m_alpha = 0xFF;
     this->m_parentAlpha = 0xFF;
     this->m_animSavedAlpha = 0xFF;
-    this->unk_00AC = 1;
+    this->m_initialized_state = INITIALIZED_STATE::STATE_INITIALIZED;
     this->m_hitRect = { 0.0f, 0.0f, 0.0f, 0.0f };
     this->m_hitRectInsets = { 0.0f, 0.0f, 0.0f, 0.0f };
     this->m_clampRectInsets = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -217,16 +217,16 @@ CSimpleFrame::CSimpleFrame(CSimpleFrame* parent) {
 
     this->SetParent(parent);
 
-    this->m_drawLayerEnabled[0] = 1;
-    this->m_drawLayerEnabled[1] = 1;
-    this->m_drawLayerEnabled[2] = 1;
-    this->m_drawLayerEnabled[3] = 1;
-    this->m_drawLayerEnabled[4] = 0;
-    this->m_renderBatch[0] = nullptr;
-    this->m_renderBatch[1] = nullptr;
-    this->m_renderBatch[2] = nullptr;
-    this->m_renderBatch[3] = nullptr;
-    this->m_renderBatch[4] = nullptr;
+    this->m_drawLayerEnabled[DRAWLAYER_BACKGROUND] = 1;
+    this->m_drawLayerEnabled[DRAWLAYER_BACKGROUND_BORDER] = 1;
+    this->m_drawLayerEnabled[DRAWLAYER_ARTWORK] = 1;
+    this->m_drawLayerEnabled[DRAWLAYER_ARTWORK_OVERLAY] = 1;
+    this->m_drawLayerEnabled[DRAWLAYER_HIGHLIGHT] = 0;
+    this->m_renderBatch[DRAWLAYER_BACKGROUND] = nullptr;
+    this->m_renderBatch[DRAWLAYER_BACKGROUND_BORDER] = nullptr;
+    this->m_renderBatch[DRAWLAYER_ARTWORK] = nullptr;
+    this->m_renderBatch[DRAWLAYER_ARTWORK_OVERLAY] = nullptr;
+    this->m_renderBatch[DRAWLAYER_HIGHLIGHT] = nullptr;
 
     this->Show();
 }
@@ -234,7 +234,7 @@ CSimpleFrame::CSimpleFrame(CSimpleFrame* parent) {
 // VERIFY: e1a5b71b manual
 // OFFSET: [0x00492770, 0x004926B0, 0x00492E40]
 CSimpleFrame::~CSimpleFrame() {
-    this->unk_00AC = 3;
+    this->m_initialized_state = INITIALIZED_STATE::STATE_DELETED;
     this->m_simpleTop->UnregisterFrame(this);
     this->m_simpleTop->ValidateDeletedFrame(this);
     this->m_simpleTop = nullptr;
@@ -243,7 +243,7 @@ CSimpleFrame::~CSimpleFrame() {
         delete this->m_titleRegion;
     }
 
-    for (uint32_t i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < NUM_SIMPLEFRAME_DRAWLAYERS; i++) {
         this->m_drawLayers[i].UnlinkAll();
 
         if (this->m_renderBatch[i]) {
@@ -571,10 +571,10 @@ void CSimpleFrame::RunOnAttributeChangedScript(const char* name, int32_t luaRef)
 // OFFSET: 0x0048ECF0
 void CSimpleFrame::AllowAttributeChanges(int32_t allow) {
     if (allow) {
-        this->m_frameFlags |= 0x8000;
+        this->m_frameFlags |= FrameFlags::FRAME_ALLOW_ATTRIBUTE_CHANGES;
         this->m_simpleTop->RegisterForCleanup(this);
     } else {
-        this->m_frameFlags &= ~0x8000u;
+        this->m_frameFlags &= ~FrameFlags::FRAME_ALLOW_ATTRIBUTE_CHANGES;
     }
 }
 
@@ -582,7 +582,7 @@ void CSimpleFrame::AllowAttributeChanges(int32_t allow) {
 // OFFSET: 0x0048ED30
 int32_t CSimpleFrame::AttributeChangesAllowed() {
     for (CSimpleFrame* frame = this; frame; frame = frame->m_parent) {
-        if (frame->m_frameFlags & 0x8000) {
+        if (frame->m_frameFlags & FrameFlags::FRAME_ALLOW_ATTRIBUTE_CHANGES) {
             return 1;
         }
     }
@@ -651,7 +651,7 @@ void CSimpleFrame::LoadXML_Layers(XMLNode* node, CStatus* status) {
             continue;
         }
 
-        uint32_t drawLayer = 2;
+        uint32_t drawLayer = DRAWLAYER_ARTWORK;
         const char* level = layerNode->GetAttributeByName("level");
 
         if (level && *level) {
@@ -758,7 +758,7 @@ void CSimpleFrame::LoadXMLInheritance(XMLNode* node, CStatus* status) {
 // VERIFY: 08c5569f auto
 // OFFSET: 0x0048F550
 void CSimpleFrame::NotifyDelayedLoad() {
-    if (this->m_frameFlags & 0x2000) {
+    if (this->m_frameFlags & FrameFlags::FRAME_BEING_SCROLLED) {
         this->m_batchDirty |= 0x20;
     } else if (this->m_simpleTop && this->m_isVisible) {
         this->m_simpleTop->NotifyFrameDelayedLoad(this);
@@ -848,11 +848,11 @@ void CSimpleFrame::DisableEvent(CSimpleEventType eventType) {
 // VERIFY: bbfb8171 manual
 // OFFSET: 0x0048F730
 int32_t CSimpleFrame::TestHitRect(const C2Vector& pt) {
-    if (!(this->m_layoutFlags & 0x100)) {
+    if (!(this->m_layoutFlags & CLayoutFrame::LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
-    if (!(this->m_frameFlags & 0x2000)) {
+    if (!(this->m_frameFlags & FrameFlags::FRAME_BEING_SCROLLED)) {
         return this->m_hitRect.IsPointInside(pt);
     }
 
@@ -862,7 +862,7 @@ int32_t CSimpleFrame::TestHitRect(const C2Vector& pt) {
         return 0;
     }
 
-    while (scrollFrame->m_frameFlags & 0x2000) {
+    while (scrollFrame->m_frameFlags & FrameFlags::FRAME_BEING_SCROLLED) {
         scrollFrame = scrollFrame->m_parent;
 
         if (!scrollFrame) {
@@ -892,7 +892,7 @@ void CSimpleFrame::SetHitRectInsets(float left, float right, float top, float bo
 // VERIFY: 8c2d9ec9 manual
 // OFFSET: 0x0048F890
 int32_t CSimpleFrame::GetHitRect(CRect& rect) {
-    if (!(this->m_layoutFlags & 0x100)) {
+    if (!(this->m_layoutFlags & CLayoutFrame::LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
@@ -1143,19 +1143,19 @@ void CSimpleFrame::OnReceiveDrag(const CMouseEvent& evt) {
 // VERIFY: 703bbed0 auto
 // OFFSET: 0x0048FEA0
 void CSimpleFrame::NotifyScrollParent() {
-    if (!(this->m_frameFlags & 0x2000) || !this->m_isVisible) {
+    if (!(this->m_frameFlags & FrameFlags::FRAME_BEING_SCROLLED) || !this->m_isVisible) {
         return;
     }
 
     CSimpleFrame* frame = this;
 
-    while (!(frame->m_frameFlags & 0x4000)) {
+    while (!(frame->m_frameFlags & FrameFlags::FRAME_SCROLL_CHILD)) {
         frame = frame->m_parent;
     }
 
     CSimpleScrollFrame* scrollFrame = static_cast<CSimpleScrollFrame*>(frame->m_parent);
 
-    if (scrollFrame && scrollFrame->unk_00AC != 3) {
+    if (scrollFrame && scrollFrame->m_initialized_state != INITIALIZED_STATE::STATE_DELETED) {
         scrollFrame->m_scrollChildUpdate = 1;
     }
 }
@@ -1252,7 +1252,7 @@ void CSimpleFrame::LoadXML_Scripts(XMLNode* node, CStatus* status) {
 // VERIFY: 784118ad auto
 // OFFSET: 0x00490270
 void CSimpleFrame::NotifyDrawLayerChanged(uint32_t drawLayer) {
-    if (this->m_frameFlags & 0x2000) {
+    if (this->m_frameFlags & FrameFlags::FRAME_BEING_SCROLLED) {
         this->m_batchDirty |= 1 << drawLayer;
     } else if (this->m_simpleTop && this->m_isVisible) {
         this->m_simpleTop->NotifyFrameLayerChanged(this, drawLayer);
@@ -1475,29 +1475,29 @@ void CSimpleFrame::OnScreenSizeChanged() {
 
 // VERIFY: ee342124 manual
 // OFFSET: 0x004908E0
-void CSimpleFrame::OnLayerCursorEnter(int32_t a2) {
+void CSimpleFrame::OnLayerCursorEnter(int32_t motion) {
     if (this->m_hoverFrame) {
         this->m_hoverFrame->Show();
     }
 
     if (!this->m_highlightLocked) {
-        this->m_drawLayerEnabled[4] = 1;
-        this->NotifyDrawLayerChanged(4);
+        this->m_drawLayerEnabled[DRAWLAYER_HIGHLIGHT] = 1;
+        this->NotifyDrawLayerChanged(DRAWLAYER_HIGHLIGHT);
     }
 
-    this->RunOnEnterScript(a2);
+    this->RunOnEnterScript(motion);
 }
 
 // VERIFY: ebe4e67e manual
 // OFFSET: 0x00490980
-void CSimpleFrame::OnLayerCursorExit(int32_t a2, int32_t a3) {
+void CSimpleFrame::OnLayerCursorExit(int32_t motion, int32_t a3) {
     if (this->m_hoverFrame) {
         this->m_hoverFrame->Hide();
     }
 
     if (!this->m_highlightLocked) {
-        this->m_drawLayerEnabled[4] = 0;
-        this->NotifyDrawLayerChanged(4);
+        this->m_drawLayerEnabled[DRAWLAYER_HIGHLIGHT] = 0;
+        this->NotifyDrawLayerChanged(DRAWLAYER_HIGHLIGHT);
     }
 
     if (a3) {
@@ -1505,7 +1505,7 @@ void CSimpleFrame::OnLayerCursorExit(int32_t a2, int32_t a3) {
         this->m_isMouseDragging = 0;
     }
 
-    this->RunOnLeaveScript(a2);
+    this->RunOnLeaveScript(motion);
 }
 
 // VERIFY: 05878e28 auto
@@ -1518,18 +1518,18 @@ void CSimpleFrame::LockHighlight(int32_t lock) {
     this->m_highlightLocked = lock;
 
     if (lock) {
-        this->m_drawLayerEnabled[4] = 1;
-        this->NotifyDrawLayerChanged(4);
+        this->m_drawLayerEnabled[DRAWLAYER_HIGHLIGHT] = 1;
+        this->NotifyDrawLayerChanged(DRAWLAYER_HIGHLIGHT);
     } else if (this->m_simpleTop->m_mouseFocus != this) {
-        this->m_drawLayerEnabled[4] = 0;
-        this->NotifyDrawLayerChanged(4);
+        this->m_drawLayerEnabled[DRAWLAYER_HIGHLIGHT] = 0;
+        this->NotifyDrawLayerChanged(DRAWLAYER_HIGHLIGHT);
     }
 }
 
 // VERIFY: 95d4bac7 manual
 // OFFSET: 0x00490C70
 void CSimpleFrame::ParentFrame(CSimpleFrame* child) {
-    SIMPLEFRAMENODE* node = this->m_children.NewNode(2, 0, 0);
+    SIMPLEFRAMENODE* node = this->m_children.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_frame = child;
 }
 
@@ -1573,16 +1573,16 @@ void CSimpleFrame::SetBeingScrolled(int32_t scrolled, int32_t a3) {
     }
 
     if (scrolled) {
-        this->m_frameFlags |= 0x2000;
+        this->m_frameFlags |= FrameFlags::FRAME_BEING_SCROLLED;
     } else {
-        this->m_frameFlags &= ~0x2000u;
+        this->m_frameFlags &= ~FrameFlags::FRAME_BEING_SCROLLED;
     }
 
     if (a3 >= 0) {
         if (a3) {
-            this->m_frameFlags |= 0x4000;
+            this->m_frameFlags |= FrameFlags::FRAME_SCROLL_CHILD;
         } else {
-            this->m_frameFlags &= ~0x4000u;
+            this->m_frameFlags &= ~FrameFlags::FRAME_SCROLL_CHILD;
         }
     }
 
@@ -1591,7 +1591,7 @@ void CSimpleFrame::SetBeingScrolled(int32_t scrolled, int32_t a3) {
     }
 
     for (SIMPLEFRAMENODE* node = this->m_children.Head(); node; node = this->m_children.Next(node)) {
-        if (!(node->m_frame->m_frameFlags & 0x4000)) {
+        if (!(node->m_frame->m_frameFlags & FrameFlags::FRAME_SCROLL_CHILD)) {
             node->m_frame->SetBeingScrolled(scrolled, -1);
         }
     }
@@ -1705,7 +1705,7 @@ void CSimpleFrame::SetParent(CSimpleFrame* parent) {
             this->UpdateAlpha();
         }
 
-        this->SetBeingScrolled((this->m_parent->m_frameFlags >> 13) & 1, -1);
+        this->SetBeingScrolled((this->m_parent->m_frameFlags >> 13) & (FrameFlags::FRAME_BEING_SCROLLED >> 13), -1);
     } else {
         this->SetFrameStrata(FRAME_STRATA_MEDIUM);
         this->SetFrameLevel(0, 1);
@@ -1733,7 +1733,7 @@ void CSimpleFrame::SetParent(CSimpleFrame* parent) {
 // OFFSET: 0x00491350
 int32_t CSimpleFrame::AreChildrenProtected(int32_t& deferred) {
     for (SIMPLEFRAMENODE* node = this->m_children.Head(); node; node = this->m_children.Next(node)) {
-        if (node->m_frame->m_frameFlags & 0x800) {
+        if (node->m_frame->m_frameFlags & FrameFlags::FRAME_DEFER_PROTECTION_QUERY) {
             deferred = 1;
         } else if (node->m_frame->IsProtected()) {
             return 1;
@@ -1917,7 +1917,7 @@ int32_t CSimpleFrame::ShowThis() {
         node->m_frame->ShowThis();
     }
 
-    if (this->m_frameFlags & 0x1) {
+    if (this->m_frameFlags & FrameFlags::FRAME_TOPLEVEL) {
         this->m_simpleTop->RaiseFrame(this, 1);
     }
 
@@ -2028,7 +2028,7 @@ void CSimpleFrame::OnFrameRender() {
     this->m_batchDirty = 0;
 
     if (dirty) {
-        for (uint32_t layer = 0; layer < 5; layer++) {
+        for (uint32_t layer = 0; layer < NUM_SIMPLEFRAME_DRAWLAYERS; layer++) {
             if (!this->m_renderBatch[layer]) {
                 void* mem = SMemAlloc(sizeof(CRenderBatch), __FILE__, __LINE__, 0);
                 this->m_renderBatch[layer] = mem ? new (mem) CRenderBatch() : nullptr;
@@ -2052,13 +2052,13 @@ void CSimpleFrame::OnFrameRender() {
         }
 
         if (this->m_batchDirty & 0x20) {
-            for (uint32_t layer = 0; layer < 5; layer++) {
+            for (uint32_t layer = 0; layer < NUM_SIMPLEFRAME_DRAWLAYERS; layer++) {
                 this->m_batchDirty |= 1 << layer;
             }
         }
     }
 
-    for (uint32_t layer = 0; layer < 5; layer++) {
+    for (uint32_t layer = 0; layer < NUM_SIMPLEFRAME_DRAWLAYERS; layer++) {
         if (this->m_renderBatch[layer]) {
             CSimpleRender::DrawBatch(this->m_renderBatch[layer]);
         }
@@ -2067,7 +2067,7 @@ void CSimpleFrame::OnFrameRender() {
     for (SIMPLEFRAMENODE* node = this->m_children.Head(); node; node = this->m_children.Next(node)) {
         CSimpleFrame* child = node->m_frame;
 
-        if (child->m_isVisible && !(child->m_frameFlags & 0x4000)) {
+        if (child->m_isVisible && !(child->m_frameFlags & FrameFlags::FRAME_SCROLL_CHILD)) {
             child->OnFrameRender();
         }
     }
@@ -2237,25 +2237,25 @@ void CSimpleFrame::LoadXML(XMLNode* node, CStatus* status) {
     const char* toplevel = node->GetAttributeByName("toplevel");
 
     if (toplevel && *toplevel) {
-        this->SetFrameFlag(0x1, StringToBOOL(toplevel));
+        this->SetFrameFlag(FrameFlags::FRAME_TOPLEVEL, StringToBOOL(toplevel));
     }
 
     const char* movable = node->GetAttributeByName("movable");
 
     if (movable && *movable) {
-        this->SetFrameFlag(0x100, StringToBOOL(movable));
+        this->SetFrameFlag(FrameFlags::FRAME_MOVABLE, StringToBOOL(movable));
     }
 
     const char* dontSavePosition = node->GetAttributeByName("dontSavePosition");
 
     if (dontSavePosition && *dontSavePosition) {
-        this->SetFrameFlag(0x80000, StringToBOOL(dontSavePosition));
+        this->SetFrameFlag(FrameFlags::FRAME_DONT_SAVE_POSITION, StringToBOOL(dontSavePosition));
     }
 
     const char* resizable = node->GetAttributeByName("resizable");
 
     if (resizable && *resizable) {
-        this->SetFrameFlag(0x200, StringToBOOL(resizable));
+        this->SetFrameFlag(FrameFlags::FRAME_RESIZABLE, StringToBOOL(resizable));
     }
 
     const char* frameStrata = node->GetAttributeByName("frameStrata");
@@ -2339,7 +2339,7 @@ void CSimpleFrame::LoadXML(XMLNode* node, CStatus* status) {
             titleRegion->SetParent(this);
             titleRegion->LoadXML(child, status);
             this->m_titleRegion = titleRegion;
-            titleRegion->SetDeferredResize((this->m_layoutFlags >> 8) & 2);
+            titleRegion->SetDeferredResize((this->m_layoutFlags >> 8) & (CLayoutFrame::LayoutFlags::LAYOUT_DEFERRED_RESIZE >> 8));
         } else if (!SStrCmpI(child->m_name.m_str, "ResizeBounds", STORM_MAX_STR)) {
             float minWidth = 0.0f;
             float minHeight = 0.0f;

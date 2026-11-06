@@ -27,52 +27,52 @@ WOWGUID CGTradeInfo::m_enchantingItem;
 WOWGUID CGTradeInfo::m_tradingPlayer;
 
 // STATIC: 0x00BFA400
-int32_t CGTradeInfo::m_targetDurability[7];
+int32_t CGTradeInfo::m_targetDurability[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA41C
-int32_t CGTradeInfo::m_targetMaxDurability[7];
+int32_t CGTradeInfo::m_targetMaxDurability[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA438
-int32_t CGTradeInfo::m_targetLockID[7];
+int32_t CGTradeInfo::m_targetLockID[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA454
-int32_t CGTradeInfo::m_targetRandomPropertyID[7];
+int32_t CGTradeInfo::m_targetRandomPropertyID[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA470
-int32_t CGTradeInfo::m_targetSuffixFactor[7];
+int32_t CGTradeInfo::m_targetSuffixFactor[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA48C
-int32_t CGTradeInfo::m_targetSpellCharges[7];
+int32_t CGTradeInfo::m_targetSpellCharges[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA4A8
-WOWGUID CGTradeInfo::m_targetGiftCreator[7];
+WOWGUID CGTradeInfo::m_targetGiftCreator[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA4E0
-int32_t CGTradeInfo::m_targetWrapped[7];
+int32_t CGTradeInfo::m_targetWrapped[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA4FC
-int32_t CGTradeInfo::m_targetEnchant[7];
+int32_t CGTradeInfo::m_targetEnchant[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA518
-WOWGUID CGTradeInfo::m_targetCreator[7];
+WOWGUID CGTradeInfo::m_targetCreator[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA550
-int32_t CGTradeInfo::m_targetSocketEnchants[7][3];
+int32_t CGTradeInfo::m_targetSocketEnchants[NUM_TRADE_SLOTS][3];
 
 // STATIC: 0x00BFA5A4
-int32_t CGTradeInfo::m_targetCount[7];
+int32_t CGTradeInfo::m_targetCount[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA5C0
-int32_t CGTradeInfo::m_targetItemID[7];
+int32_t CGTradeInfo::m_targetItemID[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA5DC
-uint8_t CGTradeInfo::m_playerItemContainerSlot[7];
+uint8_t CGTradeInfo::m_playerItemContainerSlot[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA5E8
-WOWGUID CGTradeInfo::m_playerItemContainer[7];
+WOWGUID CGTradeInfo::m_playerItemContainer[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA620
-WOWGUID CGTradeInfo::m_playerItems[7];
+WOWGUID CGTradeInfo::m_playerItems[NUM_TRADE_SLOTS];
 
 // STATIC: 0x00BFA660
 int32_t CGTradeInfo::m_playerAccepted;
@@ -101,7 +101,7 @@ PlayerTradeState CGTradeInfo::m_playerTrade;
 // VERIFY: 2df8b30b manual
 // OFFSET: 0x0050F470
 int32_t CGTradeInfo::GetTargetEnchant(uint32_t slot) {
-    if (slot > 6) {
+    if (slot > TRADE_SLOT_NONTRADED) {
         return 0;
     }
 
@@ -111,7 +111,7 @@ int32_t CGTradeInfo::GetTargetEnchant(uint32_t slot) {
 // VERIFY: 185ffecc auto
 // OFFSET: 0x00586010
 void CGTradeInfo::GetPlayerItem(uint32_t slot, WOWGUID& item, WOWGUID& container, uint8_t& containerSlot) {
-    item = slot > 6 ? WOWGUID() : CGTradeInfo::m_playerItems[slot];
+    item = slot > TRADE_SLOT_NONTRADED ? WOWGUID() : CGTradeInfo::m_playerItems[slot];
 
     if (!item) {
         container = WOWGUID();
@@ -141,7 +141,7 @@ void CGTradeInfo::EnterWorld() {
     CGTradeInfo::m_lastPlayerMoney = 0;
     CGTradeInfo::m_lastTargetMoney = 0;
 
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         CGTradeInfo::m_targetDurability[i] = 0;
         CGTradeInfo::m_targetMaxDurability[i] = 0;
         CGTradeInfo::m_targetRandomPropertyID[i] = 0;
@@ -155,7 +155,7 @@ void CGTradeInfo::EnterWorld() {
 
     memset(CGTradeInfo::m_targetSocketEnchants, 0, sizeof(CGTradeInfo::m_targetSocketEnchants));
 
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         CGTradeInfo::m_targetEnchant[i] = 0;
         CGTradeInfo::m_targetCount[i] = 0;
         CGTradeInfo::m_targetItemID[i] = 0;
@@ -172,7 +172,7 @@ void CGTradeInfo::UpdatePlayerItem(WOWGUID guid) {
         return;
     }
 
-    for (int32_t i = 0; i < 7; i++) {
+    for (int32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         if (CGTradeInfo::m_playerItems[i] == guid) {
             FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_PLAYER_ITEM_CHANGED, "%d", i + 1);
             return;
@@ -183,7 +183,7 @@ void CGTradeInfo::UpdatePlayerItem(WOWGUID guid) {
 // VERIFY: f90faa11 manual
 // OFFSET: 0x005869A0
 int32_t CGTradeInfo::SetPlayerItem(uint32_t slot, WOWGUID item, WOWGUID container, uint8_t containerSlot) {
-    if (slot > 6) {
+    if (slot > TRADE_SLOT_NONTRADED) {
         return 0;
     }
 
@@ -192,15 +192,15 @@ int32_t CGTradeInfo::SetPlayerItem(uint32_t slot, WOWGUID item, WOWGUID containe
             return 0;
         }
 
-        if (slot == 6) {
-            CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+        if (slot == TRADE_SLOT_NONTRADED) {
+            CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
             bool bound = object && object->IsBound() && !object->IsBoundForTrade();
             FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_POTENTIAL_BIND_ENCHANT, "%b", bound);
         }
     } else {
         Trade_C_RemoveItem(static_cast<uint8_t>(slot));
 
-        if (slot == 6) {
+        if (slot == TRADE_SLOT_NONTRADED) {
             FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_POTENTIAL_BIND_ENCHANT, "%b", 0);
         }
     }
@@ -231,7 +231,7 @@ bool CGTradeInfo::IsItemBeingTraded(WOWGUID item) {
         return false;
     }
 
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         if (CGTradeInfo::m_playerItems[i] == item) {
             return true;
         }
@@ -286,7 +286,7 @@ void CGTradeInfo::DenyPlayerItem(int32_t slot) {
 // VERIFY: aaae39b8 manual
 // OFFSET: 0x005864A0
 void CGTradeInfo::UnlockTradeItems() {
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         if (CGTradeInfo::m_playerItems[i]) {
             CGGameUI::UnlockItem(CGTradeInfo::m_playerItems[i]);
         }
@@ -297,16 +297,16 @@ void CGTradeInfo::UnlockTradeItems() {
 // OFFSET: 0x00586520
 int32_t CGTradeInfo::GetGameError(int32_t error, int32_t target) {
     switch (error) {
-        case 4:
+        case BAG_FULL:
             return target ? ERR_TRADE_BAG_FULL : ERR_TRADE_TARGET_BAG_FULL;
 
-        case 17:
+        case BAG_ITEM_MAX_COUNT:
             return target ? ERR_TRADE_TARGET_MAX_COUNT_EXCEEDED : ERR_TRADE_MAX_COUNT_EXCEEDED;
 
-        case 28:
+        case BAG_SPELL_FAILED_REAGENTS_GENERIC:
             return target ? ERR_MAX_VALUE : ERR_SPELL_FAILED_REAGENTS_GENERIC;
 
-        case 84:
+        case BAG_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS:
             return target ? ERR_TRADE_TARGET_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS : ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED_IS;
 
         default:
@@ -317,7 +317,7 @@ int32_t CGTradeInfo::GetGameError(int32_t error, int32_t target) {
 // VERIFY: fa685c0b auto
 // OFFSET: 0x00586930
 void CGTradeInfo::PlayerAccept() {
-    if (CGGameUI::CanPerformAction(7) && CGTradeInfo::m_playerAccepted) {
+    if (CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_TRADE_ACCEPT) && CGTradeInfo::m_playerAccepted) {
         CGTradeInfo::m_playerAccepted = 0;
         FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_ACCEPT_UPDATE, "%d%d", 0, CGTradeInfo::m_targetAccepted);
         Trade_C_UnacceptTrade();
@@ -336,7 +336,7 @@ void CGTradeInfo::RemovePlayerItem(WOWGUID item) {
         return;
     }
 
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         if (CGTradeInfo::m_playerItems[i] == item) {
             CGTradeInfo::SetPlayerItem(i, WOWGUID(), WOWGUID(), 0);
             return;
@@ -359,13 +359,13 @@ void CGTradeInfo::AddCursorItem(int32_t bound) {
     int32_t index = -1;
 
     if (bound) {
-        if (CGTradeInfo::m_playerItems[6]) {
+        if (CGTradeInfo::m_playerItems[TRADE_SLOT_NONTRADED]) {
             return;
         }
 
-        index = 6;
+        index = TRADE_SLOT_NONTRADED;
     } else {
-        for (int32_t i = 0; i < 6; i++) {
+        for (int32_t i = 0; i < NUM_TRADED_ITEM_SLOTS; i++) {
             if (CGTradeInfo::m_playerItems[i] == item) {
                 return;
             }
@@ -406,7 +406,7 @@ void CGTradeInfo::SetEnchantingItem(CGItem_C* item) {
 void CGTradeInfo::OnTradeUpdated(const TRADE_ITEM* items) {
     CGTradeInfo::PlayerAccept();
 
-    for (int32_t i = 0; i < 7; i++) {
+    for (int32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         const TRADE_ITEM& item = items[i];
         int32_t socketsChanged = 0;
 
@@ -446,12 +446,12 @@ void CGTradeInfo::OnTradeUpdated(const TRADE_ITEM* items) {
 
     if (CGTradeInfo::m_lastPlayerEnchantSpell != Trade_C_GetEnchantSpell(0)) {
         CGTradeInfo::m_lastPlayerEnchantSpell = Trade_C_GetEnchantSpell(0);
-        FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_TARGET_ITEM_CHANGED, "%d", 7);
+        FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_TARGET_ITEM_CHANGED, "%d", TRADE_SLOT_NONTRADED + 1);
     }
 
     if (CGTradeInfo::m_lastTargetEnchantSpell != Trade_C_GetEnchantSpell(1)) {
         CGTradeInfo::m_lastTargetEnchantSpell = Trade_C_GetEnchantSpell(1);
-        FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_PLAYER_ITEM_CHANGED, "%d", 7);
+        FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_PLAYER_ITEM_CHANGED, "%d", TRADE_SLOT_NONTRADED + 1);
     }
 
     if (CGTradeInfo::m_lastPlayerMoney != static_cast<int32_t>(CGTradeInfo::GetPlayerTradeMoney())) {
@@ -468,7 +468,7 @@ void CGTradeInfo::OnTradeUpdated(const TRADE_ITEM* items) {
 
 // VERIFY: 6820d853 auto
 // OFFSET: 0x005870A0
-void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t a2) {
+void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t suppressMoneyEvent) {
     if (!partner) {
         if (CGTradeInfo::m_tradingPlayer) {
             if (CGTradeInfo::m_enchantingItem) {
@@ -476,7 +476,7 @@ void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t a2) {
                 CGTradeInfo::m_enchantingItem = WOWGUID();
             }
 
-            CGTradeInfo::m_supressMoneyEvent = a2;
+            CGTradeInfo::m_supressMoneyEvent = suppressMoneyEvent;
             CGGameUI::ClearInteractTarget(CGTradeInfo::m_tradingPlayer, 0);
             CGTradeInfo::m_tradingPlayer = WOWGUID();
             FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_CLOSED, nullptr);
@@ -496,7 +496,7 @@ void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t a2) {
     CGTradeInfo::m_lastTargetMoney = 0;
     CGTradeInfo::m_supressMoneyEvent = 0;
 
-    for (uint32_t i = 0; i < 7; i++) {
+    for (uint32_t i = 0; i < NUM_TRADE_SLOTS; i++) {
         CGTradeInfo::m_targetEnchant[i] = 0;
         CGTradeInfo::m_targetCount[i] = 0;
         CGTradeInfo::m_targetItemID[i] = 0;
@@ -523,10 +523,10 @@ void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t a2) {
 
             if (item && container) {
                 uint32_t index = 0;
-                CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+                CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
 
                 if (object && object->IsBound()) {
-                    index = 6;
+                    index = TRADE_SLOT_NONTRADED;
                     FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_POTENTIAL_BIND_ENCHANT, "%b", !object->IsBoundForTrade());
                 }
 
@@ -544,12 +544,12 @@ void CGTradeInfo::SetTradePartner(WOWGUID partner, int32_t a2) {
 
 // VERIFY: 15291c4e auto
 // OFFSET: 0x005873E0
-void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t target, int32_t itemId, uint8_t slot) {
+void CGTradeInfo::HandleTradeMessage(TRADE_STATUS status, int32_t bagResult, int32_t target, int32_t itemId, uint8_t slot) {
     switch (status) {
-        case 0:
-        case 5:
+        case TRADE_STATUS_PLAYER_BUSY:
+        case TRADE_STATUS_ALREADY_TRADING:
             if (Trade_C_IsTradeRequested()) {
-                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPE_PLAYER, __FILE__, __LINE__));
 
                 if (unit) {
                     CGGameUI::DisplayError(ERR_PLAYER_BUSY_S, unit->GetUnitName(nullptr, 1));
@@ -558,12 +558,12 @@ void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t 
 
             break;
 
-        case 1:
+        case TRADE_STATUS_PROPOSED:
             if (!Trade_C_IsTradeRequested()) {
                 if (FriendList::s_friendList->IsIgnored(Trade_C_GetTradeTarget(), true)) {
                     Trade_C_PlayerIgnored();
                 } else {
-                    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+                    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPE_PLAYER, __FILE__, __LINE__));
 
                     if (unit) {
                         if (unit->IsDeadOrGhost() || CGGameUI::m_inCinematic || !CGGameUI::m_hasControl || CGAuctionHouse::m_auctioneer) {
@@ -580,48 +580,48 @@ void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t 
 
             break;
 
-        case 2:
+        case TRADE_STATUS_INITIATED:
             CGTradeInfo::SetTradePartner(Trade_C_GetTradeTarget(), 0);
             break;
 
-        case 3:
+        case TRADE_STATUS_CANCELLED:
             FrameScript_SignalEvent(SCRIPT_EVENT_TRADE_REQUEST_CANCEL, nullptr);
             CGTradeInfo::UnlockTradeItems();
             CGTradeInfo::SetTradePartner(WOWGUID(), 0);
             CGGameUI::DisplayError(ERR_TRADE_CANCELLED);
             break;
 
-        case 4:
+        case TRADE_STATUS_ACCEPTED:
             SetTargetAccepted(1);
             break;
 
-        case 6:
+        case TRADE_STATUS_PLAYER_NOT_FOUND:
             CGGameUI::DisplayError(ERR_GENERIC_NO_TARGET);
             break;
 
-        case 7:
+        case TRADE_STATUS_STATE_CHANGED:
             CGTradeInfo::PlayerAccept();
             break;
 
-        case 8:
+        case TRADE_STATUS_COMPLETE:
             CGTradeInfo::UnlockTradeItems();
             CGTradeInfo::SetTradePartner(WOWGUID(), 1);
             CGGameUI::DisplayError(ERR_TRADE_COMPLETE);
             break;
 
-        case 9:
+        case TRADE_STATUS_UNACCEPTED:
             SetTargetAccepted(0);
             break;
 
-        case 10:
+        case TRADE_STATUS_TOO_FAR_AWAY:
             CGGameUI::DisplayError(ERR_TRADE_TOO_FAR);
             break;
 
-        case 11:
+        case TRADE_STATUS_WRONG_FACTION:
             CGGameUI::DisplayError(ERR_PLAYER_WRONG_FACTION);
             break;
 
-        case 12:
+        case TRADE_STATUS_FAILED:
             CGTradeInfo::UnlockTradeItems();
 
             if (bagResult == 84 && itemId) {
@@ -642,9 +642,9 @@ void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t 
             CGTradeInfo::SetTradePartner(WOWGUID(), 0);
             break;
 
-        case 14:
+        case TRADE_STATUS_PLAYER_IGNORED:
             if (Trade_C_IsTradeRequested()) {
-                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+                CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(Trade_C_GetTradeTarget(), TYPE_PLAYER, __FILE__, __LINE__));
 
                 if (unit) {
                     CGGameUI::DisplayError(ERR_IGNORING_YOU_S, unit->GetUnitName(nullptr, 1));
@@ -653,40 +653,40 @@ void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t 
 
             break;
 
-        case 15:
+        case TRADE_STATUS_PLAYER_STUNNED:
             CGGameUI::DisplayError(ERR_GENERIC_STUNNED);
             break;
 
-        case 16:
+        case TRADE_STATUS_TARGET_STUNNED:
             CGGameUI::DisplayError(ERR_TARGET_STUNNED);
             break;
 
-        case 17:
+        case TRADE_STATUS_DEAD:
             CGGameUI::DisplayError(ERR_PLAYER_DEAD);
             break;
 
-        case 18:
+        case TRADE_STATUS_TARGET_DEAD:
             CGGameUI::DisplayError(ERR_TRADE_TARGET_DEAD);
             break;
 
-        case 19:
+        case TRADE_STATUS_LOGGING_OUT:
             CGGameUI::DisplayError(ERR_LOGGING_OUT);
             break;
 
-        case 20:
+        case TRADE_STATUS_TARGET_LOGGING_OUT:
             CGGameUI::DisplayError(ERR_TARGET_LOGGING_OUT);
             break;
 
-        case 21:
+        case TRADE_STATUS_RESTRICTED_ACCOUNT:
             CGGameUI::DisplayError(ERR_RESTRICTED_ACCOUNT);
             break;
 
-        case 22:
+        case TRADE_STATUS_WRONG_REALM:
             CGGameUI::DisplayError(ERR_TRADE_WRONG_REALM);
             CGTradeInfo::DenyPlayerItem(slot);
             break;
 
-        case 23:
+        case TRADE_STATUS_NOT_ON_TAPLIST:
             CGGameUI::DisplayError(ERR_TRADE_NOT_ON_TAPLIST);
             CGTradeInfo::DenyPlayerItem(slot);
             break;
@@ -696,7 +696,7 @@ void CGTradeInfo::HandleTradeMessage(int32_t status, int32_t bagResult, int32_t 
 // VERIFY: bbebe902 manual
 // OFFSET: 0x005877B0
 bool CGTradeInfo::AddPlayerItem(WOWGUID item, WOWGUID container, uint8_t slot) {
-    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPEMASK_ITEM, __FILE__, __LINE__));
+    CGItem_C* object = static_cast<CGItem_C*>(ClntObjMgrObjectPtr(item, TYPE_ITEM, __FILE__, __LINE__));
     uint32_t index = 0;
 
     if (!object) {
@@ -707,25 +707,25 @@ bool CGTradeInfo::AddPlayerItem(WOWGUID item, WOWGUID container, uint8_t slot) {
         WOWGUID none = WOWGUID();
         ItemStats_C* stats = g_itemDBCache.GetRecord(object->m_obj->m_entryID, none, nullptr, nullptr, false);
 
-        if (stats && stats->m_bonding == 4) {
+        if (stats && stats->m_bonding == ITEM_BINDING::ITEM_BINDING_QUEST) {
             CGGameUI::DisplayError(ERR_TRADE_QUEST_ITEM);
             return false;
         }
 
-        if (CGTradeInfo::m_playerItems[6]) {
+        if (CGTradeInfo::m_playerItems[TRADE_SLOT_NONTRADED]) {
             return false;
         }
 
-        index = 6;
+        index = TRADE_SLOT_NONTRADED;
     } else {
         while (CGTradeInfo::m_playerItems[index]) {
-            if (++index >= 6) {
+            if (++index >= NUM_TRADED_ITEM_SLOTS) {
                 return false;
             }
         }
     }
 
-    if (object->m_obj->m_type & TYPEMASK_CONTAINER) {
+    if (object->m_obj->m_type & TYPE_CONTAINER) {
         const CGBag_C* bag = object->GetBag();
 
         if (bag) {
@@ -745,7 +745,7 @@ bool CGTradeInfo::AddPlayerItem(WOWGUID item, WOWGUID container, uint8_t slot) {
 
     CGTradeInfo::SetPlayerItem(index, item, container, slot);
     CGGameUI::LockItem(item);
-    SndInterfacePlayItemSound(1, object);
+    SndInterfacePlayItemSound(ITEMSOUND_DROP, object);
     return true;
 }
 

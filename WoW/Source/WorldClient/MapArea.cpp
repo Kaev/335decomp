@@ -1,4 +1,5 @@
 #include "MapArea.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include <cstring>
 #include "Engine/Source/Services/AsyncFile.h"
 #include "Engine/Source/Storm/H/storm.h"
@@ -119,14 +120,14 @@ void CMapArea::BatchChunks(const C2iVector& pos) {
         int32_t secondStart = 1;
         int32_t firstMerge = mergeTop;
         int32_t secondMerge = mergeBottom;
-        uint8_t orientation = 2;
+        uint8_t orientation = CMapRenderChunk::BATCH_FLAGS::BATCH_PAIR_HORIZONTAL;
 
         if (vertical > horizontal) {
             firstMerge = mergeLeft;
             firstPartner = 1;
             secondStart = 2;
             secondMerge = mergeRight;
-            orientation = 1;
+            orientation = CMapRenderChunk::BATCH_FLAGS::BATCH_PAIR_VERTICAL;
         }
 
         if (firstMerge) {
@@ -362,7 +363,7 @@ CMapArea::CMapArea() {
     memset(this->m_mapChunks, 0, sizeof(this->m_mapChunks));
     this->m_fileBuffer = nullptr;
     this->m_fileSize = 0;
-    this->unk_008C = 0;
+    this->unused_008C = 0;
     this->m_doodadDef = nullptr;
     this->m_mapObjDef = nullptr;
     this->m_chunkInfo = nullptr;
@@ -456,8 +457,8 @@ static void SortLiquidChunks(LiquidChunkAndDistance* array, uint32_t count) {
 // OFFSET: 0x0079C360
 void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<World::LiquidQueryResult>& results) {
     float relY = -(pos->y - this->m_topLeft2.y);
-    int32_t chunkX = CMath::fint_(-(pos->x - this->m_topLeft2.x) * 0.029999999f - 0.5f);
-    int32_t chunkY = CMath::fint_(relY * 0.029999999f - 0.5f);
+    int32_t chunkX = CMath::fint_(-(pos->x - this->m_topLeft2.x) * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t chunkY = CMath::fint_(relY * OO_COORD_TO_CHUNK - 0.5f);
     int32_t chunkRadius = CMath::fint_(static_cast<float>(ceil(radius * 0.030000001f)) - 0.5f);
     int32_t rowStart = chunkX - chunkRadius <= 0 ? 0 : chunkX - chunkRadius;
     int32_t colStart = chunkY - chunkRadius <= 0 ? 0 : chunkY - chunkRadius;
@@ -476,7 +477,7 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
             }
 
             for (CChunkLiquid* liquid = chunk->m_liquidChunkLinkList.Head(); liquid; liquid = chunk->m_liquidChunkLinkList.Next(liquid)) {
-                float height = (liquid->m_height.y + liquid->m_height.x) * 0.5f;
+                float height = (liquid->m_height.m_h + liquid->m_height.m_l) * 0.5f;
                 LiquidChunkAndDistance* entry = chunks.New();
                 entry->m_chunk = chunk;
                 entry->m_liquid = liquid;
@@ -501,7 +502,7 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
             CMapChunk* chunk = entry->m_chunk;
             float dx = chunk->m_topLeftCoords.x - pos->x;
             float dy = chunk->m_topLeftCoords.y - pos->y;
-            float dz = (liquid->m_height.y + liquid->m_height.x) * 0.5f - pos->z;
+            float dz = (liquid->m_height.m_h + liquid->m_height.m_l) * 0.5f - pos->z;
 
             for (uint32_t row = 0; row < 8; row++) {
                 for (uint32_t col = 0; col < 8; col++) {
@@ -517,19 +518,19 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
                         result->m_offset.z = dz;
                     }
 
-                    dy -= 4.1666665f;
+                    dy -= SMOLTILE_SIZE;
                 }
 
                 dy += 33.333332f;
-                dx -= 4.1666665f;
+                dx -= SMOLTILE_SIZE;
             }
         } else {
             CMapChunk* chunk = entry->m_chunk;
             float relTileY = -(pos->y - chunk->m_topLeftCoords.y);
             float relTileX = -(pos->x - chunk->m_topLeftCoords.x);
             int32_t tileRadius = CMath::fint_(static_cast<float>(ceil(radius * 0.24000001f)) - 0.5f);
-            int32_t tileY = CMath::fint_(relTileY * 0.23999999f - 0.5f);
-            int32_t tileX = CMath::fint_(relTileX * 0.23999999f - 0.5f);
+            int32_t tileY = CMath::fint_(relTileY * OO_COORD_TO_SUBCHUNK - 0.5f);
+            int32_t tileX = CMath::fint_(relTileX * OO_COORD_TO_SUBCHUNK - 0.5f);
             int32_t tileRowStart = tileX - tileRadius;
             int32_t tileColStart = tileY - tileRadius;
             int32_t tileRowEnd = tileX + tileRadius + 1;
@@ -555,9 +556,9 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
                 continue;
             }
 
-            float dx = chunk->m_topLeftCoords.x - static_cast<float>(tileRowStart) * 4.1666665f - 2.0833333f - pos->x;
-            float dy = chunk->m_topLeftCoords.y - static_cast<float>(tileColStart) * 4.1666665f - 2.0833333f - pos->y;
-            float dz = (liquid->m_height.y + liquid->m_height.x) * 0.5f - pos->z;
+            float dx = chunk->m_topLeftCoords.x - static_cast<float>(tileRowStart) * SMOLTILE_SIZE - HALF_SMOLTILE_SIZE - pos->x;
+            float dy = chunk->m_topLeftCoords.y - static_cast<float>(tileColStart) * SMOLTILE_SIZE - HALF_SMOLTILE_SIZE - pos->y;
+            float dz = (liquid->m_height.m_h + liquid->m_height.m_l) * 0.5f - pos->z;
 
             int32_t colBegin = tileColStart - liquid->m_tileBegin.y;
             int32_t colEnd = tileColEnd - liquid->m_tileBegin.y;
@@ -570,7 +571,7 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
                 continue;
             }
 
-            float rowStep = static_cast<float>(colSpan) * 4.1666665f;
+            float rowStep = static_cast<float>(colSpan) * SMOLTILE_SIZE;
             int32_t bitIndex = rowFirst * stride;
 
             for (int32_t rows = rowLast - rowFirst; rows; rows--) {
@@ -583,12 +584,12 @@ void CMapArea::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<Wo
                         result->m_offset.z = dz;
                     }
 
-                    dy -= 4.1666665f;
+                    dy -= SMOLTILE_SIZE;
                 }
 
                 bitIndex += stride;
                 dy += rowStep;
-                dx -= 4.1666665f;
+                dx -= SMOLTILE_SIZE;
             }
         }
     }
@@ -606,7 +607,7 @@ CMapArea::~CMapArea() {
         CMapArea::FreeAsyncLoadBuffer(this->m_fileBuffer, this->m_fileSize);
     }
 
-    this->unk_008C = 0;
+    this->unused_008C = 0;
     this->m_doodadDef = nullptr;
     this->m_mapObjDef = nullptr;
     this->m_chunkInfo = nullptr;

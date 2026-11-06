@@ -15,14 +15,27 @@ class Login;
 
 struct CLIENTCDKEY {
     /* 0000 */ uint16_t m_length;
-    /* 0002 */ uint8_t unk_0002[2];
+    /* 0002 */ uint8_t unused_0002[2];
     /* 0004 */ uint8_t m_key[28];
 };
 
 class ClientConnection : public RealmConnection {
     public:
-    /* 2F3C */ uint32_t unk_2F3C;
-    /* 2F40 */ uint32_t unk_2F40;
+    // SMSG_CHARACTER_LOGIN_FAILED byte selectors;names describe mapped UI results.
+    // These ordinals are translated to ResponseCodes;all other bytes map to failure.
+    enum CHARACTER_LOGIN_FAILURE : int32_t {
+        LOGIN_FAILURE_UI_NO_WORLD = 1,
+        LOGIN_FAILURE_UI_DUPLICATE_CHARACTER = 2,
+        LOGIN_FAILURE_UI_NO_INSTANCES = 3,
+        LOGIN_FAILURE_UI_DISABLED = 4,
+        LOGIN_FAILURE_UI_NO_CHARACTER = 5,
+        LOGIN_FAILURE_UI_LOCKED_FOR_TRANSFER = 6,
+        LOGIN_FAILURE_UI_LOCKED_BY_BILLING = 7,
+        LOGIN_FAILURE_UI_LOCKED_BY_MOBILE_AH = 8,
+    };
+
+    /* 2F3C */ uint32_t m_connected;
+    /* 2F40 */ uint32_t m_characterLoggedIn;
     /* 2F44 */ int32_t m_statusComplete;
     /* 2F48 */ int32_t m_statusResult;
     /* 2F4C */ WOWCS_OPS m_statusOp;
@@ -31,7 +44,7 @@ class ClientConnection : public RealmConnection {
     /* 2F58 */ uint8_t m_quitAfterLogout;
     /* 2F59 */ uint8_t m_loggingOut;
     /* 2F5A */ uint8_t m_realmConnectPending;
-    /* 2F5B */ uint8_t unk_2F5B[1];
+    /* 2F5B */ uint8_t unused_2F5B[1];
     /* 2F5C */ void (*m_cleanup)();
 
     ~ClientConnection() override;
@@ -77,8 +90,8 @@ class ClientRealmResponseAdapter : public RealmResponse {
     void GameServerResult(RealmConnection* connection, const char* message1, const char* message2, const char* message3) override;
     void MessageReceived(RealmConnection* connection, uint32_t message) override;
     void OnChatReceived(RealmConnection* connection, WOWGUID guid, const char* text, uint8_t type) override;
-    void OnAccountOnline(RealmConnection* connection, int32_t a2, WOWGUID guid) override;
-    void OnAFKMonitorInfoResponse(RealmConnection* connection, WOWGUID guid, int32_t a3, int32_t a4, int32_t a5, int32_t a6) override;
+    void OnAccountOnline(RealmConnection* connection, int32_t unused_a2, WOWGUID guid) override;
+    void OnAFKMonitorInfoResponse(RealmConnection* connection, WOWGUID guid, int32_t unused_a3, int32_t unused_a4, int32_t unused_a5, int32_t unused_a6) override;
     void HandleConnect(RealmConnection* connection) override;
     void HandleDisconnect(RealmConnection* connection) override;
     void HandleCantConnect(RealmConnection* connection) override;

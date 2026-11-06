@@ -10,6 +10,10 @@
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
 #include "WoW/Source/SoundInterface/SoundInterface2.h"
 
+// Minimum follow-ground parameters used when constructing native missiles.
+constexpr float MISSILE_MIN_HEIGHT = 0.25f;
+constexpr float MISSILE_MIN_GROUND_DROP_SPEED = 0.01f;
+
 class C44Matrix;
 class CGObject_C;
 class CGUnit_C;
@@ -21,7 +25,7 @@ struct SimpleScriptIO;
 struct MissileCollisionData {
     /* 0000 */ WOWGUID m_casterGuid;
     /* 0008 */ uint8_t m_castID;
-    /* 0009 */ uint8_t unk_0009[3];
+    /* 0009 */ uint8_t unknown_0009[3];
     /* 000C */ C3Vector m_position;
 };
 
@@ -32,6 +36,87 @@ struct ChaserState {
     ChaserState() = default;
     ChaserState(const C3Vector& position, const C3Vector& velocity);
     void ChaserImplementation(const C3Vector& target, float stiffness, float elapsed);
+};
+
+// Client runtime state for CMissile::m_flags, reconstructed from 3.3.5 logic.
+// These masks are separate from the DBC flags in SpellMissileRec::m_flags.
+enum MISSILE_FLAGS : uint32_t {
+    MISSILE_FLAG_NONE                                 = 0x00000000u,
+    // Successful hit for a flight using scalar hit/miss results.
+    MISSILE_FLAG_HIT                                  = 0x00000001u,
+    MISSILE_FLAG_ATTACHED_TO_VICTIM                   = 0x00000002u,
+    // Ranged ammunition that can remain attached after a hit.
+    MISSILE_FLAG_ATTACH_ON_HIT                        = 0x00000004u,
+    // Miss/dodge/evade or a deflected missile flying past its target.
+    MISSILE_FLAG_MISS_FLY_BY                          = 0x00000008u,
+    MISSILE_FLAG_MISS_BLOCK                           = 0x00000010u,
+    // Resist/immune feedback, including temporary immunity.
+    MISSILE_FLAG_MISS_RESIST                          = 0x00000020u,
+    // Deflect away from the target; parries are converted to MISS_DEFLECTED.
+    MISSILE_FLAG_MISS_DEFLECT                         = 0x00000040u,
+    MISSILE_FLAG_MISS_REFLECT                         = 0x00000080u,
+    MISSILE_FLAG_MISS_FEEDBACK_REPORTED               = 0x00000100u,
+    // Use the target/result arrays and advance through successive targets.
+    MISSILE_FLAG_BOUNCING                             = 0x00000200u,
+    // Reflected leg targets the original caster and uses scalar hit results.
+    MISSILE_FLAG_REFLECTED                            = 0x00000400u,
+    MISSILE_FLAG_ORIENT_TO_MOVEMENT                   = 0x00000800u,
+    MISSILE_FLAG_UPDATE_PROGRESS                      = 0x00001000u,
+    MISSILE_FLAG_MOVE_LAUNCH_WITH_TRANSPORT           = 0x00002000u,
+    MISSILE_FLAG_FOLLOW_GROUND                        = 0x00004000u,
+    // Use the model position for impact FX after motion-script translation.
+    MISSILE_FLAG_USE_MODEL_IMPACT_POSITION            = 0x00008000u,
+    MISSILE_FLAG_BALLISTIC_TRAJECTORY                 = 0x00010000u,
+    // Flight without a target GUID; eligible for duration-based interpolation.
+    MISSILE_FLAG_FIXED_DESTINATION                    = 0x00020000u,
+    MISSILE_FLAG_TRAJECTORY_DURATION_ADJUSTED         = 0x00040000u,
+    // Trajectory-specific particle emitter setup has run.
+    MISSILE_FLAG_TRAJECTORY_PARTICLES_INITIALIZED     = 0x00080000u,
+    MISSILE_FLAG_HAS_SMOOTH_DIRECTION                 = 0x00100000u,
+    // Enable collision detection for a locally controlled caster or its pet.
+    MISSILE_FLAG_LOCAL_COLLISION_DETECTION            = 0x00200000u,
+    // A remote trajectory collision position has been recorded.
+    MISSILE_FLAG_HAS_REMOTE_COLLISION                 = 0x00400000u,
+    // At least one model-FX wait pass has run.
+    MISSILE_FLAG_MODEL_FX_WAIT_STARTED                = 0x00800000u,
+    MISSILE_FLAG_MOTION_SCRIPT_OVERRIDES_SPEED        = 0x01000000u,
+    // Preserve the precast model's animated transform for the first flight update.
+    MISSILE_FLAG_USE_ANIMATED_MODEL_TRANSFORM         = 0x02000000u,
+    MISSILE_FLAG_TRANSPORT_OFFSET_INITIALIZED         = 0x04000000u,
+    // SPELL_ATTR7_REFLECTION_ONLY_DEFENDS turns reflection into deflection.
+    MISSILE_FLAG_REFLECT_AS_DEFLECT                   = 0x08000000u,
+    // Delay emitter/ribbon shutdown until the next model-FX wait pass.
+    MISSILE_FLAG_DEFER_MODEL_FX_SHUTDOWN              = 0x10000000u,
+    // Bits 29-31 have no observed consumers or setters in this client.
+    MISSILE_FLAG_UNKNOWN_29                           = 0x20000000u,
+    MISSILE_FLAG_UNKNOWN_30                           = 0x40000000u,
+    MISSILE_FLAG_UNKNOWN_31                           = 0x80000000u,
+
+    MISSILE_FLAG_MOTION_SCRIPT_SETUP_MASK = MISSILE_FLAG_ORIENT_TO_MOVEMENT
+        | MISSILE_FLAG_UPDATE_PROGRESS
+        | MISSILE_FLAG_MOVE_LAUNCH_WITH_TRANSPORT,
+    MISSILE_FLAG_GROUND_FOLLOW_SETUP_MASK = MISSILE_FLAG_ORIENT_TO_MOVEMENT
+        | MISSILE_FLAG_UPDATE_PROGRESS
+        | MISSILE_FLAG_MOVE_LAUNCH_WITH_TRANSPORT
+        | MISSILE_FLAG_FOLLOW_GROUND,
+    MISSILE_FLAG_TRAJECTORY_SETUP_MASK = MISSILE_FLAG_ORIENT_TO_MOVEMENT
+        | MISSILE_FLAG_BALLISTIC_TRAJECTORY,
+    MISSILE_FLAG_DESTINATION_TIMING_MASK = MISSILE_FLAG_FOLLOW_GROUND
+        | MISSILE_FLAG_FIXED_DESTINATION
+        | MISSILE_FLAG_MOTION_SCRIPT_OVERRIDES_SPEED,
+    MISSILE_FLAG_BOUNCE_RESET_MASK = MISSILE_FLAG_HIT
+        | MISSILE_FLAG_ATTACHED_TO_VICTIM
+        | MISSILE_FLAG_MISS_FLY_BY
+        | MISSILE_FLAG_MISS_BLOCK
+        | MISSILE_FLAG_MISS_RESIST
+        | MISSILE_FLAG_MISS_DEFLECT
+        | MISSILE_FLAG_MISS_REFLECT
+        | MISSILE_FLAG_MISS_FEEDBACK_REPORTED
+        | MISSILE_FLAG_REFLECTED
+        | MISSILE_FLAG_REFLECT_AS_DEFLECT,
+    MISSILE_FLAG_REFLECTION_RESET_MASK = MISSILE_FLAG_MISS_REFLECT
+        | MISSILE_FLAG_MISS_FEEDBACK_REPORTED
+        | MISSILE_FLAG_REFLECTED,
 };
 
 class CMissile {
@@ -59,7 +144,7 @@ class CMissile {
     /* 0018 */ CM2Model* m_model;
     /* 001C */ uint32_t m_spellID;
     /* 0020 */ uint8_t m_castID;
-    /* 0021 */ uint8_t unk_0021[3];
+    /* 0021 */ uint8_t unknown_0021[3];
     /* 0024 */ float m_speed;
     /* 0028 */ float m_baseSpeed;
     /* 002C */ C3Vector m_position;
@@ -67,7 +152,7 @@ class CMissile {
     /* 0044 */ C3Vector m_impactPos;
     /* 0050 */ C3Vector m_worldImpactPos;
     /* 005C */ C3Vector m_lastModelPos;
-    /* 0068 */ uint32_t m_flags;
+    /* 0068 */ uint32_t m_flags; // MISSILE_FLAGS
     /* 006C */ int32_t m_attachmentID;
     /* 0070 */ C3Vector m_attachOffset;
     /* 007C */ int32_t m_soundKitID;
@@ -91,8 +176,8 @@ class CMissile {
     /* 0104 */ float m_followGroundRate;
     /* 0108 */ float m_followGroundStart;
     /* 010C */ uint32_t m_motionFlags;
-    /* 0110 */ int32_t unk_0110;
-    /* 0114 */ int32_t unk_0114;
+    /* 0110 */ int32_t m_missileIndex;
+    /* 0114 */ int32_t m_missileCount;
     /* 0118 */ float m_pitch;
     /* 011C */ float m_trajectorySpeed;
     /* 0120 */ C3Vector m_velocity;
@@ -110,7 +195,7 @@ class CMissile {
     /* 0160 */ CMissile** m_prevLink;
     /* 0164 */ CMissile* m_next;
     /* 0168 */ uint32_t m_memHandle;
-    /* 016C */ uint32_t unk_016C;
+    /* 016C */ uint32_t unknown_016C;
     /* 0170 */ WOWGUID m_targetingUnit;
     /* 0178 */ uint32_t m_targetingEffectTime;
     /* 017C */ int32_t m_motionScriptFunction;
@@ -120,7 +205,7 @@ class CMissile {
     /* 0194 */ C3Vector m_smoothDirection;
     /* 01A0 */ C3Vector m_lastTransportPos;
     /* 01AC */ ChaserState m_transportOffset;
-    /* 01C4 */ uint32_t unk_01C4;
+    /* 01C4 */ uint32_t unknown_01C4;
 
     void AdjustTrajectoryDuration(uint32_t duration);
     void ApplyMotionScriptFunctionRotationAndScale(const SimpleScriptIO& io, C44Matrix& matrix);

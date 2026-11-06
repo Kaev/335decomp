@@ -184,7 +184,7 @@ void CSimpleModel::SetCameraByID(uint32_t id) {
         return;
     }
 
-    if (id < 2) {
+    if (id < NUM_OBJECT_CAMERAS) {
         this->SetCamera(this->m_model->GetCameraById(id));
         return;
     }
@@ -305,7 +305,7 @@ void CSimpleModel::LoadXML(XMLNode* node, CStatus* status) {
             CImVector color;
             LoadXML_Color(child, color, status);
             this->m_fogColor = color;
-            this->m_flags |= 0x1;
+            this->m_flags |= CSimpleModel::MODEL_FOGGED;
         }
     }
 }
@@ -336,12 +336,12 @@ void CSimpleModel::SetCameraByIndex(uint32_t index) {
 
     CM2Model* model = this->m_model;
 
-    if (!(model->m_fFlags & 0x1)) {
+    if (!(model->m_runtimeFlags & 0x1)) {
         model->WaitForLoad(nullptr);
     }
 
     if (index < model->m_shared->m_data->m_cameras.m_count) {
-        this->SetCamera(static_cast<CCamera*>(this->m_model->GetCameraByIndex(index)));
+        this->SetCamera(this->m_model->GetCameraByIndex(index));
         return;
     }
 
@@ -474,7 +474,7 @@ void CSimpleModel::RenderModel(void* arg) {
     clearColor.g = 0x00;
     clearColor.r = 0x00;
     clearColor.a = 0xFF;
-    GxSceneClear(0x2, clearColor);
+    GxSceneClear(GxBufferBit_Depth, clearColor);
 
     CShaderEffect::UpdateProjMatrix();
     simpleModel->UpdateModel();
@@ -496,7 +496,7 @@ void CSimpleModel::RenderModel(void* arg) {
 void CSimpleModel::LightingCallback(CM2Model* model, CM2Lighting* lighting, void* arg) {
     CSimpleModel* simpleModel = static_cast<CSimpleModel*>(arg);
 
-    if (simpleModel->m_flags & 0x1) {
+    if (simpleModel->m_flags & CSimpleModel::MODEL_FOGGED) {
         lighting->SetFog(C3Vector(simpleModel->m_fogColor), simpleModel->m_fogNear, simpleModel->m_fogFar);
     }
 
@@ -520,13 +520,13 @@ void CSimpleModel::SetModel(CM2Model* model) {
 
     if (model) {
         model->m_fadeAlpha = static_cast<uint8_t>(this->m_alpha * this->m_parentAlpha / 255) * 0.0039215689f;
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(&AnimFinishedCallback), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(&AnimFinishedCallback, reinterpret_cast<uintptr_t>(this));
         this->m_model->m_lightingCallback = &CSimpleModel::LightingCallback;
         this->m_model->m_lightingArg = this;
         this->m_model->SetLoadedCallback(&CSimpleModel::ModelLoaded, this);
     }
 
-    this->NotifyDrawLayerChanged(2);
+    this->NotifyDrawLayerChanged(DRAWLAYER_ARTWORK);
 }
 
 // VERIFY: b15a7a55 auto
@@ -566,15 +566,15 @@ void CSimpleModel::OnLayerUpdate(float elapsedSec) {
         CM2Model* model = this->m_model;
 
         if (model->m_attachParent) {
-            model->m_fFlags |= 0x80;
+            model->m_runtimeFlags |= 0x80;
         } else {
-            model->m_fFlags |= 0x8;
+            model->m_runtimeFlags |= 0x8;
         }
 
         if (model->m_attachParent) {
-            model->m_fFlags |= 0x20000;
+            model->m_runtimeFlags |= 0x20000;
         } else {
-            model->m_fFlags |= 0x10000;
+            model->m_runtimeFlags |= 0x10000;
         }
     }
 

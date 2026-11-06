@@ -70,7 +70,7 @@ void ConsoleDetectSetDefaults(DefaultSettings& defaults, const Hardware& hardwar
     defaults.m_animatingDoodads = s_animatingDoodads[2 * video->m_animatingDoodadIdx + cpu->m_animatingDoodadIdx];
     defaults.m_trilinear = video->m_trilinear != 0;
     defaults.m_numLights = video->m_numLights;
-    defaults.unk_001A = video->m_specularity != 0;
+    defaults.m_specular = video->m_specularity != 0;
     defaults.m_specularity = video->m_specularity != 0;
     defaults.m_waterLOD = s_waterLOD[2 * video->m_waterLodidx + cpu->m_waterLODIdx];
     defaults.m_particleDensity = s_particleDensity[2 * video->m_particleDensityIdx + cpu->m_particleDensityIdx];
@@ -110,7 +110,7 @@ static void ShowFatalMessageBox(int32_t stringID, const char* message) {
     const char* caption = titleRec ? titleRec->m_message : "World of Warcraft";
     Startup_StringsRec* rec = g_startup_StringsDB.GetRecord(stringID);
 
-    OsGuiMessageBox(OsGuiGetWindow(2), 0, rec ? rec->m_message : message, caption);
+    OsGuiMessageBox(OsGuiGetWindow(OSGUI_WINDOW_TYPE_FRONT), OSGUI_MESSAGE_STYLE_OK, rec ? rec->m_message : message, caption);
     exit(0);
 }
 
@@ -148,7 +148,7 @@ void ConsoleDetectSaveHardware(const Hardware& hardware, bool& changed) {
         Startup_StringsRec* rec = g_startup_StringsDB.GetRecord(5);
         const char* message = rec ? rec->m_message : "Hardware changed.  Reload default settings?";
 
-        changed = OsGuiMessageBox(OsGuiGetWindow(2), 2, message, caption) == 0;
+        changed = OsGuiMessageBox(OsGuiGetWindow(OSGUI_WINDOW_TYPE_FRONT), OSGUI_MESSAGE_STYLE_YESNO, message, caption) == OSGUI_MESSAGE_RESULT_YESOK;
     }
 
     SRegSaveValue("World of Warcraft\\Client", s_hwRegNames[0], 0, hardware.m_cpuIdx);

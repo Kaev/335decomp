@@ -7,6 +7,7 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Storm/Source/SThread.h"
+#include "WoW/Source/DB/Types.h"
 #include "WoW/Source/DB/WowClientDB.h"
 #include "WoW/Source/DB/Rec/Startup_StringsRec.h"
 #include "Engine/Source/Tempest/C3Vector.h"
@@ -17,6 +18,29 @@ class CDataStore;
 
 class CAsyncObject;
 class CObjectHeapList;
+
+// Build 12340 UI outcomes; these are descriptive names, not recovered server symbols.
+// 0/5 are silent, and 12/13/14 share NOT_FOUND; their meanings remain UNKNOWN.
+// Keep the packet carrier raw so every unrecognized byte retains default handling.
+enum TRANSFER_ABORT_REASON : int32_t {
+    TRANSFER_ABORT_UNKNOWN_0 = 0,
+    TRANSFER_ABORT_ERROR = 1,
+    TRANSFER_ABORT_MAX_PLAYERS = 2,
+    TRANSFER_ABORT_NOT_FOUND = 3,
+    TRANSFER_ABORT_TOO_MANY_INSTANCES = 4,
+    TRANSFER_ABORT_UNKNOWN_5 = 5,
+    TRANSFER_ABORT_ZONE_IN_COMBAT = 6,
+    TRANSFER_ABORT_INSUFFICIENT_EXPANSION = 7,
+    TRANSFER_ABORT_DIFFICULTY = 8,
+    TRANSFER_ABORT_UNIQUE_MESSAGE = 9,
+    TRANSFER_ABORT_TOO_MANY_REALM_INSTANCES = 10,
+    TRANSFER_ABORT_NEED_GROUP = 11,
+    TRANSFER_ABORT_UNKNOWN_12 = 12,
+    TRANSFER_ABORT_UNKNOWN_13 = 13,
+    TRANSFER_ABORT_UNKNOWN_14 = 14,
+    TRANSFER_ABORT_REALM_ONLY = 15,
+    TRANSFER_ABORT_MAP_NOT_ALLOWED = 16,
+};
 
 enum WOWCMDOPT {
     CMD_RES_800x600 = 16,
@@ -50,7 +74,7 @@ extern CVar* g_accountNameVar;
 extern CVar* g_accountUsesTokenVar;
 extern CVar* g_checkAddonVersionVar;
 extern HEVENTCONTEXT g_clientEventContext;
-extern bool g_hasIsoLocale[12];
+extern bool g_hasIsoLocale[NUM_DB_LOCALES];
 extern CVar* g_lastCharacterIndexVar;
 extern CVar* g_readContestVar;
 extern CVar* g_readEULAVar;
@@ -129,7 +153,7 @@ extern volatile long s_additionalCheckArmed;
 
 void CheckAndSendBotDetected();
 void AdditionalCheck1();
-uint8_t AdditionalCheck1Scan(const AdditionalCheckInterface* iface, int32_t a2);
+uint8_t AdditionalCheck1Scan(const AdditionalCheckInterface* iface, int32_t unused_a2);
 void InitTokenSeed(const uint8_t* key);
 void* Client_MemAlloc(uint32_t bytes);
 void Client_MemFree(void* ptr);

@@ -8,6 +8,22 @@
 class CDataStore;
 class CGUnit_C;
 
+// Aura packet bits. Names describe the native reader and client consumers;
+// 0x10 is the client cancellation/filter gate, distinct from the harmful bit.
+enum AURA_FLAGS : uint8_t {
+    AURA_FLAG_EFFECT_0 = 0x1,
+    AURA_FLAG_EFFECT_1 = 0x2,
+    AURA_FLAG_EFFECT_2 = 0x4,
+    AURA_FLAG_SELF_CAST = 0x8,
+    AURA_FLAG_CANCELABLE = 0x10,
+    AURA_FLAG_HAS_DURATION = 0x20,
+    AURA_FLAG_UNKNOWN_6 = 0x40,
+    AURA_FLAG_HARMFUL = 0x80,
+    AURA_FLAG_EFFECT_MASK = AURA_FLAG_EFFECT_0 | AURA_FLAG_EFFECT_1 | AURA_FLAG_EFFECT_2,
+};
+
+constexpr int32_t AURA_HARMFUL_FLAG_SHIFT = 7;
+
 #pragma pack(push, 4)
 class AuraData {
     public:
@@ -16,7 +32,7 @@ class AuraData {
     /* 000C */ uint8_t m_flags;
     /* 000D */ uint8_t m_level;
     /* 000E */ uint8_t m_stackCount;
-    /* 000F */ uint8_t unk_000F;
+    /* 000F */ uint8_t unknown_000F;
     /* 0010 */ int32_t m_duration;
     /* 0014 */ int32_t m_endTime;
 

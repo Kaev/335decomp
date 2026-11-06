@@ -1,3 +1,4 @@
+#include "Engine/Source/Tempest/CMath.h"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -55,11 +56,11 @@ float CSimpleAnimSCurveSmoother::GetSmoothProgress(float progress) {
     }
 
     if (fabsf(this->m_in) >= 0.001f) {
-        return 1.0f - cosf(progress * 1.5707964f);
+        return 1.0f - cosf(progress * HALF_PI);
     }
 
     if (fabsf(this->m_out) >= 0.001f) {
-        return cosf((progress + 1.0f) * 1.5707964f) * -1.0f;
+        return cosf((progress + 1.0f) * HALF_PI) * -1.0f;
     }
 
     return progress;
@@ -412,7 +413,7 @@ bool CSimpleAnim::OnUpdate(float elapsedSec, float& consumed) {
 // OFFSET: 0x00499BB0
 CSimpleAnim::CSimpleAnim(CSimpleAnimGroup* group) {
     this->m_group = nullptr;
-    this->unk_002C = 0;
+    this->unused_002C = 0;
     this->m_order = -1;
     this->m_flags = 0;
     this->m_playState = 0;

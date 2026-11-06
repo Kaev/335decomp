@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "Engine/Source/Services/LightningCoordUpdateData.h"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C2Vector.h"
 #include "Engine/Source/Tempest/C3Vector.h"
@@ -21,6 +22,18 @@ struct LightningJoint {
 
 class CLightning {
     public:
+    enum RUNTIME_FLAGS : int32_t {
+        FLAG_NONE = 0,
+        FLAG_JOINTS_INITIALIZED = 0x1,
+        FLAG_VISIBLE = 0x2,
+        FLAG_FLICKER_OFF = 0x4,
+        FLAG_INITIAL_PULSE_WRAP = 0x8,
+        FLAG_SOURCE_ENDPOINT = 0x10,
+        FLAG_DESTINATION_ENDPOINT = 0x20,
+        FLAG_RESET_MASK = 0x5,
+        FLAG_ENDPOINT_MASK = 0x30,
+    };
+
     static uint32_t DecodeChainEffectsID(uint32_t id);
 
     /* 0000 */ C3Vector m_srcPos;
@@ -36,8 +49,7 @@ class CLightning {
     /* 0068 */ CAaBox m_bounds;
     /* 0080 */ float m_texOffset;
     /* 0084 */ CTexture* m_texture;
-    /* 0088 */ void (*m_coordUpdate)(void*, uint32_t, C3Vector*, C3Vector*);
-    /* 008C */ void* m_coordUpdateParam;
+    /* 0088 */ LightningCoordUpdateData m_coordUpdateData;
     /* 0090 */ uint32_t m_flags;
     /* 0094 */ float m_waveAngle;
     /* 0098 */ float m_waveSpin;

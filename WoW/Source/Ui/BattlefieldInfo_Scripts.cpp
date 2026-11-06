@@ -1,4 +1,5 @@
 #include "BattlefieldInfo.h"
+#include "WoW/Source/Object/Types.h"
 #include "WoW/Source/Object/ObjectClient/Player_C.h"
 #include <cstdint>
 #include "Engine/Source/FrameScript/FrameScript.h"
@@ -145,7 +146,7 @@ static int32_t Script_GetBattlefieldTeamInfo(lua_State* L) {
 // VERIFY: 978fd379 auto
 // OFFSET: 0x00549AD0
 static int32_t Script_IsActiveBattlefieldArena(lua_State* L) {
-    if (CGBattlefieldInfo::m_instanceType == 4) {
+    if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -256,16 +257,16 @@ static int32_t Script_GetBattlefieldStatus(lua_State* L) {
     }
 
     switch (status->m_status) {
-        case 0:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE:
             lua_pushstring(L, "none");
             break;
-        case 1:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_QUEUED:
             lua_pushstring(L, "queued");
             break;
-        case 2:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM:
             lua_pushstring(L, "confirm");
             break;
-        case 3:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_ACTIVE:
             lua_pushstring(L, "active");
             break;
         default:
@@ -275,7 +276,7 @@ static int32_t Script_GetBattlefieldStatus(lua_State* L) {
 
     MapRec* map = nullptr;
 
-    if (status->m_status == 2) {
+    if (status->m_status == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM) {
         if (status->m_bgTypeID == 32) {
             if (status->m_joinedQueueData) {
                 BattlemasterListRec* battlemaster = g_battlemasterListDB.GetRecord(static_cast<uint32_t>(status->m_joinedQueueData >> 16));
@@ -287,7 +288,7 @@ static int32_t Script_GetBattlefieldStatus(lua_State* L) {
         } else {
             map = g_mapDB.GetRecord(status->m_mapID);
         }
-    } else if (status->m_status == 3) {
+    } else if (status->m_status == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_ACTIVE) {
         map = g_mapDB.GetRecord(CGBattlefieldInfo::m_activeMapID);
     }
 
@@ -412,7 +413,7 @@ static int32_t Script_GetBattlefieldInstanceInfo(lua_State* L) {
         return 0;
     }
 
-    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__)) {
+    if (!ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__)) {
         return 0;
     }
 
@@ -545,19 +546,19 @@ static int32_t Script_GetWorldPVPQueueStatus(lua_State* L) {
     }
 
     switch (queue->m_status) {
-        case 0:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE:
             lua_pushstring(L, "none");
             break;
 
-        case 1:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_QUEUED:
             lua_pushstring(L, "queued");
             break;
 
-        case 2:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM:
             lua_pushstring(L, "confirm");
             break;
 
-        case 3:
+        case CGBattlefieldInfo::QUEUE_STATUS::QUEUE_ACTIVE:
             lua_pushstring(L, "active");
             break;
 
@@ -576,7 +577,7 @@ static int32_t Script_GetWorldPVPQueueStatus(lua_State* L) {
 
     lua_pushnumber(L, queue->m_queueID);
 
-    if (queue->m_status == 2) {
+    if (queue->m_status == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM) {
         lua_pushnumber(L, queue->m_expireTime - CGWorldStateInfo::GetUITime());
     } else {
         lua_pushnumber(L, 0.0);
@@ -625,7 +626,7 @@ static int32_t Script_SortBGList(lua_State* L) {
 // VERIFY: 9f46881d manual
 // OFFSET: 0x0054D770
 static int32_t Script_GetBattlefieldInfo(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
@@ -686,7 +687,7 @@ static int32_t Script_GetBattlegroundInfo(lua_State* L) {
     }
 
     int32_t index = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || index < 0 || index >= static_cast<int32_t>(CGBattlefieldInfo::m_battlegroundTypes.m_count)) {
         return 0;
@@ -848,7 +849,7 @@ static int32_t Script_GetBattlefieldPosition(lua_State* L) {
     }
 
     C3Vector position(0.0f, 0.0f, 0.0f);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         position = player->GetPosition();
@@ -889,7 +890,7 @@ static int32_t Script_GetBattlefieldVehicleInfo(lua_State* L) {
 
     uint32_t index = static_cast<int32_t>(lua_tonumber(L, 1)) - 1;
     WOWGUID guid = index >= CGBattlefieldInfo::m_numVehicles ? WOWGUID() : CGBattlefieldInfo::m_vehicleGuids[index];
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -907,7 +908,7 @@ static int32_t Script_GetBattlefieldVehicleInfo(lua_State* L) {
     lua_pushnumber(L, x);
     lua_pushnumber(L, y);
     lua_pushstring(L, unit->GetUnitName(nullptr, true));
-    lua_pushboolean(L, (unit->m_unit->m_unitFieldFlags >> 24) & 0x1);
+    lua_pushboolean(L, (unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_POSSESSED) != 0);
 
     if (hasType) {
         lua_pushstring(L, s_vehicleTypes[vehicle->m_uiLocomotionType]);
@@ -929,7 +930,7 @@ static int32_t Script_AcceptBattlefieldPort(lua_State* L) {
         return 0;
     }
 
-    if (!CGGameUI::CanPerformAction(20)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_BATTLEFIELD_PORT)) {
         return 0;
     }
 
@@ -945,7 +946,7 @@ static int32_t Script_AcceptBattlefieldPort(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
     if (player && accept && !IsCurrentMapArena()) {
-        if (player->m_unit->m_unitFieldFlags & 0x800) {
+        if (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_PET_IN_COMBAT) {
             CGGameUI::DisplayError(ERR_NOT_IN_COMBAT);
             lua_pushnil(L);
             return 1;
@@ -957,7 +958,7 @@ static int32_t Script_AcceptBattlefieldPort(lua_State* L) {
             return 1;
         }
 
-        if (player->m_movement->m_flags & 0x1000) {
+        if (player->m_movement->m_flags & MOVEMENTFLAG_FALLING) {
             CGGameUI::DisplayError(ERR_NOT_WHILE_FALLING);
             lua_pushnil(L);
             return 1;
@@ -1048,51 +1049,51 @@ static int32_t Script_SortBattlefieldScoreData(lua_State* L) {
         return 0;
     }
 
-    int32_t column = 0;
+    int32_t column = CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_KILLING_BLOWS;
     const char* type = lua_tolstring(L, 1, nullptr);
 
     if (!SStrCmpI(type, "kills", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(0);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_KILLING_BLOWS);
         return 0;
     }
 
     if (!SStrCmpI(type, "deaths", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(1);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_DEATHS);
         return 0;
     }
 
     if (!SStrCmpI(type, "cp", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(2);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_BONUS_HONOR);
         return 0;
     }
 
     if (!SStrCmpI(type, "name", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(3);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_NAME);
         return 0;
     }
 
     if (!SStrCmpI(type, "class", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(4);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_CLASS);
         return 0;
     }
 
     if (!SStrCmpI(type, "hk", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(5);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_HONORABLE_KILLS);
         return 0;
     }
 
     if (!SStrCmpI(type, "damage", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(6);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_DAMAGE_DONE);
         return 0;
     }
 
     if (!SStrCmpI(type, "healing", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(7);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_HEALING_DONE);
         return 0;
     }
 
     if (!SStrCmpI(type, "team", STORM_MAX_STR)) {
-        CGBattlefieldInfo::SetScoreSortColumn(8);
+        CGBattlefieldInfo::SetScoreSortColumn(CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_TEAM);
         return 0;
     }
 
@@ -1100,7 +1101,7 @@ static int32_t Script_SortBattlefieldScoreData(lua_State* L) {
         type += 4;
         uint32_t stat = SStrToUnsigned(type) + 8;
 
-        if (stat >= 17) {
+        if (stat >= CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS) {
             return 0;
         }
 

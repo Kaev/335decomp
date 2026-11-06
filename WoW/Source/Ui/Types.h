@@ -5,6 +5,116 @@
 #include <cstdint>
 #include "Engine/Source/BLPFile/Types.h"
 
+enum ERROR_TEXT_PLACEMENT : int32_t {
+    ERRORTEXT_CHAT = 0,
+    ERRORTEXT_UIINFO = 1,
+    ERRORTEXT_UIERROR = 2,
+    ERRORTEXT_CONSOLE = 3,
+};
+
+enum UNIT_MIRROR_TIMER : int32_t {
+    UNIT_MIRROR_TIMER_EXHAUSTION = 0,
+    UNIT_MIRROR_TIMER_BREATH = 1,
+    UNIT_MIRROR_TIMER_FEIGNDEATH = 2,
+    NUM_UNIT_MIRROR_TIMERS = 3,
+    UNIT_MIRROR_TIMER_INACTIVE = 3,
+};
+
+// SMSG_LIST_INVENTORY: names follow the client console messages.
+// The local NOT_READ sentinel is not an inferred additional wire error.
+enum VENDOR_LIST_RESULT : int32_t {
+    VENDOR_LIST_EMPTY = 0,
+    VENDOR_LIST_VENDOR_DISLIKES_PLAYER = 1,
+    VENDOR_LIST_TOO_FAR = 2,
+    VENDOR_LIST_VENDOR_DEAD = 3,
+    VENDOR_LIST_PLAYER_DEAD = 4,
+    VENDOR_LIST_RESULT_NOT_READ = 0xFF,
+};
+
+// SMSG_BUY_FAILED result byte, separate from sell results and inventory error IDs.
+// Reference only: guessed TC 3.3.5 BUY_ERR_CANT_FIND_ITEM=0 uses the generic default.
+enum VENDOR_BUY_RESULT : uint8_t {
+    // Only result 1 also clears matching stock for the last received vendor.
+    VENDOR_BUY_SOLD_OUT_REFRESH_STOCK      = 1,
+    VENDOR_BUY_NOT_ENOUGH_MONEY            = 2,
+    VENDOR_BUY_HOSTILE                     = 4,
+    VENDOR_BUY_TOO_FAR                     = 5,
+    // Observed client action only; the server-side cause is unverified.
+    VENDOR_BUY_NO_UI_ERROR                 = 6,
+    VENDOR_BUY_SOLD_OUT                    = 7,
+    VENDOR_BUY_MAX_COUNT                   = 8,
+    VENDOR_BUY_REQUIRES_RANK               = 11,
+    VENDOR_BUY_REQUIRES_REPUTATION         = 12,
+};
+
+// SMSG_SELL_ITEM result byte. Unknown results retain the original silent/default path.
+enum VENDOR_SELL_RESULT : uint8_t {
+    VENDOR_SELL_SUCCESS                    = 0,
+    VENDOR_SELL_ITEM_NOT_FOUND             = 1,
+    VENDOR_SELL_NOT_INTERESTED             = 2,
+    VENDOR_SELL_HOSTILE                    = 3,
+    VENDOR_SELL_NOT_OWNER                  = 4,
+    // Reference only: TC 3.3.5 SELL_ERR_UNK = 5; client uses the silent default.
+    VENDOR_SELL_NONEMPTY_BAG               = 6,
+    VENDOR_SELL_DOESNT_BUY                 = 7,
+    VENDOR_SELL_MUST_REPAIR                = 8,
+    VENDOR_SELL_INTERNAL_BAG_ERROR         = 9,
+};
+
+// SMSG_LOOT_RESPONSE failure byte, separate from acquisition modes and UI error IDs.
+// Unknown values retain the existing generic denial and cleanup behavior.
+enum LOOT_RESPONSE_ERROR : uint8_t {
+    LOOT_ERROR_DIDNT_KILL                      = 0,
+    LOOT_ERROR_TOO_FAR                         = 4,
+    LOOT_ERROR_BAD_FACING                      = 5,
+    LOOT_ERROR_LOCKED                          = 6,
+    LOOT_ERROR_NOT_STANDING                    = 8,
+    LOOT_ERROR_STUNNED                         = 9,
+    LOOT_ERROR_PLAYER_NOT_FOUND                = 10,
+    LOOT_ERROR_PLAY_TIME_EXCEEDED              = 11,
+    LOOT_ERROR_MASTER_INVENTORY_FULL           = 12,
+    LOOT_ERROR_MASTER_UNIQUE_ITEM              = 13,
+    LOOT_ERROR_MASTER_OTHER                    = 14,
+    LOOT_ERROR_ALREADY_PICKPOCKETED            = 15,
+    LOOT_ERROR_NOT_WHILE_SHAPESHIFTED          = 16,
+};
+
+enum LOOT_ACQUIRE : uint32_t {
+    LOOT_ACQUIRE_FAILED = 0,
+    LOOT_ACQUIRE_UNKNOWN_1 = 1,
+    LOOT_ACQUIRE_UNKNOWN_2 = 2,
+    LOOT_ACQUIRE_FISHING = 3,
+    LOOT_ACQUIRE_UNKNOWN_4 = 4,
+    LOOT_ACQUIRE_UNKNOWN_6 = 6,
+    LOOT_ACQUIRE_UNKNOWN_7 = 7,
+    LOOT_ACQUIRE_UNKNOWN_8 = 8,
+
+    // Unused historical names; current meanings of 1/2 are unverified.
+    // LOOT_ACQUIRE_NORMAL = 1,
+    // LOOT_ACQUIRE_PICKPOCKET = 2,
+};
+
+enum UICURSORTYPE : int32_t {
+    UICURSOR_EMPTY = 0,
+    UICURSOR_ITEM = 1,
+    UICURSOR_MONEY = 2,
+    UICURSOR_SPELL = 3,
+    UICURSOR_PET_ACTION = 4,
+    UICURSOR_MERCHANT = 5,
+    UICURSOR_LOOT = 6,
+    UICURSOR_ACTIONBAR = 7,
+    UICURSOR_MACRO = 8,
+    UICURSOR_AMMO = 9,
+    UICURSOR_PET = 10,
+    UICURSOR_GUILDBANK_ITEM = 11,
+    UICURSOR_GUILDBANK_MONEY = 12,
+    UICURSOR_EQUIPMENT_SET = 13,
+    NUM_UICURSOR_TYPES = 14,
+
+    // Pet spells share the current spell payload; there is no separate current kind.
+    // UICURSOR_PET_SPELL = UICURSOR_SPELL,
+};
+
 enum UIErrors {
     ERR_INV_FULL = 0,
     ERR_BANK_FULL = 1,
@@ -1387,6 +1497,38 @@ enum UIErrors {
     EVENT(CHAT_MSG_BN_INLINE_TOAST_BROADCAST, 719) \
     EVENT(CHAT_MSG_BN_INLINE_TOAST_BROADCAST_INFORM, 720) \
     EVENT(CHAT_MSG_BN_INLINE_TOAST_CONVERSATION, 721)
+
+// Action indices used by the native spell/tradeskill permission paths.
+// Descriptive protected-action selectors. UNKNOWN values retain native handled IDs.
+// CHAT has a verified producer and follows the default permission branch.
+enum UI_ACTION : uint32_t {
+    UI_ACTION_MOVEMENT = 0,
+    UI_ACTION_ATTACK = 1,
+    UI_ACTION_CAST_SPELL = 2,
+    UI_ACTION_RUN_MACRO = 3,
+    UI_ACTION_PARTY_ASSIGNMENT = 4,
+    UI_ACTION_UNKNOWN_5 = 5,
+    UI_ACTION_TRADE_SKILL = 6,
+    UI_ACTION_TRADE_ACCEPT = 7,
+    UI_ACTION_AUCTION = 8,
+    UI_ACTION_LFG = 9,
+    UI_ACTION_CHAT = 10,
+    UI_ACTION_RAID_SUBGROUP = 11,
+    UI_ACTION_EDIT_MACRO = 12,
+    UI_ACTION_BINDING = 13,
+    UI_ACTION_ACTION_MANIPULATION = 14,
+    UI_ACTION_UNKNOWN_15 = 15,
+    UI_ACTION_UNKNOWN_16 = 16,
+    UI_ACTION_GM_TICKET = 17,
+    UI_ACTION_UNKNOWN_18 = 18,
+    UI_ACTION_CALENDAR_EVENT = 19,
+    UI_ACTION_BATTLEFIELD_PORT = 20,
+    UI_ACTION_UNKNOWN_21 = 21,
+    UI_ACTION_EQUIP_ITEM = 22,
+    UI_ACTION_UNKNOWN_23 = 23,
+};
+
+constexpr uint32_t UI_ACTION_MASK_CAST_SPELL = 1u << UI_ACTION_CAST_SPELL;
 
 enum SCRIPT_EVENT {
 #define SCRIPT_EVENT_ENUM(name, index) SCRIPT_EVENT_##name = index,

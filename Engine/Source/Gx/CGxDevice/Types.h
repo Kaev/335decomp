@@ -5,6 +5,13 @@
 #include <cstdint>
 #include "Engine/Source/Tempest/C2iVector.h"
 
+enum : uint32_t {
+    PrimMask_Vertex = 0x1,
+    PrimMask_TexCoord = 2,
+    PrimMask_Normal = 0x200,
+    PrimMask_Color = 0x400,
+};
+
 enum EGxVertexAttrib {
     GxVA_Position = 0,
     GxVA_BlendWeight = 1,
@@ -23,10 +30,22 @@ enum EGxVertexAttrib {
     GxVAs_Last = 14,
 };
 
+// Storage slots recovered from the D3D declaration and OpenGL pointer tables.
+enum EGxVertexAttribType : uint32_t {
+    GxVAT_Color = 0,
+    GxVAT_UByte4 = 1,
+    GxVAT_UByte4N = 2,
+    GxVAT_Float2 = 3,
+    GxVAT_Float3 = 4,
+    GxVAT_Short2 = 5,
+    GxVAT_Float1 = 6,
+    GxVertexAttribTypes_Last = 7,
+};
+
 class CGxVertexAttrib {
     public:
     /* 0000 */ EGxVertexAttrib m_attrib;
-    /* 0004 */ uint32_t m_type;
+    /* 0004 */ EGxVertexAttribType m_type;
     /* 0008 */ uint32_t m_offset;
     /* 000C */ uint32_t m_bufSize;
 };

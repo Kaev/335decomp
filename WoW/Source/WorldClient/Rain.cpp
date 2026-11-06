@@ -19,6 +19,7 @@
 #include "WoW/Source/WorldClient/MapWeather.h"
 #include "WoW/Source/WorldClient/World.h"
 #include "Engine/Source/Gx/CGxVertexPT.h"
+#include "Engine/Source/ShaderEffect/Types.h"
 
 // STATIC: 0x00ADF220
 static float s_maxWindTilt = 45.0f;
@@ -191,7 +192,7 @@ void Rain::InitDrop(RainDropParticle* drop, float time) {
     drop->m_position.z = offset.z - t * drop->m_velocity.z;
     Weather* weather = World::s_weather;
     C3Vector axis(0.0f, 0.0f, 0.0f);
-    CMath::sincos_(weather->m_facing - 1.5707964f, &axis.y, &axis.x);
+    CMath::sincos_(weather->m_facing - HALF_PI, &axis.y, &axis.x);
     float tilt = weather->m_speed * 0.055555556f;
 
     if (tilt < 0.0f) {
@@ -344,7 +345,7 @@ void Rain::UpdatePackets() {
             this->m_rainDropPacketList.m_activePacketsCount--;
             this->m_rainDropPacketList.m_freePacketsCount++;
             this->m_rainDropPacketList.m_freePackets.LinkToTail(packet);
-        } else if (!packet->m_vertexBufHandle->unk_001C || !packet->m_vertexBufHandle->unk_001D) {
+        } else if (!packet->m_vertexBufHandle->m_hasData || !packet->m_vertexBufHandle->m_valid) {
             Rain::RealizePacket(packet);
         }
 
@@ -360,7 +361,7 @@ void Rain::UpdatePackets() {
             this->m_rainPatterPacketList.m_activePacketsCount--;
             this->m_rainPatterPacketList.m_freePacketsCount++;
             this->m_rainPatterPacketList.m_freePackets.LinkToTail(patter);
-        } else if (!patter->m_vertexBufHandle->unk_001C || !patter->m_vertexBufHandle->unk_001D) {
+        } else if (!patter->m_vertexBufHandle->m_hasData || !patter->m_vertexBufHandle->m_valid) {
             Rain::RealizePacket(patter);
         }
 
@@ -419,8 +420,8 @@ void Rain::RenderPatterPacketsSW() {
     g_theGxDevicePtr->RsPush();
     GxRsSet(GxRs_BlendingMode, 5);
     GxRsSet(GxRs_AlphaRef, static_cast<int32_t>(CGxDevice::s_alphaRef[g_theGxDevicePtr->m_appRenderStates.m_data[GxRs_BlendingMode].m_value.m_data.i[0]]));
-    GxRsSet(GxRs_ColorOp0, 0);
-    GxRsSet(GxRs_AlphaOp0, 0);
+    GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
     GxRsSet(GxRs_MatDiffuse, *reinterpret_cast<int32_t*>(&World::s_weather->m_color));
     GxRsSet(GxRs_DepthWrite, 0);
     GxRsSet(GxRs_Lighting, 0);
@@ -483,7 +484,7 @@ void Rain::RenderPatterPacketsSW() {
         }
 
         g_theGxDevicePtr->BufUnlock(vertexBuf, 0);
-        vertexBuf->unk_001C = 1;
+        vertexBuf->m_hasData = 1;
 
         if (vertexCount) {
             GxPrimVertexPtr(vertexBuf, GxVBF_PT);
@@ -516,8 +517,8 @@ void Rain::RenderDropPacketsSW() {
     g_theGxDevicePtr->RsPush();
     GxRsSet(GxRs_BlendingMode, 5);
     GxRsSet(GxRs_AlphaRef, static_cast<int32_t>(CGxDevice::s_alphaRef[g_theGxDevicePtr->m_appRenderStates.m_data[GxRs_BlendingMode].m_value.m_data.i[0]]));
-    GxRsSet(GxRs_ColorOp0, 0);
-    GxRsSet(GxRs_AlphaOp0, 0);
+    GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+    GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
     GxRsSet(GxRs_MatDiffuse, *reinterpret_cast<int32_t*>(&World::s_weather->m_color));
     GxRsSet(GxRs_DepthWrite, 0);
     GxRsSet(GxRs_Lighting, 0);
@@ -588,7 +589,7 @@ void Rain::RenderDropPacketsSW() {
         }
 
         g_theGxDevicePtr->BufUnlock(vertexBuf, 0);
-        vertexBuf->unk_001C = 1;
+        vertexBuf->m_hasData = 1;
 
         if (vertexCount) {
             GxPrimVertexPtr(vertexBuf, GxVBF_PT);
@@ -866,6 +867,6 @@ RainPatterParticleBuffer::RainPatterParticleBuffer() {
         this->m_particles[i].m_position.x = 0.0f;
         this->m_particles[i].m_position.y = 0.0f;
         this->m_particles[i].m_position.z = 0.0f;
-        this->m_particles[i].unk_000C = 0.0f;
+        this->m_particles[i].unused_000C = 0.0f;
     }
 }

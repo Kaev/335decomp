@@ -14,7 +14,7 @@ CLCDConnection::CLCDConnection() {
     this->m_pGfxColor = nullptr;
     this->m_pMonoOutput = nullptr;
     this->m_pGfxMono = nullptr;
-    this->unk_0040 = 0;
+    this->unused_0040 = 0;
     this->m_pSoftbuttonsChangedCtx = nullptr;
     InitializeCriticalSection(&this->m_csCallback);
 }
@@ -293,7 +293,7 @@ DWORD WINAPI CLCDConnection::_OnNotificationCallback(int connection, const PVOID
     CLCDConnection* self = static_cast<CLCDConnection*>(pContext);
 
     EnterCriticalSection(&self->m_csCallback);
-    CB_EVENT_NODE* node = self->m_callbackEvents.NewNode(2, 0, 0);
+    CB_EVENT_NODE* node = self->m_callbackEvents.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_event.m_code = notificationCode;
     node->m_event.m_type = 2;
     node->m_event.m_param1 = notifyParm1;
@@ -310,7 +310,7 @@ DWORD WINAPI CLCDConnection::_OnSoftButtonsCallback(int device, DWORD buttons, c
     CLCDConnection* self = static_cast<CLCDConnection*>(context);
 
     EnterCriticalSection(&self->m_csCallback);
-    CB_EVENT_NODE* node = self->m_callbackEvents.NewNode(2, 0, 0);
+    CB_EVENT_NODE* node = self->m_callbackEvents.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_event.m_code = device;
     node->m_event.m_type = 0;
     node->m_event.m_param1 = buttons;

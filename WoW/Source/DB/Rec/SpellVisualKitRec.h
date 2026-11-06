@@ -6,6 +6,33 @@
 
 class SFileImpl;
 
+// Four independent procedural-effect slots in SpellVisualKit.dbc.
+constexpr int32_t NUM_SPELL_VISUAL_CHAR_PROCS = 4;
+
+// Descriptive client behavior. Unresolved meanings remain UNKNOWN, not UNUSED.
+// IDs 0 and 12 share the native chain-lightning branch (0x007265C0).
+enum SPELL_VISUAL_CHAR_PROC : int32_t {
+    SPELL_VISUAL_CHAR_PROC_NONE = -1,
+    SPELL_VISUAL_CHAR_PROC_CHAIN_LIGHTNING = 0,
+    SPELL_VISUAL_CHAR_PROC_COLOR_TINT = 1,
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_2 = 2, // Reference: Scale; not established by this dispatcher.
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_3 = 3,
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_4 = 4, // Reference: Emissive; not established by this dispatcher.
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_5 = 5,
+    SPELL_VISUAL_CHAR_PROC_ECLIPSE = 6,
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_7 = 7, // Reference: Stand/Walk Anim; not established by this dispatcher.
+    SPELL_VISUAL_CHAR_PROC_WEAPON_TRAIL = 8,
+    SPELL_VISUAL_CHAR_PROC_BLIZZARD = 9,
+    SPELL_VISUAL_CHAR_PROC_UNKNOWN_10 = 10, // Reference: Fishing Line; not established by this dispatcher.
+    SPELL_VISUAL_CHAR_PROC_FREEZE_ANIMATION = 11,
+    SPELL_VISUAL_CHAR_PROC_CHAIN_LIGHTNING_12 = 12,
+    SPELL_VISUAL_CHAR_PROC_FLASH_COLOR = 13,
+    SPELL_VISUAL_CHAR_PROC_ALPHA = 14,
+    SPELL_VISUAL_CHAR_PROC_PROCEDURAL_FADE = 15,
+    SPELL_VISUAL_CHAR_PROC_MOUNT_TRANSITION = 16,
+    SPELL_VISUAL_CHAR_PROC_ITEM_VISUAL = 17,
+};
+
 class SpellVisualKitRec {
     public:
     static const int32_t s_numColumns = 38;
@@ -27,11 +54,11 @@ class SpellVisualKitRec {
     /* 0038 */ int32_t m_worldEffect;
     /* 003C */ int32_t m_soundID;
     /* 0040 */ int32_t m_shakeID;
-    /* 0044 */ int32_t m_charProc [4];
-    /* 0054 */ float m_charParamZero [4];
-    /* 0064 */ float m_charParamOne [4];
-    /* 0074 */ float m_charParamTwo [4];
-    /* 0084 */ float m_charParamThree [4];
+    /* 0044 */ int32_t m_charProc [NUM_SPELL_VISUAL_CHAR_PROCS];
+    /* 0054 */ float m_charParamZero [NUM_SPELL_VISUAL_CHAR_PROCS];
+    /* 0064 */ float m_charParamOne [NUM_SPELL_VISUAL_CHAR_PROCS];
+    /* 0074 */ float m_charParamTwo [NUM_SPELL_VISUAL_CHAR_PROCS];
+    /* 0084 */ float m_charParamThree [NUM_SPELL_VISUAL_CHAR_PROCS];
     /* 0094 */ int32_t m_flags;
 
     SpellVisualKitRec();

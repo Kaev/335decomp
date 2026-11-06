@@ -20,6 +20,11 @@ enum EGxApi {
     GxApis_Last = 6,
 };
 
+enum EGxEnable : int32_t {
+    Gx_Disable = 0,
+    Gx_Enable = 1,
+};
+
 enum EGxBlend {
     GxBlend_Opaque = 0,
     GxBlend_AlphaKey = 1,
@@ -34,6 +39,14 @@ enum EGxBlend {
     GxBlend_NoAlphaAdd = 10,
     GxBlend_ConstantAlpha = 11,
     GxBlends_Last = 12,
+};
+
+enum EGxCmp : int32_t {
+    GxCmp_LEqual = 0,
+    GxCmp_Equal = 1,
+    GxCmp_GEqual = 2,
+    GxCmp_Less = 3,
+    GxCmps_Last = 4,
 };
 
 enum EGxTexFormat {
@@ -77,22 +90,27 @@ enum EGxBuffer {
     GxBuffers_Last = 2,
 };
 
+enum EGxBufferBit : uint32_t {
+    GxBufferBit_Color = 0x1,
+    GxBufferBit_Depth = 0x2,
+};
+
 enum EGxOverride {
     GxOverride_PixelShader = 0,
-    GxOverride_Unk1 = 1,
-    GxOverride_Unk2 = 2,
-    GxOverride_Unk3 = 3,
-    GxOverride_Unk4 = 4,
-    GxOverride_Unk5 = 5,
-    GxOverride_Unk6 = 6,
-    GxOverride_Unk7 = 7,
-    GxOverride_Unk8 = 8,
+    GxOverride_VertexBufferObject = 1,
+    GxOverride_StreamVertexBufferObject = 2,
+    GxOverride_StreamIndexBufferObject = 3,
+    GxOverride_StreamVertexBufferBroker = 4,
+    GxOverride_StreamIndexBufferBroker = 5,
+    GxOverride_SphereMapReflection = 6,
+    GxOverride_TexNonPow2 = 7,
+    GxOverride_PointScaleMax = 8,
     GxOverrides_Last = 9,
 };
 
 enum EGxQueryParam {
-    GxQueryParam_Unk0 = 0,
-    GxQueryParam_Unk1 = 1,
+    GxQueryParam_DataSize = 0,
+    GxQueryParam_ResultAvailable = 1,
     GxQueryParams_Last = 2,
 };
 
@@ -100,8 +118,13 @@ enum EGxTexCommand {
     GxTex_Lock = 0,
     GxTex_Latch = 1,
     GxTex_Unlock = 2,
-    GxTex_3 = 3,
+    GxTex_Recreate = 3,
     GxTexCommands_Last = 4,
+};
+
+enum EGx : int32_t {
+    Gx_SizeMinimized = 1,
+    Gx_SizeMaxHide = 2,
 };
 
 enum EGxWM {
@@ -112,11 +135,21 @@ enum EGxWM {
     GxWM_KillFocus = 4,
 };
 
+enum EGxTexCubeFace : uint32_t {
+    GxTex_PositiveX = 0,
+    GxTex_NegativeX = 1,
+    GxTex_PositiveY = 2,
+    GxTex_NegativeY = 3,
+    GxTex_PositiveZ = 4,
+    GxTex_NegativeZ = 5,
+    GxTexCubeFaces_Last = 6,
+};
+
 enum EGxTexGen {
     GxTexGen_Disabled = 0,
     GxTexGen_ObjectLinear = 1,
-    GxTexGen_EyeLinear = 2,
-    GxTexGen_Unk3 = 3,
+    GxTexGen_World = 2,
+    GxTexGen_View = 3,
     GxTexGen_ReflectionMap = 4,
     GxTexGen_Normal = 5,
     GxTexGen_SphereMap = 6,
@@ -191,7 +224,7 @@ class CGxCaps {
     /* 0004 */ int32_t m_pixelCenterOnEdge;
     /* 0008 */ int32_t m_texelCenterOnEdge;
     /* 000C */ int32_t m_numStreams;
-    /* 0010 */ int32_t unk_0010;
+    /* 0010 */ int32_t m_streamOffset;
     /* 0014 */ EGxColorFormat m_colorFormat;
     /* 0018 */ int32_t unk_0018;
     /* 001C */ uint32_t m_maxIndex;
@@ -201,7 +234,7 @@ class CGxCaps {
     /* 0068 */ uint32_t m_texNonPow2;
     /* 006C */ uint32_t m_texMaxSize [4];
     /* 007C */ int32_t m_rttFormat [13];
-    /* 00B0 */ uint32_t unk_00B0;
+    /* 00B0 */ uint32_t m_rttOriginUpperLeft; // Render-to-texture (RTT) coordinate origin is at the upper left.
     /* 00B4 */ int32_t m_shaderTargets [6];
     /* 00CC */ uint32_t m_shaderConstants [6];
     /* 00E4 */ int32_t m_texFilterTrilinear;
@@ -216,10 +249,10 @@ class CGxCaps {
     /* 0108 */ float m_pointScaleMax;
     /* 010C */ int32_t m_pointSprite;
     /* 0110 */ uint32_t m_blendFactor;
-    /* 0114 */ uint32_t unk_0114 [5];
+    /* 0114 */ uint32_t unused_0114 [5];
     /* 0128 */ int32_t m_oglRtAlpha;
     /* 012C */ int32_t m_stereoAvailable;
-    /* 0130 */ int32_t unk_0130;
+    /* 0130 */ int32_t m_shaderAlphaRef;
     /* 0134 */ int32_t unk_0134;
     /* 0138 */ int32_t unk_0138;
 };
@@ -337,7 +370,7 @@ enum EGxRenderState {
     GxRs_PointScaleMin = 81,
     GxRs_PointScaleMax = 82,
     GxRs_PointSprite = 83,
-    Unk84 = 84,
+    GxRs_BlendFactor = 84,
     GxRs_ColorMaterial = 85,
     GxRenderStates_Last = 86,
 };

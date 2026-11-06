@@ -26,6 +26,11 @@
 #include "Engine/Source/Tempest/CMath.h"
 #include "Engine/Source/Tempest/CRange.h"
 
+const float CParticleEmitter2::VEL_UPDATE_TIME = 0.033333335f;
+const float CParticleEmitter2::MIN_ZSOURCE = 0.001f;
+
+static const float s_maxTimeStep = 0.1f;
+
 // STATIC: 0x00B2D530
 static int32_t s_particleRenderEnable = 1;
 
@@ -60,7 +65,7 @@ CGxPool* CParticleEmitter2::s_indexPool;
 float CParticleEmitter2::s_viewDist;
 
 // STATIC: 0x00DCE690
-float CParticleEmitter2::s_rndTable[128];
+float CParticleEmitter2::s_rndTable[CParticleEmitter2::RND_TABLE_SIZE];
 
 // STATIC: 0x00DCE890
 uint8_t CParticleEmitter2::s_noIndexBuffer;
@@ -238,7 +243,7 @@ void CParticleEmitter2::SetModel(CM2Scene* scene, const char* name) {
         this->m_model = scene->CreateModel(name, 0);
 
         if (this->m_model) {
-            this->m_params.m_hasModel = 1;
+            this->m_params.m_particleType = CParticleEmitter2::PARTICLE_TYPE::PT_MODEL;
         }
     }
 }
@@ -257,8 +262,8 @@ void CParticleEmitter2::SetMaterial(const CParticleMat& material, CTexture* text
     }
 
     this->m_texture = reinterpret_cast<CTexture*>(HandleDuplicate(reinterpret_cast<HOBJECT>(texture)));
-    this->m_params.m_materialBlend = material.m_blendMode;
-    this->m_params.m_materialFlags = material.m_flags;
+    this->m_params.m_material.m_blendMode = material.m_blendMode;
+    this->m_params.m_material.m_flags = material.m_flags;
 }
 
 // VERIFY: 9ef515a2 auto
@@ -295,33 +300,33 @@ void CParticleEmitter2::SetTextureDimensions(uint32_t rows, uint32_t cols) {
 // OFFSET: 0x00978D00
 void CParticleEmitter2::SetParticleStyle(int32_t head, int32_t tail, float tailLength, int32_t clampTail) {
     if (head) {
-        this->m_flags |= 0x4;
+        this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::HEAD;
     } else {
-        this->m_flags &= ~0x4;
+        this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::HEAD;
     }
 
     if (tail) {
-        this->m_flags |= 0x8;
+        this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::TAIL;
     } else {
-        this->m_flags &= ~0x8;
+        this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::TAIL;
     }
 
     if (clampTail) {
-        this->m_flags |= 0x20000;
+        this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::CLAMP_TAIL;
     } else {
-        this->m_flags &= ~0x20000;
+        this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::CLAMP_TAIL;
     }
 
     this->m_vertsPerParticle = 0;
     this->m_indicesPerParticle = 0;
     this->m_params.m_tailLength = tailLength;
 
-    if (this->m_flags & 0x4) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::HEAD) {
         this->m_vertsPerParticle = 4;
         this->m_indicesPerParticle = 6;
     }
 
-    if (this->m_flags & 0x8) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::TAIL) {
         this->m_vertsPerParticle += 4;
         this->m_indicesPerParticle += 6;
     }
@@ -332,7 +337,7 @@ void CParticleEmitter2::SetParticleStyle(int32_t head, int32_t tail, float tailL
 void CParticleEmitter2::SetZsource(float zsource) {
     this->m_params.m_zsource = zsource;
 
-    if (fabs(zsource) < 0.001f) {
+    if (fabs(zsource) < MIN_ZSOURCE) {
         this->m_params.m_zsource = 0.0f;
     }
 }
@@ -357,9 +362,9 @@ void CParticleEmitter2::SetFollowParams(float speed1, float scale1, float speed2
 // OFFSET: 0x00978E30
 void CParticleEmitter2::SetChooseRandomTexture(int32_t choose) {
     if (this->m_textureRows * this->m_textureCols > 1 && choose) {
-        this->m_flags |= 0x100000;
+        this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::RANDOM_TEXTURE;
     } else {
-        this->m_flags &= ~0x100000;
+        this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::RANDOM_TEXTURE;
     }
 }
 
@@ -445,7 +450,7 @@ CImVector CParticleEmitter2::InterpolateColorTrack(float t) {
     float g;
     float b;
 
-    if (this->m_flags & 0x10) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::REPLACEMENT_COLORS) {
         r = (this->m_params.m_replacementColors[key1].x - this->m_params.m_replacementColors[key0].x) * blend + this->m_params.m_replacementColors[key0].x;
         g = (this->m_params.m_replacementColors[key1].y - this->m_params.m_replacementColors[key0].y) * blend + this->m_params.m_replacementColors[key0].y;
         b = blend * (this->m_params.m_replacementColors[key1].z - this->m_params.m_replacementColors[key0].z) + this->m_params.m_replacementColors[key0].z;
@@ -507,10 +512,10 @@ void CParticleEmitter2::CreateParticle(CParticle2& particle, float time, const C
     particle.m_position.y = 0.0f;
     particle.m_position.z = 0.0f;
 
-    if (!(this->m_flags & 0x200)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE)) {
         particle.m_position *= transform;
 
-        if (this->m_flags & 0x40000) {
+        if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::PROJECT) {
             this->ProjectParticle(particle);
         }
     }
@@ -530,7 +535,7 @@ void CParticleEmitter2::CreateParticle(CParticle2& particle, float time, const C
 void CParticleEmitter2::CreateParticle(CParticle2_Model& particle, float time, const C44Matrix& transform) {
     this->CreateParticle(static_cast<CParticle2&>(particle), time, transform);
 
-    if (!(this->m_flags & 0x200)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE)) {
         C33Matrix rotation(transform);
         C3Vector axis(rotation.a0, rotation.a1, rotation.a2);
         float lengthSq = axis.y * axis.y + axis.z * axis.z + axis.x * axis.x;
@@ -553,7 +558,7 @@ void CParticleEmitter2::CreateParticle(CParticle2_Model& particle, float time, c
     particle.m_angularVelocity.y = (tumbleY + 1.0f) * this->m_tumbleSpanY;
     particle.m_angularVelocity.z = (tumbleZ + 1.0f) * this->m_tumbleSpanZ;
 
-    if (this->m_flags & 0x10000) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::RANDOM_SPIN_DIRECTION) {
         float signZ = (CRandom::uint32_(this->m_random) & 1) ? 1.0f : -1.0f;
         float signY = (CRandom::uint32_(this->m_random) & 1) ? 1.0f : -1.0f;
         float signX = (CRandom::uint32_(this->m_random) & 1) ? 1.0f : -1.0f;
@@ -579,7 +584,7 @@ int32_t CParticleEmitter2::MoveParticle(CParticle2& particle, float deltaTime) {
         particle.m_velocity.FlushDenormals();
     }
 
-    if ((this->m_flags & 0x80000) && deltaTime + deltaTime < particle.m_age) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::FOLLOW) && deltaTime + deltaTime < particle.m_age) {
         particle.m_position.x = this->m_burstOffset.x + particle.m_position.x;
         particle.m_position.y = this->m_burstOffset.y + particle.m_position.y;
         particle.m_position.z = this->m_burstOffset.z + particle.m_position.z;
@@ -608,14 +613,14 @@ int32_t CParticleEmitter2::MoveParticle(CParticle2& particle, float deltaTime) {
 
     particle.m_velocity.FlushDenormals();
 
-    if (!(this->m_flags & 0x1000)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::KILL_OUTWARD_PARTICLES)) {
         return 1;
     }
 
     float dot;
     float x;
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         dot = particle.m_position.z * moveZ + particle.m_position.y * moveY;
         x = particle.m_position.x;
     } else {
@@ -683,7 +688,7 @@ void CParticleEmitter2::InterpolateAllTracks(const CParticle2& particle, CImVect
 
     if (this->m_params.m_headCellTrack->m_times.m_count) {
         *headCell = PartTrackSample(*this->m_params.m_headCellTrack, t);
-    } else if (this->m_flags & 0x100000) {
+    } else if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::RANDOM_TEXTURE) {
         *headCell = CRandom::dice_(this->m_textureRows * this->m_textureCols, seed);
     }
 
@@ -691,7 +696,7 @@ void CParticleEmitter2::InterpolateAllTracks(const CParticle2& particle, CImVect
         *tailCell = PartTrackSample(*this->m_params.m_tailCellTrack, t);
     }
 
-    if (this->m_flags & 0x800000) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::SCALE_VARIATION) {
         float variationY = CRandom::sfloat_(seed);
         float scaleX = CRandom::sfloat_(seed) * this->m_params.m_scaleVariationX + 1.0f;
         float scaleY = this->m_params.m_scaleVariationY * variationY + 1.0f;
@@ -762,7 +767,7 @@ void __stdcall CParticleEmitter2::RenderIndices(CGxBuf* buf) {
     }
 
     g_theGxDevicePtr->BufUnlock(buf, 0);
-    buf->unk_001C = 1;
+    buf->m_hasData = 1;
 }
 
 // VERIFY: 7d50dd44 manual
@@ -773,7 +778,7 @@ void CParticleEmitter2::FillOutParticleVertex(void* buffer, EGxVertexBufferForma
     vertex->m_position = static_cast<uint8_t*>(buffer) + GxVertexAttribOffset(format, GxVA_Position);
     vertex->m_positionStride = stride;
 
-    if (this->m_params.m_materialFlags & 0x1) {
+    if (this->m_params.m_material.m_flags & 0x1) {
         vertex->m_normalStride = stride;
         vertex->m_normal = static_cast<uint8_t*>(buffer) + GxVertexAttribOffset(format, GxVA_Normal);
     } else {
@@ -796,7 +801,7 @@ void CParticleEmitter2::RenderParticlesPrep(const C44Matrix* frameOfReference, c
     translate.d1 = -this->m_viewPos.y;
     translate.d2 = -this->m_viewPos.z;
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         s_particleXform = this->m_xform * translate * view;
     } else if (frameOfReference) {
         s_particleXform = *frameOfReference * translate * view;
@@ -808,13 +813,13 @@ void CParticleEmitter2::RenderParticlesPrep(const C44Matrix* frameOfReference, c
     s_particleNormal.y = view.c1;
     s_particleNormal.z = view.c2;
 
-    if (!(this->m_flags & 0x4000)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::USE_BILLBOARD_AXIS)) {
         return;
     }
 
     s_billboardXform = C33Matrix(s_particleXform);
 
-    if ((this->m_flags & 0x200) && fabs(this->m_xformScale) >= 0.00000023841858f) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) && fabs(this->m_xformScale) >= 0.00000023841858f) {
         s_billboardXform.Scale(1.0f / this->m_xformScale);
     }
 
@@ -839,7 +844,7 @@ void __stdcall CParticleEmitter2::RenderParticleVertices(CGxBuf* buf, EGxVertexB
         return;
     }
 
-    if (!CParticleEmitter2::s_indexBuf->unk_001C || !CParticleEmitter2::s_indexBuf->unk_001D) {
+    if (!CParticleEmitter2::s_indexBuf->m_hasData || !CParticleEmitter2::s_indexBuf->m_valid) {
         CParticleEmitter2::RenderIndices(CParticleEmitter2::s_indexBuf);
     }
 
@@ -868,22 +873,22 @@ int32_t CParticleEmitter2::RenderParticle(CParticle2_Model& particle, const C44M
     uint32_t twinkle = 0;
 
     if (this->m_twinkleOnOff < 1.0f || 0.0f != this->m_twinkleScaleSpan) {
-        twinkle = (static_cast<uint8_t>(CMath::fint_(this->m_twinkleFPS * particle.m_age)) + (reinterpret_cast<uintptr_t>(&particle) >> 5)) & 0x7F;
+        twinkle = (static_cast<uint8_t>(CMath::fint_(this->m_twinkleFPS * particle.m_age)) + (reinterpret_cast<uintptr_t>(&particle) >> 5)) & CParticleEmitter2::RND_TABLE_MASK;
     }
 
     if (this->m_twinkleOnOff < 1.0f && this->m_twinkleOnOff < CParticleEmitter2::s_rndTable[twinkle]) {
         CM2Model* model = particle.m_model;
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x80;
+            model->m_runtimeFlags &= ~0x80;
         } else {
-            model->m_fFlags &= ~0x8;
+            model->m_runtimeFlags &= ~0x8;
         }
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x20000;
+            model->m_runtimeFlags &= ~0x20000;
         } else {
-            model->m_fFlags &= ~0x10000;
+            model->m_runtimeFlags &= ~0x10000;
         }
 
         return 0;
@@ -905,7 +910,7 @@ int32_t CParticleEmitter2::RenderParticle(CParticle2_Model& particle, const C44M
     scale.x = scale.x * twinkleScale;
     scale.y = twinkleScale * scale.y;
 
-    if (!(this->m_flags & 0x200) && (this->m_flags & 0x400)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) && (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::TRANSFORM_SCALE)) {
         scale.x = scale.x * this->m_xformScale;
         scale.y = this->m_xformScale * scale.y;
     }
@@ -916,14 +921,14 @@ int32_t CParticleEmitter2::RenderParticle(CParticle2_Model& particle, const C44M
     transform.d1 = particle.m_position.y;
     transform.d2 = particle.m_position.z;
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         transform *= this->m_xform;
     } else if (frameOfReference) {
         transform *= *frameOfReference;
     }
 
     CM2Model* model = particle.m_model;
-    model->m_fFlags |= 0x8000;
+    model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
     model->m_worldTransform = transform;
 
     model = particle.m_model;
@@ -935,15 +940,15 @@ int32_t CParticleEmitter2::RenderParticle(CParticle2_Model& particle, const C44M
     model = particle.m_model;
 
     if (model->m_attachParent) {
-        model->m_fFlags |= 0x80;
+        model->m_runtimeFlags |= 0x80;
     } else {
-        model->m_fFlags |= 0x8;
+        model->m_runtimeFlags |= 0x8;
     }
 
     if (model->m_attachParent) {
-        model->m_fFlags |= 0x20000;
+        model->m_runtimeFlags |= 0x20000;
     } else {
-        model->m_fFlags |= 0x10000;
+        model->m_runtimeFlags |= 0x10000;
     }
 
     if (particle.m_model->IsLoaded(0, 0)) {
@@ -976,9 +981,9 @@ void CParticleEmitter2::SetParticleColors(const CImVector& color0, const CImVect
     this->m_params.m_replacementColors[2].y = color2.g;
     this->m_params.m_replacementColors[2].z = color2.b;
 
-    this->m_flags |= 0x10;
+    this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::REPLACEMENT_COLORS;
 
-    if (!(this->m_flags & 0x1000000)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::SIMPLE_TRACKS)) {
         return;
     }
 
@@ -1023,7 +1028,7 @@ void CParticleEmitter2::SetTwinkleScale(const CRange& scale) {
 void CParticleEmitter2::UpdateXform(const C44Matrix& transform, const C3Vector& viewPos, const C44Matrix* frameOfReference) {
     this->m_viewPos = viewPos;
 
-    if (!frameOfReference || (this->m_flags & 0x200)) {
+    if (!frameOfReference || (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE)) {
         this->m_xform = transform;
     } else {
         this->m_xform = transform * frameOfReference->AffineInverse();
@@ -1037,14 +1042,14 @@ void CParticleEmitter2::UpdateXform(const C44Matrix& transform, const C3Vector& 
 void CParticleEmitter2::InternalUpdate(float deltaTime, int32_t child) {
     float time = 0.0f;
 
-    if (deltaTime < 0.0f || (time = deltaTime, deltaTime <= 0.1f)) {
+    if (deltaTime < 0.0f || (time = deltaTime, deltaTime <= s_maxTimeStep)) {
         this->m_burstOffset = this->m_followOffset;
         this->StepUpdate(time, child);
         return;
     }
 
     float steps = floor(time * 10.0f);
-    float remainder = deltaTime - steps * 0.1f;
+    float remainder = deltaTime - steps * s_maxTimeStep;
     float maxSteps = floor(this->m_params.m_life * 10.0f);
 
     if (maxSteps < steps) {
@@ -1057,7 +1062,7 @@ void CParticleEmitter2::InternalUpdate(float deltaTime, int32_t child) {
     this->m_burstOffset = C3Vector(this->m_followOffset.x * scale, this->m_followOffset.y * scale, scale * this->m_followOffset.z);
 
     for (; count; count--) {
-        this->StepUpdate(0.1f, child);
+        this->StepUpdate(s_maxTimeStep, child);
     }
 
     this->StepUpdate(remainder, child);
@@ -1072,14 +1077,14 @@ static void RecursiveEmitterModelLoaded(CM2Model* model, void* arg) {
         return;
     }
 
-    if (!(model->m_fFlags & 1)) {
+    if (!(model->m_runtimeFlags & 1)) {
         model->WaitForLoad(nullptr);
     }
 
-    uint32_t count = 4;
+    uint32_t count = CParticleEmitter2::MAX_CHILD_EMITTERS;
 
-    if (model->m_shared->m_data->m_particles.m_count < 4) {
-        if (!(model->m_fFlags & 1)) {
+    if (model->m_shared->m_data->m_particles.m_count < CParticleEmitter2::MAX_CHILD_EMITTERS) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
@@ -1087,13 +1092,13 @@ static void RecursiveEmitterModelLoaded(CM2Model* model, void* arg) {
     }
 
     for (uint32_t i = 0; i < count; i++) {
-        if (!(model->m_fFlags & 1)) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
         CParticleEmitter2* child = model->m_particleEmitters[i];
         emitter->m_childEmitters[emitter->m_childEmitterCount++] = child;
-        child->m_flags |= 0x1;
+        child->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::DATA_EMITTING;
     }
 }
 
@@ -1114,12 +1119,12 @@ void CParticleEmitter2::CreateChildEmittersFromModel(CM2Scene* scene, const char
 // VERIFY: b2426889 manual
 // OFFSET: 0x0097AEF0
 void CParticleEmitter2::ChangeFrameOfReference(const C44Matrix* matrix) {
-    if (!(this->m_flags & 0x200)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE)) {
         uint32_t count = this->m_liveList.Count();
 
         for (uint32_t i = 0; i < count; i++) {
             uint32_t index = this->m_liveList[i];
-            CParticle2* particle = this->m_params.m_hasModel ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
+            CParticle2* particle = this->m_params.m_particleType ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
 
             particle->m_position *= *matrix;
 
@@ -1141,7 +1146,7 @@ void CParticleEmitter2::ChangeFrameOfReference(const C44Matrix* matrix) {
 void CParticleEmitter2::SetSimpleColorKeys() {
     SimpleKey* keys = this->m_params.m_simpleKeys;
 
-    if (this->m_flags & 0x10) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::REPLACEMENT_COLORS) {
         keys[0].m_color.r = static_cast<uint8_t>(CMath::fint_(this->m_params.m_replacementColors[0].x));
         keys[0].m_color.g = static_cast<uint8_t>(CMath::fint_(this->m_params.m_replacementColors[0].y));
         keys[0].m_color.b = static_cast<uint8_t>(CMath::fint_(this->m_params.m_replacementColors[0].z));
@@ -1406,7 +1411,7 @@ int32_t CParticleEmitter2::HasLiveParticles() {
 uint32_t CParticleEmitter2::GetNumParticleModels() {
     uint32_t count = 0;
 
-    if (this->m_params.m_hasModel == 1) {
+    if (this->m_params.m_particleType == CParticleEmitter2::PARTICLE_TYPE::PT_MODEL) {
         count = this->m_liveList.Count();
     }
 
@@ -1420,7 +1425,7 @@ uint32_t CParticleEmitter2::GetNumParticleModels() {
 // VERIFY: 8d3bef82 auto
 // OFFSET: 0x0097BA70
 CM2Model* CParticleEmitter2::GetParticleModelInternal(uint32_t& index) {
-    if (this->m_params.m_hasModel == 1) {
+    if (this->m_params.m_particleType == CParticleEmitter2::PARTICLE_TYPE::PT_MODEL) {
         uint32_t count = this->m_liveList.Count();
 
         if (index < count) {
@@ -1535,7 +1540,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
     uint32_t twinkle = 0;
 
     if (this->m_twinkleOnOff < 1.0f || 0.0f != this->m_twinkleScaleSpan) {
-        twinkle = (static_cast<uint8_t>(CMath::fint_(this->m_twinkleFPS * particle.m_age)) + (reinterpret_cast<uintptr_t>(&particle) >> 5)) & 0x7F;
+        twinkle = (static_cast<uint8_t>(CMath::fint_(this->m_twinkleFPS * particle.m_age)) + (reinterpret_cast<uintptr_t>(&particle) >> 5)) & CParticleEmitter2::RND_TABLE_MASK;
     }
 
     if (this->m_twinkleOnOff < 1.0f && this->m_twinkleOnOff < CParticleEmitter2::s_rndTable[twinkle]) {
@@ -1547,7 +1552,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
     int32_t headCell;
     int32_t tailCell;
 
-    if (this->m_flags & 0x1000000) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::SIMPLE_TRACKS) {
         this->InterpolateAllTracksSimple(particle, &color, &scale, &headCell, &tailCell);
     } else {
         this->InterpolateAllTracks(particle, &color, &scale, &headCell, &tailCell);
@@ -1567,7 +1572,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
     scale.x = scale.x * twinkleScale;
     scale.y = twinkleScale * scale.y;
 
-    if (this->m_flags & 0x400) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::TRANSFORM_SCALE) {
         scale.x = scale.x * this->m_xformScale;
         scale.y = this->m_xformScale * scale.y;
     }
@@ -1575,13 +1580,13 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
     C3Vector center = particle.m_position * s_particleXform;
     uint32_t flags = this->m_flags;
 
-    if (flags & 0x4) {
+    if (flags & CParticleEmitter2::RUNTIME_FLAGS::HEAD) {
         uint32_t column = headCell & (this->m_textureCols - 1);
         float u = column * this->m_textureCellWidth;
         int32_t row = headCell >> this->m_textureCellShift;
         float v = row * this->m_textureCellHeight;
 
-        if ((flags & 0x200000) && particle.m_velocity.z * particle.m_velocity.z + particle.m_velocity.y * particle.m_velocity.y + particle.m_velocity.x * particle.m_velocity.x > 0.00000023841858f) {
+        if ((flags & CParticleEmitter2::RUNTIME_FLAGS::VELOCITY_ALIGNED_HEAD) && particle.m_velocity.z * particle.m_velocity.z + particle.m_velocity.y * particle.m_velocity.y + particle.m_velocity.x * particle.m_velocity.x > 0.00000023841858f) {
             C3Vector reverse(-particle.m_velocity.x, -particle.m_velocity.y, -particle.m_velocity.z);
             C3Vector direction = TransformDirection(reverse, s_particleXform);
             C2Vector flat(direction);
@@ -1612,7 +1617,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
                 AddVertex(this->m_worldBounds, vertex, position, color, texCoord);
             }
         } else if (0.0f == this->m_params.m_spin && 0.0f == this->m_params.m_spinVariation) {
-            if (flags & 0x4000) {
+            if (flags & CParticleEmitter2::RUNTIME_FLAGS::USE_BILLBOARD_AXIS) {
                 for (uint32_t i = 0; i < 4; i++) {
                     float offsetX = s_cornerOffsets[i][0] * scale.x;
                     float offsetY = s_cornerOffsets[i][1] * scale.y;
@@ -1634,11 +1639,11 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
         } else {
             float angle = particle.m_age * spinRate + spin;
 
-            if ((flags & 0x10000) && (reinterpret_cast<uintptr_t>(&particle) & 0x20)) {
+            if ((flags & CParticleEmitter2::RUNTIME_FLAGS::RANDOM_SPIN_DIRECTION) && (reinterpret_cast<uintptr_t>(&particle) & 0x20)) {
                 angle = -angle;
             }
 
-            if (flags & 0x4000) {
+            if (flags & CParticleEmitter2::RUNTIME_FLAGS::USE_BILLBOARD_AXIS) {
                 for (uint32_t i = 0; i < 4; i++) {
                     C33Matrix rotation = C33Matrix::Rotation(angle, this->m_billboardAxis, true);
                     float offsetX = s_cornerOffsets[i][0] * scale.x;
@@ -1680,7 +1685,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
         }
     }
 
-    if (!(this->m_flags & 0x8)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::TAIL)) {
         return 1;
     }
 
@@ -1691,7 +1696,7 @@ int32_t CParticleEmitter2::BuildVertex(const CParticle2& particle, ParticleVerte
 
     float tailLength = this->m_params.m_tailLength;
 
-    if ((this->m_flags & 0x20000) && tailLength > particle.m_age) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::CLAMP_TAIL) && tailLength > particle.m_age) {
         tailLength = particle.m_age;
     }
 
@@ -1778,7 +1783,7 @@ void CParticleEmitter2::DetermineIfSimple() {
         return;
     }
 
-    if (0.0f != this->m_params.m_lifeVariation || (!headKeys && (this->m_flags & 0x100000))) {
+    if (0.0f != this->m_params.m_lifeVariation || (!headKeys && (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::RANDOM_TEXTURE))) {
         return;
     }
 
@@ -1822,13 +1827,13 @@ void CParticleEmitter2::DetermineIfSimple() {
         return;
     }
 
-    this->m_params.m_simpleKeys = new (__FILE__, __LINE__) SimpleKey[2];
+    this->m_params.m_simpleKeys = new (__FILE__, __LINE__) SimpleKey[CParticleEmitter2::NUM_PARTICLE_KEYS];
 
     if (!this->m_params.m_simpleKeys) {
         return;
     }
 
-    this->m_flags |= 0x1000000;
+    this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::SIMPLE_TRACKS;
     this->m_params.m_simpleMidTime = midTime * 0.000030518509f;
 
     this->SetSimpleColorKeys();
@@ -1875,7 +1880,7 @@ void CParticleEmitter2::EmitParticle(float time, const C44Matrix& transform) {
     uint32_t index = PopIndex(this->m_freeList);
     this->m_liveList.New(index);
 
-    if (this->m_params.m_hasModel) {
+    if (this->m_params.m_particleType) {
         this->CreateParticle(this->m_particleModels[index], time, transform);
     } else {
         this->CreateParticle(this->m_particles[index], time, transform);
@@ -1887,7 +1892,7 @@ void CParticleEmitter2::EmitParticle(float time, const C44Matrix& transform) {
 void CParticleEmitter2::EmitNewParticles(float deltaTime, const C44Matrix& transform) {
     float distanceScale = 1.0f;
 
-    if (!(this->m_flags & 0x400000)) {
+    if (!(this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::IGNORE_DISTANCE)) {
         distanceScale = 1.0f - (CParticleEmitter2::s_viewDist - 50.0f) * 0.02f;
 
         if (distanceScale < 0.25f) {
@@ -1900,24 +1905,24 @@ void CParticleEmitter2::EmitNewParticles(float deltaTime, const C44Matrix& trans
     float rate = CRandom::sfloat_(this->m_random) * this->m_params.m_emissionRateVariation + this->m_params.m_emissionRate;
     rate = ParticleSystemManager::GetScaler() * rate * distanceScale;
 
-    if ((this->m_flags & 0x40) && (this->m_flags & 0x2)) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::BURST_PENDING) && (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::USER_ENABLED)) {
         int32_t burst = static_cast<int32_t>(rate);
 
         while (this->m_freeList.Count() && burst--) {
             this->EmitParticle(0.0f, transform);
         }
 
-        this->m_flags &= ~0x40;
+        this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::BURST_PENDING;
     }
 
-    if ((this->m_flags & 0x3) != 0x3) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::EMISSION_ENABLED_MASK) != CParticleEmitter2::RUNTIME_FLAGS::EMISSION_ENABLED_MASK) {
         return;
     }
 
     uint32_t emitted = 0;
     this->m_emitAccumulator = rate * deltaTime + this->m_emitAccumulator;
 
-    if (this->m_flags & 0x2000) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::EMIT_ALONG_MOTION) {
         C44Matrix& xform = const_cast<C44Matrix&>(transform);
         C3Vector position(xform.d0, xform.d1, xform.d2);
         C3Vector delta(position.x - this->m_parentPosition.x, position.y - this->m_parentPosition.y, position.z - this->m_parentPosition.z);
@@ -1966,7 +1971,7 @@ int32_t CParticleEmitter2::UpdateLiveParticle(float deltaTime, CParticle2* parti
     C3Vector position = particle->m_position;
     int32_t alive;
 
-    if (this->m_params.m_hasModel) {
+    if (this->m_params.m_particleType) {
         alive = this->MoveParticle(*static_cast<CParticle2_Model*>(particle), deltaTime);
     } else {
         alive = this->MoveParticle(*particle, deltaTime);
@@ -1990,11 +1995,11 @@ int32_t CParticleEmitter2::UpdateLiveParticle(float deltaTime, CParticle2* parti
         this->m_xform.d1 = particle->m_position.y;
         this->m_xform.d2 = particle->m_position.z;
 
-        if (child->m_flags & 0x800) {
+        if (child->m_flags & CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY) {
             child->m_parentVelocity = particle->m_velocity;
         }
 
-        if (child->m_flags & 0x2000) {
+        if (child->m_flags & CParticleEmitter2::RUNTIME_FLAGS::EMIT_ALONG_MOTION) {
             child->m_parentPosition = position;
         }
 
@@ -2015,7 +2020,7 @@ void CParticleEmitter2::StepUpdate(float deltaTime, int32_t child) {
         return;
     }
 
-    if ((this->m_flags & 0x3) == 0x3 || ((this->m_flags & 0x40) && (this->m_flags & 0x2))) {
+    if ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::EMISSION_ENABLED_MASK) == CParticleEmitter2::RUNTIME_FLAGS::EMISSION_ENABLED_MASK || ((this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::BURST_PENDING) && (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::USER_ENABLED))) {
         this->Sync();
     }
 
@@ -2034,7 +2039,7 @@ void CParticleEmitter2::StepUpdate(float deltaTime, int32_t child) {
 
         while (i < this->m_liveList.Count()) {
             uint32_t index = this->m_liveList[i];
-            CParticle2* particle = this->m_params.m_hasModel ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
+            CParticle2* particle = this->m_params.m_particleType ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
             particle->m_age = particle->m_age + deltaTime;
 
             if (particle->m_age < life) {
@@ -2052,7 +2057,7 @@ void CParticleEmitter2::StepUpdate(float deltaTime, int32_t child) {
         while (i < this->m_liveList.Count()) {
             float life = 0.001f;
             uint32_t index = this->m_liveList[i];
-            CParticle2* particle = this->m_params.m_hasModel ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
+            CParticle2* particle = this->m_params.m_particleType ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
             particle->m_age = particle->m_age + deltaTime;
 
             float particleLife = particle->m_lifeSeed.m_value * this->m_params.m_lifeVariation * 0.000030518509f + this->m_params.m_life;
@@ -2128,7 +2133,7 @@ CSortableParticleRecord CSortableParticleQueue::Pop() {
 // VERIFY: eeea2b31 manual
 // OFFSET: 0x00979250
 CParticleEmitter2::Params::Params() {
-    this->m_hasModel = 0;
+    this->m_particleType = CParticleEmitter2::PARTICLE_TYPE::PT_QUAD;
     this->m_emissionRate = 0.0f;
     this->m_emissionRateVariation = 0.0f;
     this->m_life = 0.0f;
@@ -2142,8 +2147,8 @@ CParticleEmitter2::Params::Params() {
     this->m_initialSpinVariation = 0.0f;
     this->m_spin = 0.0f;
     this->m_spinVariation = 0.0f;
-    this->m_materialBlend = 0;
-    this->m_materialFlags |= 0x7;
+    this->m_material.m_blendMode = 0;
+    this->m_material.m_flags |= 0x7;
     this->m_colorTrack = nullptr;
     this->m_alphaTrack = nullptr;
     this->m_scaleTrack = nullptr;
@@ -2164,17 +2169,17 @@ CParticleEmitter2::CParticleEmitter2() : m_random(0) {
     this->m_textureCellWidth = 1.0f;
     this->m_textureCellHeight = 1.0f;
     this->m_renderedParticles = 0;
-    this->m_emitterType = 0;
-    this->m_childEmitterCount = 4;
+    this->m_emitterType = PET_BASE_EMITTER;
+    this->m_childEmitterCount = CParticleEmitter2::MAX_CHILD_EMITTERS;
     this->m_model = nullptr;
     this->m_childModel = nullptr;
     this->m_vertsPerParticle = 0;
     this->m_indicesPerParticle = 0;
     this->m_alphaScale = 1.0f;
     this->m_texture = nullptr;
-    this->unk_012C = 0;
+    this->unused_012C = 0;
     this->m_twinkleFPS = 10.0f;
-    this->m_flags = 0x6;
+    this->m_flags = CParticleEmitter2::RUNTIME_FLAGS::INITIAL_FLAGS;
     this->m_textureRows = 1;
     this->m_twinkleOnOff = 1.0f;
     this->m_textureCols = 1;
@@ -2201,7 +2206,7 @@ CParticleEmitter2::CParticleEmitter2() : m_random(0) {
     this->m_worldBounds.t.x = -3.4028235e38f;
     this->m_worldBounds.t.y = -3.4028235e38f;
     this->m_worldBounds.t.z = -3.4028235e38f;
-    this->unk_0230 = 0;
+    this->unused_0230 = 0;
 
     this->m_random.SetSeed((rand() << 16) | static_cast<uint16_t>(rand()));
     this->m_childEmitterCount = 0;
@@ -2226,7 +2231,7 @@ void CParticleEmitter2::SyncReserve(uint32_t count, uint32_t used, uint32_t spar
 
     uint32_t shortfall = target - (used + spare);
 
-    if (this->m_params.m_hasModel) {
+    if (this->m_params.m_particleType) {
         if (shortfall + this->m_particleModels.Count() > this->m_particleModels.m_alloc) {
             this->m_particleModels.ReallocData(shortfall + this->m_particleModels.Count());
         }
@@ -2246,7 +2251,7 @@ void CParticleEmitter2::SyncReserve(uint32_t count, uint32_t used, uint32_t spar
 // VERIFY: e29c25ff manual
 // OFFSET: 0x0097E480
 void CParticleEmitter2::SyncAllocation(uint32_t count) {
-    if (this->m_params.m_hasModel) {
+    if (this->m_params.m_particleType) {
         uint32_t oldCount = this->m_particleModels.Count();
 
         if (oldCount >= count) {
@@ -2298,10 +2303,10 @@ void CParticleEmitter2::SyncAllocation(uint32_t count) {
 void CParticleEmitter2::BuildParticleVertices(ParticleVertex& vertex, uint32_t count, const C44Matrix& transform) {
     uint32_t i = 0;
 
-    if (this->m_flags & 0x20) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::SORT_PARTICLES) {
         for (; i < this->m_liveList.Count(); i++) {
             uint32_t index = this->m_liveList[i];
-            CParticle2* particle = this->m_params.m_hasModel ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
+            CParticle2* particle = this->m_params.m_particleType ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
             float depth = s_particleXform.c2 * particle->m_position.z + s_particleXform.b2 * particle->m_position.y + s_particleXform.a2 * particle->m_position.x + s_particleXform.d2;
             CParticleEmitter2::s_pq.Push(depth, particle);
         }
@@ -2313,7 +2318,7 @@ void CParticleEmitter2::BuildParticleVertices(ParticleVertex& vertex, uint32_t c
     } else {
         for (; i < count; i++) {
             uint32_t index = this->m_liveList[i];
-            CParticle2* particle = this->m_params.m_hasModel ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
+            CParticle2* particle = this->m_params.m_particleType ? static_cast<CParticle2*>(&this->m_particleModels[index]) : &this->m_particles[index];
             this->BuildVertex(*particle, vertex);
         }
     }
@@ -2360,7 +2365,7 @@ void CParticleEmitter2::RenderParticles(const C44Matrix* frameOfReference, void*
         count = this->m_liveList.Count();
     }
 
-    EGxVertexBufferFormat format = (this->m_params.m_materialFlags & 0x1) ? GxVBF_PNCT : GxVBF_PCT;
+    EGxVertexBufferFormat format = (this->m_params.m_material.m_flags & 0x1) ? GxVBF_PNCT : GxVBF_PCT;
 
     if (!buffer) {
         buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, GxVertexSize(format), count * this->m_vertsPerParticle);
@@ -2374,7 +2379,7 @@ void CParticleEmitter2::RenderParticles(const C44Matrix* frameOfReference, void*
 
     if (buf) {
         g_theGxDevicePtr->BufUnlock(buf, 0);
-        buf->unk_001C = 1;
+        buf->m_hasData = 1;
 
         if (this->m_renderedParticles) {
             CParticleEmitter2::RenderParticleVertices(buf, format, vertex.m_count, this->m_renderedParticles * this->m_indicesPerParticle);
@@ -2392,7 +2397,7 @@ void CParticleEmitter2::PlaceParticleModels(const C44Matrix* frameOfReference) {
 
     uint32_t flags = this->m_flags;
 
-    if (!(flags & 0x20)) {
+    if (!(flags & CParticleEmitter2::RUNTIME_FLAGS::SORT_PARTICLES)) {
         for (uint32_t i = 0; i < this->m_liveList.Count(); i++) {
             this->RenderParticle(this->m_particleModels[this->m_liveList[i]], frameOfReference);
         }
@@ -2410,7 +2415,7 @@ void CParticleEmitter2::PlaceParticleModels(const C44Matrix* frameOfReference) {
     xform.c2 = 1.0f;
     xform.d2 = 0.0f;
 
-    if (flags & 0x200) {
+    if (flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         xform = this->m_xform * view;
     } else if (frameOfReference) {
         xform = *frameOfReference * view;
@@ -2448,7 +2453,7 @@ void CParticleEmitter2::Render(const C44Matrix* frameOfReference, void* buffer, 
 
     this->m_batchFlags ^= (first ^ this->m_batchFlags) & 0x1;
 
-    if (!this->m_params.m_hasModel) {
+    if (!this->m_params.m_particleType) {
         this->RenderParticles(frameOfReference, buffer);
     }
 }
@@ -2471,13 +2476,13 @@ void CParticleEmitter2::Update(float deltaTime, const C44Matrix& transform, cons
     }
 
     if (fabs(deltaTime) < 0.00000023841858f) {
-        this->m_flags |= 0x100;
+        this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::UNKNOWN_00000100;
         return;
     }
 
     float zero;
 
-    if (this->m_flags & 0x80000) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::FOLLOW) {
         this->m_followOffset.x = this->m_xform.d0 - this->m_parentPosition.x;
         this->m_followOffset.y = this->m_xform.d1 - this->m_parentPosition.y;
         this->m_followOffset.z = this->m_xform.d2 - this->m_parentPosition.z;
@@ -2505,10 +2510,10 @@ void CParticleEmitter2::Update(float deltaTime, const C44Matrix& transform, cons
         zero = 0.0f;
     }
 
-    if (this->m_flags & 0x800) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY) {
         this->m_ivelTimer = this->m_ivelTimer + deltaTime;
 
-        if (this->m_ivelTimer > 0.033333335f) {
+        if (this->m_ivelTimer > VEL_UPDATE_TIME) {
             float rate = this->m_ivelTimer * 29.999998f;
             this->m_ivelTimer = zero;
 
@@ -2528,9 +2533,9 @@ void CParticleEmitter2::Update(float deltaTime, const C44Matrix& transform, cons
     }
 
     this->InternalUpdate(deltaTime, 0);
-    this->m_flags |= 0x80;
+    this->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::UNKNOWN_00000080;
 
-    if (this->m_params.m_hasModel == 1) {
+    if (this->m_params.m_particleType == CParticleEmitter2::PARTICLE_TYPE::PT_MODEL) {
         this->PlaceParticleModels(frameOfReference);
     }
 }
@@ -2545,8 +2550,8 @@ void CParticleEmitter2::Sync() {
         CParticleEmitter2* child = this->m_childEmitters[i];
         uint32_t childCount = static_cast<uint32_t>(count * ((child->m_params.m_lifeVariation + child->m_params.m_life) * (child->m_params.m_emissionRateVariation + child->m_params.m_emissionRate) * 1.15f));
 
-        if (childCount > 0x1000) {
-            childCount = 0x1000;
+        if (childCount > CParticleEmitter2::MAX_RECURSIVE_PARTICLES) {
+            childCount = CParticleEmitter2::MAX_RECURSIVE_PARTICLES;
         }
 
         child->SyncAllocation(childCount);
@@ -2563,12 +2568,12 @@ CParticleEmitter2::CParticleEmitter2(const CParticleEmitter2& source, int32_t co
     this->m_textureCellHeight = source.m_textureCellHeight;
     this->m_priorityPlane = source.m_priorityPlane;
     this->m_emitterType = source.m_emitterType;
-    this->m_childEmitterCount = 4;
+    this->m_childEmitterCount = CParticleEmitter2::MAX_CHILD_EMITTERS;
     this->m_vertsPerParticle = source.m_vertsPerParticle;
     this->m_indicesPerParticle = source.m_indicesPerParticle;
     this->m_textureRows = source.m_textureRows;
     this->m_textureCols = source.m_textureCols;
-    this->unk_012C = source.unk_012C;
+    this->unused_012C = source.unused_012C;
     this->m_alphaScale = source.m_alphaScale;
     this->m_flags = source.m_flags;
     this->m_twinkleFPS = source.m_twinkleFPS;
@@ -2596,7 +2601,7 @@ CParticleEmitter2::CParticleEmitter2(const CParticleEmitter2& source, int32_t co
     this->m_worldBounds.t.x = 0.0f;
     this->m_worldBounds.t.y = 0.0f;
     this->m_worldBounds.t.z = 0.0f;
-    this->unk_0230 = 0;
+    this->unused_0230 = 0;
 
     this->m_random.SetSeed((rand() << 16) | static_cast<uint16_t>(rand()));
     this->m_childEmitterCount = source.m_childEmitterCount;
@@ -2618,7 +2623,7 @@ CParticleEmitter2::CParticleEmitter2(const CParticleEmitter2& source, int32_t co
     }
 
     this->m_texture = reinterpret_cast<CTexture*>(HandleDuplicate(reinterpret_cast<HOBJECT>(source.m_texture)));
-    this->m_flags &= ~0x80;
+    this->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::UNKNOWN_00000080;
 
     if (!copyParticles || (!source.m_freeList.m_count && !source.m_liveList.m_count)) {
         return;
@@ -2634,7 +2639,7 @@ CParticleEmitter2::CParticleEmitter2(const CParticleEmitter2& source, int32_t co
 
     uint32_t liveCount = source.m_liveList.m_count;
 
-    if (this->m_params.m_hasModel) {
+    if (this->m_params.m_particleType) {
         for (uint32_t i = 0; i < liveCount; i++) {
             uint32_t index = source.m_liveList.m_data[i];
             *this->m_liveList.New() = index;
@@ -2765,7 +2770,7 @@ void CSortableParticleQueue::Push(float depth, CParticle2* particle) {
 CPlaneParticleEmitter::CPlaneParticleEmitter() {
     this->m_width = 0.0f;
     this->m_height = 0.0f;
-    this->m_emitterType = 1;
+    this->m_emitterType = PET_PLANE_EMITTER;
     this->m_latitude = 0.0f;
     this->m_longitude = 0.0f;
 }
@@ -2808,7 +2813,7 @@ void CPlaneParticleEmitter::SetLongitude(float longitude) {
 CSphereParticleEmitter::CSphereParticleEmitter() {
     this->m_minRadius = 0.0f;
     this->m_maxRadius = 0.0f;
-    this->m_emitterType = 2;
+    this->m_emitterType = PET_SPHERE_EMITTER;
     this->m_latitude = 0.0f;
     this->m_longitude = 0.0f;
 }
@@ -2852,7 +2857,7 @@ void CSphereParticleEmitter::SetLongitude(float longitude) {
 // VERIFY: 32c67748 auto
 // OFFSET: 0x009814E0
 void CSplineParticleEmitter::SetEmissionRate(float rate) {
-    this->m_ratePerUnit = rate;
+    this->m_requestedEmissionRate = rate;
     this->m_params.m_emissionRate = rate * this->m_end;
 }
 
@@ -2918,7 +2923,7 @@ void CPlaneParticleEmitter::CreateParticle(CParticle2& particle, float time, con
         velocity.z = scale * direction.z;
     }
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         particle.m_velocity = velocity;
     } else {
         particle.m_velocity.x = transform.b0 * velocity.y + transform.c0 * velocity.z + transform.a0 * velocity.x;
@@ -2926,12 +2931,12 @@ void CPlaneParticleEmitter::CreateParticle(CParticle2& particle, float time, con
         particle.m_velocity.z = velocity.z * transform.c2 + (velocity.y * transform.b2 + velocity.x * transform.a2);
         particle.m_position *= transform;
 
-        if (this->m_flags & 0x40000) {
+        if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::PROJECT) {
             this->ProjectParticle(particle);
         }
     }
 
-    if (this->m_flags & 0x800) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY) {
         float scale = CRandom::sfloat_(this->m_random) * this->m_params.m_variation + 1.0f;
         particle.m_velocity.x = this->m_parentVelocity.x * scale + particle.m_velocity.x;
         particle.m_velocity.y = this->m_parentVelocity.y * scale + particle.m_velocity.y;
@@ -2978,7 +2983,7 @@ void CSphereParticleEmitter::CreateParticle(CParticle2& particle, float time, co
         }
 
         velocity = direction;
-    } else if (this->m_flags & 0x8000) {
+    } else if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::SPHERE_Z_VELOCITY) {
         velocity = C3Vector(0.0f, 0.0f, 1.0f);
     } else {
         velocity = direction;
@@ -2989,7 +2994,7 @@ void CSphereParticleEmitter::CreateParticle(CParticle2& particle, float time, co
     velocity.y = velocity.y * speed;
     velocity.z = speed * velocity.z;
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         particle.m_velocity = velocity;
     } else {
         particle.m_velocity.x = transform.c0 * velocity.z + transform.b0 * velocity.y + transform.a0 * velocity.x;
@@ -2997,12 +3002,12 @@ void CSphereParticleEmitter::CreateParticle(CParticle2& particle, float time, co
         particle.m_velocity.z = velocity.y * transform.b2 + velocity.z * transform.c2 + velocity.x * transform.a2;
         particle.m_position *= transform;
 
-        if (this->m_flags & 0x40000) {
+        if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::PROJECT) {
             this->ProjectParticle(particle);
         }
     }
 
-    if (this->m_flags & 0x800) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY) {
         float scale = CRandom::sfloat_(this->m_random) * this->m_params.m_variation + 1.0f;
         particle.m_velocity.x = this->m_parentVelocity.x * scale + particle.m_velocity.x;
         particle.m_velocity.y = this->m_parentVelocity.y * scale + particle.m_velocity.y;
@@ -3038,7 +3043,7 @@ void CSplineParticleEmitter::SetHeight(float height) {
     if (fabs(end - this->m_end) >= 0.00000023841858f) {
         this->m_end = end;
         this->m_emitAtEnd = 1;
-        this->m_params.m_emissionRate = end * this->m_ratePerUnit;
+        this->m_params.m_emissionRate = end * this->m_requestedEmissionRate;
     }
 }
 
@@ -3050,8 +3055,8 @@ void CSplineParticleEmitter::SetLatitude(float latitude) {
 
 // VERIFY: 027aa93b auto
 // OFFSET: 0x009814D0
-void CSplineParticleEmitter::SetLongitude(float longitude) {
-    this->m_longitude = longitude;
+void CSplineParticleEmitter::SetLongitude(float radius) {
+    this->m_radius = radius;
 }
 
 // VERIFY: 4df0155e manual
@@ -3091,8 +3096,8 @@ void CSplineParticleEmitter::CreateParticle(CParticle2& particle, float time, co
             C33Matrix rotation = C33Matrix::Rotation(CRandom::sfloat_(this->m_random) * this->m_latitude, tangent, true);
             C3Vector direction = up * rotation;
 
-            if (0.0f != this->m_longitude) {
-                C3Vector offset(direction.x * this->m_longitude, direction.y * this->m_longitude, this->m_longitude * direction.z);
+            if (0.0f != this->m_radius) {
+                C3Vector offset(direction.x * this->m_radius, direction.y * this->m_radius, this->m_radius * direction.z);
                 float distance = CRandom::ufloat_(this->m_random);
                 particle.m_position.x = offset.x * distance + particle.m_position.x;
                 particle.m_position.y = offset.y * distance + particle.m_position.y;
@@ -3107,7 +3112,7 @@ void CSplineParticleEmitter::CreateParticle(CParticle2& particle, float time, co
         velocity = C3Vector(direction.x * scale, direction.y * scale, scale * direction.z);
     }
 
-    if (this->m_flags & 0x200) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::LOCAL_SPACE) {
         particle.m_velocity = velocity;
     } else {
         particle.m_velocity.x = transform.a0 * velocity.x + transform.b0 * velocity.y + transform.c0 * velocity.z;
@@ -3115,12 +3120,12 @@ void CSplineParticleEmitter::CreateParticle(CParticle2& particle, float time, co
         particle.m_velocity.z = velocity.z * transform.c2 + (velocity.x * transform.a2 + velocity.y * transform.b2);
         particle.m_position *= transform;
 
-        if (this->m_flags & 0x40000) {
+        if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::PROJECT) {
             this->ProjectParticle(particle);
         }
     }
 
-    if (this->m_flags & 0x800) {
+    if (this->m_flags & CParticleEmitter2::RUNTIME_FLAGS::INHERIT_VELOCITY) {
         float scale = CRandom::sfloat_(this->m_random) * this->m_params.m_variation + 1.0f;
         particle.m_velocity.x = this->m_parentVelocity.x * scale + particle.m_velocity.x;
         particle.m_velocity.y = this->m_parentVelocity.y * scale + particle.m_velocity.y;
@@ -3134,10 +3139,10 @@ CSplineParticleEmitter::CSplineParticleEmitter() {
     this->m_start = 0.0f;
     this->m_end = 0.0f;
     this->m_latitude = 0.0f;
-    this->m_emitterType = 3;
-    this->m_longitude = 0.0f;
+    this->m_emitterType = PET_SPLINE_EMITTER;
+    this->m_radius = 0.0f;
     this->m_emitAtEnd = 0;
-    this->m_ratePerUnit = 0.0f;
+    this->m_requestedEmissionRate = 0.0f;
 }
 
 // VERIFY: e9bf0ccf manual
@@ -3151,8 +3156,8 @@ CSplineParticleEmitter::CSplineParticleEmitter(const CSplineParticleEmitter& sou
     this->m_start = source.m_start;
     this->m_end = source.m_end;
     this->m_latitude = source.m_latitude;
-    this->m_longitude = source.m_longitude;
-    this->m_ratePerUnit = source.m_ratePerUnit;
+    this->m_radius = source.m_radius;
+    this->m_requestedEmissionRate = source.m_requestedEmissionRate;
     this->m_emitAtEnd = source.m_emitAtEnd;
     this->m_spline = source.m_spline;
 }

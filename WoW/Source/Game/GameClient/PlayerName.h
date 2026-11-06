@@ -17,6 +17,15 @@ struct WORLDTEXTSTRING;
 
 class PLAYERNAMEDESC {
     public:
+    // Local name/text lifecycle word;separate from model visibility and nameplates.
+    enum NAME_FLAGS : uint32_t {
+        NAME_REGENERATE = 0x1,
+        COLOR_UPDATE = 0x2,
+        INITIAL_DIRTY = 3,
+        OBJECT_NAME = 0x4,
+        SHOWING = 0x8,
+    };
+
     /* 0000 */ TSLink<PLAYERNAMEDESC> m_link;
     /* 0008 */ CGxString* m_string;
     /* 000C */ CImVector m_color;
@@ -25,7 +34,7 @@ class PLAYERNAMEDESC {
     /* 001C */ uint32_t m_renderFrame;
     /* 0020 */ WORLDTEXTSTRING* m_worldText [4];
     /* 0030 */ float m_zOffset;
-    /* 0034 */ uint32_t unk_0034;
+    /* 0034 */ uint32_t unused_0034;
 
     static int32_t ShouldRender(CGObject_C* object, uint32_t raidTarget);
 

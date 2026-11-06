@@ -14,14 +14,14 @@ struct lua_State;
 
 class CGKnowledgeBase {
     public:
-    /* 0000 */ uint8_t unk_0000[4];
-    /* 0004 */ uint32_t unk_0004;
-    /* 0008 */ uint8_t unk_0008[44];
-    /* 0034 */ uint32_t unk_0034;
-    /* 0038 */ uint8_t unk_0038[8];
-    /* 0040 */ uint32_t unk_0040;
-    /* 0044 */ uint8_t unk_0044[4];
-    /* 0048 */ uint32_t unk_0048;
+    /* 0000 */ uint8_t unused_0000[4];
+    /* 0004 */ uint32_t unused_0004;
+    /* 0008 */ uint8_t unused_0008[44];
+    /* 0034 */ uint32_t unused_0034;
+    /* 0038 */ uint8_t unused_0038[8];
+    /* 0040 */ uint32_t unused_0040;
+    /* 0044 */ uint8_t unused_0044[4];
+    /* 0048 */ uint32_t unused_0048;
 };
 
 class CKBPage {
@@ -34,7 +34,19 @@ class CKBPage {
 
     static bool LoadingCallback(void* param, const char* data, uint32_t size, bool done, HTTPError::ErrorCode error);
 
-    /* 0004 */ uint32_t m_state;
+    enum PAGE_STATE : uint32_t {
+        IDLE = 0,
+        LOADING = 1,
+        READY = 2,
+        DOWNLOAD_START_FAILED = 3,
+        CALLBACK_FAILED = 4,
+        TIMEOUT = 5,
+        NOT_FOUND = 6,
+        BUFFER_ALLOCATION_FAILED = 7,
+        XML_LOAD_FAILED = 8,
+    };
+
+    /* 0004 */ PAGE_STATE m_state;
     /* 0008 */ SCritSect m_lock;
     /* 0030 */ CDynamicString* m_data;
     /* 0034 */ XMLTree* m_tree;

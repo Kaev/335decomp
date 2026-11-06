@@ -1,4 +1,5 @@
 #include "GossipInfo.h"
+#include "WoW/Source/Object/QuestCache.h"
 #include <cstdint>
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/FrameScript/FrameScript_Object.h"
@@ -47,7 +48,7 @@ static int32_t Script_GetNumGossipOptions(lua_State* L) {
 // OFFSET: 0x0058AB50
 static int32_t Script_ForceGossip(lua_State* L) {
     bool force = false;
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGossipInfo::m_gossip, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGGossipInfo::m_gossip, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         force = unit->IsForceGossip();
@@ -126,7 +127,7 @@ static int32_t Script_GetGossipAvailableQuests(lua_State* L) {
             lua_pushnil(L);
         }
 
-        if (quest->m_flags & 0x1000) {
+        if (quest->m_flags & QUEST_TEMPLATE_FLAGS::QUEST_FLAG_DAILY) {
             lua_pushnumber(L, 1.0);
         } else {
             lua_pushnil(L);

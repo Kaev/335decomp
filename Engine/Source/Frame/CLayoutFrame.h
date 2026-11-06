@@ -14,6 +14,34 @@ class XMLNode;
 
 class CLayoutFrame {
     public:
+    enum LayoutFlags : uint32_t {
+        // The low byte is a resize retry counter; it is not part of this flag domain.
+        LAYOUT_RECT_VALID = 0x100,
+        LAYOUT_DEFERRED_RESIZE = 0x200,
+        LAYOUT_RESIZE_PENDING = 0x400,
+        LAYOUT_RECT_UNRESOLVED = 0x800,
+        LAYOUT_CLAMPED_TO_SCREEN = 0x1000,
+        LAYOUT_EXPLICITLY_PROTECTED = 0x10000,
+        LAYOUT_DEPENDENCY_PROTECTED = 0x20000,
+        LAYOUT_PROTECTION_DIRTY = 0x40000,
+        LAYOUT_PROTECTION_RECURSION = 0x80000,
+        LAYOUT_RECT_STATE_MASK = 0x900,
+        LAYOUT_RESIZE_STATE_MASK = 0xc00,
+        LAYOUT_PROTECTED_MASK = 0x30000,
+        LAYOUT_PROTECTION_STATE_MASK = 0x70000,
+        LAYOUT_PROTECTION_BLOCK_MASK = 0x90000,
+    };
+
+    enum GuardFlags : uint32_t {
+        GUARD_NONE = 0,
+        GUARD_LEFT = 0x01,
+        GUARD_TOP = 0x02,
+        GUARD_RIGHT = 0x04,
+        GUARD_BOTTOM = 0x08,
+        GUARD_CENTER_X = 0x10,
+        GUARD_CENTER_Y = 0x20,
+    };
+
     struct FRAMENODE : public TSLinkedNode<FRAMENODE> {
         /* 0008 */ CLayoutFrame* m_frame;
         /* 000C */ uint32_t m_dependency;

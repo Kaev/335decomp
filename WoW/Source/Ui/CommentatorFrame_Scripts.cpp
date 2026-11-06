@@ -20,16 +20,16 @@
 // OFFSET: 0x00569230
 static int32_t Script_CommentatorGetMode(lua_State* L) {
     int32_t mode = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         uint32_t flags = player->m_player->m_playerFlags;
 
-        if (flags & 0x80000) {
+        if (flags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) {
             mode = 1;
         }
 
-        if (flags & 0x400000) {
+        if (flags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER) {
             mode = 2;
         }
     }
@@ -82,7 +82,7 @@ static int32_t Script_CommentatorGetNumMaps(lua_State* L) {
 static int32_t Script_CommentatorGetMapInfo(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -109,9 +109,9 @@ static int32_t Script_CommentatorGetMapInfo(lua_State* L) {
 // VERIFY: 003a522d manual
 // OFFSET: 0x0056AFC0
 static int32_t Script_CommentatorGetSkirmishQueuePlayerInfo(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -141,9 +141,9 @@ static int32_t Script_CommentatorGetSkirmishQueuePlayerInfo(lua_State* L) {
 // VERIFY: 8ce90f84 manual
 // OFFSET: 0x0056AF60
 static int32_t Script_CommentatorGetSkirmishQueueCount(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -154,9 +154,9 @@ static int32_t Script_CommentatorGetSkirmishQueueCount(lua_State* L) {
 // VERIFY: 9a2b78ca manual
 // OFFSET: 0x0056AF00
 static int32_t Script_CommentatorGetSkirmishMode(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -167,7 +167,7 @@ static int32_t Script_CommentatorGetSkirmishMode(lua_State* L) {
 // VERIFY: f387e25a auto
 // OFFSET: 0x0056A2A0
 static int32_t Script_CommentatorGetCamera(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || !player->IsCommentatorUberOrInArena()) {
         return 0;
@@ -191,9 +191,9 @@ static int32_t Script_CommentatorGetCamera(lua_State* L) {
 // VERIFY: 0f4be0e6 manual
 // OFFSET: 0x0056AB70
 static int32_t Script_CommentatorSetCameraCollision(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && (player->m_player->m_playerFlags & 0x80000) && (player->m_player->m_playerFlags & 0x400000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         if (!lua_isnumber(L, 1)) {
             luaL_error(L, "Usage: CommentatorSetCameraCollision(bool enable)");
             return 0;
@@ -213,9 +213,9 @@ static int32_t Script_CommentatorSetCameraCollision(lua_State* L) {
 // VERIFY: a53f977c manual
 // OFFSET: 0x0056AC10
 static int32_t Script_CommentatorSetTargetHeightOffset(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && (player->m_player->m_playerFlags & 0x80000) && (player->m_player->m_playerFlags & 0x400000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         if (!lua_isnumber(L, 1)) {
             luaL_error(L, "Usage: CommentatorSetTargetHeightOffset(float offset)");
             return 0;
@@ -230,9 +230,9 @@ static int32_t Script_CommentatorSetTargetHeightOffset(lua_State* L) {
 // VERIFY: 49d3efa1 manual
 // OFFSET: 0x0056AA10
 static int32_t Script_CommentatorSetBattlemaster(lua_State* L) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -243,14 +243,14 @@ static int32_t Script_CommentatorSetBattlemaster(lua_State* L) {
         return 0;
     }
 
-    CGObject_C* object = ClntObjMgrObjectPtr(target, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(target, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (!object || !(object->m_obj->m_type & TYPEMASK_UNIT)) {
+    if (!object || !(object->m_obj->m_type & TYPE_UNIT)) {
         luaL_error(L, "Targeted unit is not a Battlemaster.");
         return 0;
     }
 
-    if (!(static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & 0x100000)) {
+    if (!(static_cast<CGUnit_C*>(object)->m_unit->m_unitNpcFlags & UNIT_NPC_FLAGS::UNIT_NPC_FLAG_BATTLEMASTER)) {
         luaL_error(L, "Targeted unit is not a Battlemaster.");
         return 0;
     }
@@ -320,7 +320,7 @@ static int32_t Script_CommentatorUpdatePlayerInfo(lua_State* L) {
     CGCommentator::MapInfo* map;
     CGCommentator::InstanceInfo* instance;
 
-    if (player && (player->m_player->m_playerFlags & 0x80000) && CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) && CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance)) {
         WDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_COMMENTATOR_GET_PLAYER_INFO));
         msg.Put(instance->m_mapID);
@@ -337,7 +337,7 @@ static int32_t Script_CommentatorUpdatePlayerInfo(lua_State* L) {
 static int32_t Script_CommentatorUpdateMapInfo(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && (player->m_player->m_playerFlags & 0x80000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         const char* name = "";
 
         if (lua_isstring(L, 1)) {
@@ -359,7 +359,7 @@ static int32_t Script_CommentatorUpdateMapInfo(lua_State* L) {
 static int32_t Script_CommentatorGetInstanceInfo(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -396,7 +396,7 @@ static int32_t Script_CommentatorGetInstanceInfo(lua_State* L) {
 static int32_t Script_CommentatorEnterInstance(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -423,7 +423,7 @@ static int32_t Script_CommentatorEnterInstance(lua_State* L) {
 static int32_t Script_CommentatorExitInstance(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && (player->m_player->m_playerFlags & 0x80000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         WDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_COMMENTATOR_EXIT_INSTANCE));
         msg.Finalize();
@@ -452,7 +452,7 @@ static int32_t Script_CommentatorGetNumPlayers(lua_State* L) {
     CGCommentator::MapInfo* map;
     CGCommentator::InstanceInfo* instance;
 
-    if (player && (player->m_player->m_playerFlags & 0x80000) && CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) && CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance)) {
         lua_pushnumber(L, instance->m_numPlayers[faction - 1]);
     } else {
         lua_pushnumber(L, 0.0);
@@ -466,7 +466,7 @@ static int32_t Script_CommentatorGetNumPlayers(lua_State* L) {
 static int32_t Script_CommentatorGetPlayerInfo(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -610,7 +610,7 @@ static int32_t Script_CommentatorLookatPlayer(lua_State* L) {
 static int32_t Script_CommentatorSetMapAndInstanceIndex(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -647,7 +647,7 @@ static int32_t Script_CommentatorSetMapAndInstanceIndex(lua_State* L) {
 static int32_t Script_CommentatorSetPlayerIndex(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         return 0;
     }
 
@@ -737,7 +737,7 @@ static int32_t Script_CommentatorGetCurrentMapID(lua_State* L) {
     CGCommentator::MapInfo* map;
     CGCommentator::InstanceInfo* instance;
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000) || !CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance) || !instance) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) || !CGCommentator::s_Commentator.GetCommentatorInfo(&map, &instance) || !instance) {
         return 0;
     }
 
@@ -750,7 +750,7 @@ static int32_t Script_CommentatorGetCurrentMapID(lua_State* L) {
 static int32_t Script_CommentatorStartInstance(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x400000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         return 0;
     }
 
@@ -795,7 +795,7 @@ static int32_t Script_CommentatorStartInstance(lua_State* L) {
 static int32_t Script_CommentatorAddPlayer(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x400000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         return 0;
     }
 
@@ -804,9 +804,9 @@ static int32_t Script_CommentatorAddPlayer(lua_State* L) {
         return 0;
     }
 
-    CGObject_C* target = ClntObjMgrObjectPtr(player->m_unit->m_unitFieldTarget, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* target = ClntObjMgrObjectPtr(player->m_unit->m_unitFieldTarget, TYPE_OBJECT, __FILE__, __LINE__);
 
-    if (!target || !(target->m_obj->m_type & TYPEMASK_PLAYER)) {
+    if (!target || !(target->m_obj->m_type & TYPE_PLAYER)) {
         luaL_error(L, "Must target a player.");
         return 0;
     }
@@ -856,7 +856,7 @@ static int32_t Script_CommentatorAddPlayer(lua_State* L) {
 static int32_t Script_CommentatorRemovePlayer(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x400000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         return 0;
     }
 
@@ -925,7 +925,7 @@ static int32_t Script_CommentatorSetMoveSpeed(lua_State* L) {
 static int32_t Script_CommentatorSetSkirmishMatchmakingMode(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !(player->m_player->m_playerFlags & 0x80000) || !(player->m_player->m_playerFlags & 0x400000)) {
+    if (!player || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) || !(player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR_UBER)) {
         return 0;
     }
 
@@ -950,7 +950,7 @@ static int32_t Script_CommentatorSetSkirmishMatchmakingMode(lua_State* L) {
 static int32_t Script_CommentatorRequestSkirmishQueueData(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && (player->m_player->m_playerFlags & 0x80000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         WDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_COMMENTATOR_SKIRMISH_QUEUE_COMMAND));
         msg.Put(static_cast<uint32_t>(1));
@@ -970,7 +970,7 @@ static int32_t Script_CommentatorRequestSkirmishQueueData(lua_State* L) {
 static int32_t Script_CommentatorRequestSkirmishMode(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && (player->m_player->m_playerFlags & 0x80000)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR)) {
         WDataStore msg;
         msg.Put(static_cast<uint32_t>(CMSG_COMMENTATOR_SKIRMISH_QUEUE_COMMAND));
         msg.Put(static_cast<uint32_t>(3));
@@ -990,7 +990,7 @@ static int32_t Script_CommentatorRequestSkirmishMode(lua_State* L) {
 static int32_t Script_CommentatorStartSkirmishMatch(lua_State* L) {
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (player && (player->m_player->m_playerFlags & 0x80000) && lua_isstring(L, 1) && lua_isstring(L, 2)) {
+    if (player && (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_COMMENTATOR) && lua_isstring(L, 1) && lua_isstring(L, 2)) {
         WOWGUID first = StringToGuid(lua_tolstring(L, 1, nullptr));
         WOWGUID second = StringToGuid(lua_tolstring(L, 2, nullptr));
         int32_t team = -1;

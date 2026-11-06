@@ -12,11 +12,11 @@
 
 // STATIC: 0x00AD88F0
 static CGxVertexAttrib s_vertexAttribsPCT3[] = {
-    { GxVA_Position, 4, 0, 40 },
-    { GxVA_Color0, 0, 12, 40 },
-    { GxVA_TexCoord0, 3, 16, 40 },
-    { GxVA_TexCoord1, 3, 24, 40 },
-    { GxVA_TexCoord2, 3, 32, 40 }
+    { GxVA_Position, GxVAT_Float3, 0, 40 },
+    { GxVA_Color0, GxVAT_Color, 12, 40 },
+    { GxVA_TexCoord0, GxVAT_Float2, 16, 40 },
+    { GxVA_TexCoord1, GxVAT_Float2, 24, 40 },
+    { GxVA_TexCoord2, GxVAT_Float2, 32, 40 }
 };
 
 // STATIC: 0x00B24B20
@@ -54,11 +54,11 @@ static void WaveTexCallback(EGxTexCommand command, uint32_t width, uint32_t heig
 
                 for (uint32_t y = 0; y < 128; y++) {
                     for (uint32_t x = 0; x < 128; x++) {
-                        float u = CMath::sin_(x / 128.0f * 6.2831855f) * 128.0f;
+                        float u = CMath::sin_(x / 128.0f * TWO_PI) * 128.0f;
                         u = u < -128.0f ? -128.0f : (u < 127.0f ? u : 127.0f);
                         int8_t du = static_cast<int8_t>(u);
 
-                        float v = CMath::sin_(y / 128.0f * 6.2831855f) * 128.0f;
+                        float v = CMath::sin_(y / 128.0f * TWO_PI) * 128.0f;
                         v = v < -128.0f ? -128.0f : (v < 127.0f ? v : 127.0f);
                         int8_t dv = static_cast<int8_t>(v);
 
@@ -73,10 +73,10 @@ static void WaveTexCallback(EGxTexCommand command, uint32_t width, uint32_t heig
 
                 for (uint32_t y = 0; y < 128; y++) {
                     for (uint32_t x = 0; x < 128; x++) {
-                        float u = (CMath::sin_(x / 128.0f * 6.2831855f) * 0.5f + 0.5f) * 255.0f;
+                        float u = (CMath::sin_(x / 128.0f * TWO_PI) * 0.5f + 0.5f) * 255.0f;
                         u = u < 0.0f ? 0.0f : (u < 255.0f ? u : 255.0f);
 
-                        float v = (CMath::sin_(y / 128.0f * 6.2831855f) * 0.5f + 0.5f) * 255.0f;
+                        float v = (CMath::sin_(y / 128.0f * TWO_PI) * 0.5f + 0.5f) * 255.0f;
                         v = v < 0.0f ? 0.0f : (v < 255.0f ? v : 255.0f);
 
                         color.r = static_cast<uint8_t>(u);
@@ -110,10 +110,10 @@ PassGlowBase::PassGlowBase(FFX::Tex** inputs, uint32_t count, FFX::Tex* output, 
 // VERIFY: 8a0b30cf auto
 // OFFSET: 0x008C21E0
 PassGlow::PassGlow(FFX::Tex** inputs, uint32_t count, FFX::Tex* output, EGxBlend blend, bool unk) : PassGlowBase(inputs, count, output, blend, unk) {
-    this->m_shaderIndex = 0;
+    this->m_shaderIndex = FFX::SHADER_TEXCOORD::NORMALIZED_COORDS;
 
     if (FFX::s_useRECT) {
-        this->m_shaderIndex = 1;
+        this->m_shaderIndex = FFX::SHADER_TEXCOORD::RECTANGLE_COORDS;
     }
 
     g_theGxDevicePtr->ShaderCreate(this->m_shaders, GxSh_Pixel, "Shaders\\Pixel", "FFXGlow", sizeof(this->m_shaders) / sizeof(this->m_shaders[0]));
@@ -143,8 +143,8 @@ void PassGlow::Execute() {
     C2Vector tex1[4];
 
     FFX::SetupGx(this->m_output);
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, tex0, this->unk_002C);
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[1]->m_size, this->m_inputs[1]->m_texSize, FFX::s_gridPos, tex1, this->unk_002C);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, tex0, this->m_flip);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[1]->m_size, this->m_inputs[1]->m_texSize, FFX::s_gridPos, tex1, this->m_flip);
 
     g_theGxDevicePtr->RsSet(GxRs_Texture0, TextureGetGxTex(this->m_inputs[0]->m_texture, 1, nullptr));
     g_theGxDevicePtr->RsSet(GxRs_Texture1, TextureGetGxTex(this->m_inputs[1]->m_texture, 1, nullptr));
@@ -195,7 +195,7 @@ void PassGlowWave::Execute() {
 
     FFX::SetupGx(this->m_output);
     FFX::SetupIB();
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, tex0, this->unk_002C);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, tex0, this->m_flip);
     g_theGxDevicePtr->RsSet(GxRs_Texture0, TextureGetGxTex(this->m_inputs[0]->m_texture, 1, nullptr));
 
     C44Matrix waveMtx;
@@ -213,9 +213,9 @@ void PassGlowWave::Execute() {
     waveMtx.Scale(scale);
     waveMtx.RotateAroundZ(0.17453294f);
 
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[1]->m_size, this->m_inputs[1]->m_texSize, FFX::s_gridPos, tex1, this->unk_002C);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[1]->m_size, this->m_inputs[1]->m_texSize, FFX::s_gridPos, tex1, this->m_flip);
     g_theGxDevicePtr->RsSet(GxRs_Texture1, TextureGetGxTex(this->m_inputs[1]->m_texture, 1, nullptr));
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[2]->m_size, this->m_inputs[2]->m_texSize, FFX::s_gridPos, tex2, this->unk_002C);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[2]->m_size, this->m_inputs[2]->m_texSize, FFX::s_gridPos, tex2, this->m_flip);
     g_theGxDevicePtr->RsSet(GxRs_Texture2, TextureGetGxTex(this->m_inputs[2]->m_texture, 1, nullptr));
 
     CGxBuf* buf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(FFX::VertexPCT3), 4);
@@ -302,14 +302,14 @@ PassGlowWave::PassGlowWave(FFX::Tex** inputs, uint32_t count, FFX::Tex* output, 
 
     s_waveTexRefCount++;
 
-    this->m_shaderIndex = 0;
+    this->m_shaderIndex = PassGlowWave::SHADER_VARIANT::NORMALIZED_UV88_CAPABLE;
 
     if (FFX::s_useRECT) {
-        this->m_shaderIndex = 1;
+        this->m_shaderIndex = PassGlowWave::SHADER_VARIANT::RECTANGLE_UV88_CAPABLE;
     }
 
     if (!g_theGxDevicePtr->Caps().m_texFmt[GxTex_Uv88]) {
-        this->m_shaderIndex += 2;
+        this->m_shaderIndex = static_cast<PassGlowWave::SHADER_VARIANT>(this->m_shaderIndex + PassGlowWave::SHADER_VARIANT::NORMALIZED_UV88_FALLBACK);
     }
 
     g_theGxDevicePtr->ShaderCreate(this->m_shaders, GxSh_Pixel, "Shaders\\Pixel", "FFXGlowWave", sizeof(this->m_shaders) / sizeof(this->m_shaders[0]));

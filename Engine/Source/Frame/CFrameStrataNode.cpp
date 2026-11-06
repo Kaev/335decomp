@@ -22,7 +22,7 @@ int32_t CFrameStrataNode::RemoveFrame(CSimpleFrame* frame) {
 
     frame->m_strataLink.Unlink();
 
-    if (!(frame->m_frameFlags & 0x2000)) {
+    if (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_BEING_SCROLLED)) {
         this->m_batchDirty = -1;
     }
 
@@ -50,7 +50,7 @@ int32_t CFrameStrataNode::BuildBatches() {
         return 0;
     }
 
-    for (uint32_t layer = 0; layer < 5; layer++) {
+    for (uint32_t layer = 0; layer < NUM_SIMPLEFRAME_DRAWLAYERS; layer++) {
         CRenderBatch* batch = &this->m_batches[layer];
 
         if (this->m_renderList.IsLinked(batch)) {
@@ -61,7 +61,7 @@ int32_t CFrameStrataNode::BuildBatches() {
             batch->Clear();
 
             for (CSimpleFrame* frame = this->m_frames.Head(); frame; frame = this->m_frames.Next(frame)) {
-                if (!(frame->m_frameFlags & 0x2000)) {
+                if (!(frame->m_frameFlags & CSimpleFrame::FrameFlags::FRAME_BEING_SCROLLED)) {
                     frame->OnFrameRender(batch, layer);
                 }
             }

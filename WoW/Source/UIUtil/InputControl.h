@@ -17,6 +17,8 @@ struct lua_State;
 
 struct MOUSELOOKBINDING : public TSHashObject<MOUSELOOKBINDING, HASHKEY_STRI> {
     /* 0018 */ char* m_binding;
+
+    ~MOUSELOOKBINDING();
 };
 
 class CMouseEvent;
@@ -49,7 +51,7 @@ class CGInputControl {
     /* 000C */ float m_dragAccumY;
     /* 0010 */ uint32_t m_lastMouseMoveFrame;
     /* 0014 */ uint32_t m_lookStartTime;
-    /* 0018 */ PENDING_DEFAULT_ACTION m_pendingDefaultAction;
+    /* 0018 */ CGInputReleaseAction m_pendingDefaultAction;
     /* 001C */ TSHashTable<MOUSELOOKBINDING, HASHKEY_STRI> m_mouseLookBindings;
     /* 0044 */ uint32_t m_facingOverrideActive;
     /* 0048 */ float m_facingOverride;
@@ -84,7 +86,7 @@ class CGInputControl {
     void VehicleAimChange(uint32_t time, float delta);
     void UpdateMoveStopped();
     void UpdatePlayer(uint32_t time, int32_t a2);
-    void ToggleControlBit(uint32_t bit, int32_t enable, uint32_t time, int32_t a5);
+    void ToggleControlBit(uint32_t bit, int32_t enable, uint32_t time, int32_t keepSmoothing);
     int32_t SetControlBit(uint32_t bit, uint32_t time);
     int32_t UnsetControlBit(uint32_t bit, uint32_t time, int32_t keepSmoothing);
     void OnTurnToAngleStop();

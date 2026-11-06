@@ -1,4 +1,5 @@
 #include "SpellBookFrame.h"
+#include "WoW/Common/Types.h"
 #include <cstdlib>
 #include <cstring>
 #include "Engine/Source/Base/ConvertUTF.h"
@@ -12,6 +13,7 @@
 #include "WoW/Source/DB/Rec/SkillLineAbilityRec.h"
 #include "WoW/Source/DB/Rec/SpellIconRec.h"
 #include "WoW/Source/Game/ValidateName.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Magic/MagicClient/SpellTable.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
 #include "WoW/Source/Object/ObjectClient/Item_C.h"
@@ -86,7 +88,7 @@ static int32_t s_skinPlayerCorpseSpell;
 static int32_t s_pendingCompanions;
 
 // STATIC: 0x00BE5D88
-uint32_t s_unkBE5D88[1024];
+uint32_t s_displayedSpells[1024];
 
 // STATIC: 0x00BE6D88
 int32_t s_spellList[1024];
@@ -104,7 +106,7 @@ int32_t CGSpellBook::m_duelSpell;
 uint32_t s_numSpells;
 
 // STATIC: 0x00BE8D9C
-uint32_t s_unkBE8D9C;
+uint32_t s_displayedSpellCount;
 
 // STATIC: 0x00BE8DA0
 uint32_t s_numSkillInfos;
@@ -136,11 +138,16 @@ static TSHashTable<SPELLSBYNAME, HASHKEY_UTF8I> s_spellsByName;
 // STATIC: 0x00BE8E8C
 TSGrowableArray<int32_t> CGSpellBook::m_unlearnedSpells;
 
+// INLINED
+SPELLSBYNAME::~SPELLSBYNAME() {
+    this->m_spells.Clear();
+}
+
 // VERIFY: ee08c995 manual
 // OFFSET: 0x0053CF10
 void CGSpellBook::UpdateUsable() {
     CGActionBar::UpdateUsable();
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         SpellRec spell;
@@ -227,9 +234,9 @@ void CGSpellBook::ClearSpells() {
     }
 
     s_numSpells = 0;
-    s_unkBE8D9C = 0;
+    s_displayedSpellCount = 0;
     memset(s_spellList, 0, sizeof(s_spellList));
-    memset(s_unkBE5D88, 0, sizeof(s_unkBE5D88));
+    memset(s_displayedSpells, 0, sizeof(s_displayedSpells));
 
     for (uint32_t i = 0; i < s_skillInfos.Count(); i++) {
         if (s_skillInfos.m_data[i]) {
@@ -284,8 +291,8 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
     s_knownSpellBits.m_bits.m_data[static_cast<uint32_t>(spellId) >> 5] |= 1 << (spellId & 0x1F);
 
     switch (spell.m_effect[0]) {
-        case 28:
-        case 56: {
+        case SPELL_EFFECT_SUMMON:
+        case SPELL_EFFECT_SUMMON_PET: {
             int32_t creature = spell.m_effectMiscValue[0];
 
             if (creature) {
@@ -305,38 +312,38 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
             break;
         }
 
-        case 33: {
+        case SPELL_EFFECT_OPEN_LOCK: {
             *s_openLockSpells.New() = spellId;
             break;
         }
 
-        case 39: {
+        case SPELL_EFFECT_LANGUAGE: {
             CGSpellBook::m_languageSpells.m_data[spell.m_effectMiscValue[0]] = spellId;
             CGChat::UpdateLanguages();
             break;
         }
 
-        case 83: {
+        case SPELL_EFFECT_DUEL: {
             CGSpellBook::m_duelSpell = spellId;
             break;
         }
 
-        case 84: {
+        case SPELL_EFFECT_STUCK: {
             CGSpellBook::m_stuckSpell = spellId;
             break;
         }
 
-        case 95: {
+        case SPELL_EFFECT_SKINNING: {
             s_skinningSpells[spell.m_effectMiscValue[0]] = spellId;
             break;
         }
 
-        case 116: {
+        case SPELL_EFFECT_SKIN_PLAYER_CORPSE: {
             s_skinPlayerCorpseSpell = spellId;
             break;
         }
 
-        case 152: {
+        case SPELL_EFFECT_SUMMON_RAF_FRIEND: {
             CGSpellBook::m_summonFriendSpell = spellId;
             break;
         }
@@ -346,8 +353,8 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         *s_trackingSpells.New() = spellId;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
-        if (spell.m_effect[i] != 38 || spell.m_implicitTargetA[i] == 6) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+        if (spell.m_effect[i] != SPELL_EFFECT_DISPEL || spell.m_implicitTargetA[i] == SPELL_IMPLICIT_TARGET::TARGET_UNIT_TARGET_ENEMY) {
             continue;
         }
 
@@ -364,7 +371,7 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         }
     }
 
-    if (spell.m_effect[0] == 126 && spell.m_implicitTargetA[0] == 6) {
+    if (spell.m_effect[0] == SPELL_EFFECT_STEAL_BENEFICIAL_BUFF && spell.m_implicitTargetA[0] == SPELL_IMPLICIT_TARGET::TARGET_UNIT_TARGET_ENEMY) {
         SpellDispelTypeRec* dispel = g_spellDispelTypeDB.GetRecord(spell.m_effectMiscValue[0]);
 
         if (dispel && dispel->m_mask) {
@@ -374,11 +381,11 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         }
     }
 
-    if (spell.m_attributesExD & 0x1000000) {
+    if (spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_AUTO_RANGED_COMBAT) {
         CGSpellBook::m_autoRangedSpell = spellId;
     }
 
-    if (spell.m_attributesExD & 0x200) {
+    if (spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_COMBAT_FEEDBACK_WHEN_USABLE) {
         uint32_t i;
 
         for (i = 0; i < s_knownSpells.Count(); i++) {
@@ -416,22 +423,22 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         }
     }
 
-    if (spell.m_attributesExB & 0x8100) {
+    if (spell.m_attributesExB & (SPELL_ATTR2::SPELL_ATTR2_INCLUDE_IN_ADVANCED_COMBAT_LOG | SPELL_ATTR2::SPELL_ATTR2_DO_NOT_CONSUME_IF_GAINED_DURING_CAST)) {
         Spell_C_SetCooldownLeft(spell.m_id, 0, spell.m_category, spell.m_recoveryTime, 0, true, 0);
     }
 
-    if (!(spell.m_attributesExB & 0x2)) {
+    if (!(spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_NO_SHAPESHIFT_UI)) {
         bool shapeshift = false;
 
-        for (uint32_t i = 0; i < 3; i++) {
-            if (spell.m_effectAura[i] == 36 || (spell.m_attributesExB & 0x10)) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+            if (spell.m_effectAura[i] == SPELL_AURA_MOD_SHAPESHIFT || (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_USE_SHAPESHIFT_BAR)) {
                 shapeshift = true;
                 break;
             }
         }
 
         if (shapeshift) {
-            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+            CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
             uint32_t count = s_shapeshiftSpells.Count();
 
             if (replaceSpell) {
@@ -469,11 +476,11 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         }
     }
 
-    if (spell.m_attributes & 0x80) {
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG) {
         return;
     }
 
-    if (spell.m_attributes & 0x20) {
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_IS_TRADESKILL) {
         if (notify) {
             CGGameUI::DisplayError(ERR_LEARN_RECIPE_S, spell.m_name);
         }
@@ -484,17 +491,17 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
     CGSpellBook::AddSpellToNameCache(spellId, 0);
 
     if (SpellIsCallCompanion(&spell)) {
-        int32_t type = spell.m_effect[0] == 28 ? 0 : (spell.m_effectAura[0] != 78) + 1;
+        int32_t type = spell.m_effect[0] == SPELL_EFFECT_SUMMON ? 0 : (spell.m_effectAura[0] != SPELL_AURA_MOUNTED) + 1;
         *CGSpellBook::m_companions[type].New() = spellId;
 
         if (type == 0) {
-            CGTutorial::TriggerTutorial(51);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_COMPANIONS);
         } else if (type == 1) {
-            CGTutorial::TriggerTutorial(52);
+            CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_MOUNTS);
         }
 
         WOWGUID requester = { 0 };
-        requester.m_guid = static_cast<uint32_t>(spellId) | 0x1FE0000000000000ULL;
+        requester.m_guid = static_cast<uint32_t>(spellId) | WOWGUID_SPELL_QUERY_TAG;
         CreatureStats_C* creature = g_creatureDBCache.GetRecord(spell.m_effectMiscValue[0], requester, CGSpellBook::CompanionCallback, reinterpret_cast<void*>(static_cast<intptr_t>(notify)), false);
 
         if (!creature) {
@@ -520,18 +527,18 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
             SStrCopy(name, spell.m_name, sizeof(name));
         }
 
-        CGGameUI::DisplayError(spell.m_attributes & 0x10 ? ERR_LEARN_ABILITY_S : ERR_LEARN_SPELL_S, name);
+        CGGameUI::DisplayError(spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_IS_ABILITY ? ERR_LEARN_ABILITY_S : ERR_LEARN_SPELL_S, name);
     }
 
-    if (spell.m_attributesExD & 0x8000) {
+    if (spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_NOT_IN_SPELLBOOK) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     int32_t updateMultiCast = 0;
     bool tutorialShown = CGTutorial::m_tutorialShown.m_count ? !((CGTutorial::m_tutorialShown.m_bits.m_data[1] >> 14) & 1) : false;
 
-    if (spell.m_attributesExG & 0x20) {
+    if (spell.m_attributesExG & SPELL_ATTR7::SPELL_ATTR7_CAN_BE_MULTI_CAST) {
         for (uint32_t i = 0; i < 2; i++) {
             int32_t category = spell.m_requiredTotemCategoryID[i];
             uint32_t slotMask = CGActionBar::GetMultiCastSlotMaskForTotemCategory(category);
@@ -605,7 +612,7 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
                 }
 
                 if (!tutorialShown && updateMultiCast && player && player->m_bag.FindTotemCategory(category, 8)) {
-                    CGTutorial::TriggerTutorial(46);
+                    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_TOTEM_BAR);
                     tutorialShown = true;
                 }
             }
@@ -618,7 +625,7 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         SkillLineAbilityRec* ability = player->LookupAbility(spellId);
 
         if (ability) {
-            const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], ability->m_skillLine);
+            const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_raceID, player->m_unit->m_classID, ability->m_skillLine);
 
             if (info && !(info->m_flags & 0x80)) {
                 skillLine = info->m_skillID;
@@ -662,7 +669,7 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
         }
 
         FrameScript_SignalEvent(SCRIPT_EVENT_LEARNED_SPELL_IN_TAB, "%d", tab + 1);
-        CGTutorial::TriggerTutorial(39);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_SPELLBOOK);
 
         for (uint32_t i = 0; i < sizeof(s_multiCastSpells) / sizeof(s_multiCastSpells[0]); i++) {
             if (s_multiCastSpells[i] == spellId) {
@@ -671,7 +678,7 @@ void CGSpellBook::AddKnownSpell(int32_t spellId, int32_t notify, int32_t replace
             }
         }
 
-        if (player && player->m_unit->m_unitFieldLevel <= 10 && CGSpellBook::GetSpellProgressionRank(&spell) <= 1 && !(spell.m_attributes & 0x40) && !(spell.m_attributesExB & 0x10) && !SpellRec::HasAura(&spell, 36)) {
+        if (player && player->m_unit->m_unitFieldLevel <= 10 && CGSpellBook::GetSpellProgressionRank(&spell) <= 1 && !(spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE) && !(spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_USE_SHAPESHIFT_BAR) && !SpellRec::HasAura(&spell, SPELL_AURA_MOD_SHAPESHIFT)) {
             int32_t offset = GetActionBarPageOffset(player, &spell);
 
             for (int32_t slot = offset; slot < offset + 12; slot++) {
@@ -727,8 +734,8 @@ void CGSpellBook::UpdateSpells(int32_t a1, int32_t a2, int32_t a3) {
     }
 
     uint32_t spellIndex = 0;
-    s_unkBE8D9C = 0;
-    memset(s_unkBE5D88, 0, sizeof(s_unkBE5D88));
+    s_displayedSpellCount = 0;
+    memset(s_displayedSpells, 0, sizeof(s_displayedSpells));
 
     for (uint32_t tab = 0; tab < s_numSkillInfos; tab++) {
         SpellRec previous;
@@ -744,13 +751,13 @@ void CGSpellBook::UpdateSpells(int32_t a1, int32_t a2, int32_t a3) {
             while (true) {
                 if (!g_spellDB.GetRecord(*spell, &current)) {
                     visible++;
-                    s_unkBE5D88[s_unkBE8D9C++] = s_spellList[spellIndex + j - 1];
+                    s_displayedSpells[s_displayedSpellCount++] = s_spellList[spellIndex + j - 1];
                     break;
                 }
 
                 if (SStrCmp(current.m_name, previous.m_name, STORM_MAX_STR) || !CGSpellBook::GetSpellProgressionRank(&current)) {
                     visible++;
-                    s_unkBE5D88[s_unkBE8D9C++] = spell[-1];
+                    s_displayedSpells[s_displayedSpellCount++] = spell[-1];
                     previous = current;
                 }
 
@@ -779,21 +786,21 @@ void CGSpellBook::UpdateSpells(int32_t a1, int32_t a2, int32_t a3) {
                 continue;
             }
 
-            for (uint32_t j = 0; j < 3; j++) {
-                if (spell.m_effect[j] == 6) {
-                    if (spell.m_effectAura[j] == 27) {
+            for (uint32_t j = 0; j < NUM_SPELL_EFFECTS; j++) {
+                if (spell.m_effect[j] == SPELL_EFFECT_APPLY_AURA) {
+                    if (spell.m_effectAura[j] == SPELL_AURA_MOD_SILENCE) {
                         CGSpellBook::m_silenceSchoolMask |= spell.m_schoolMask;
                     }
-                } else if (spell.m_effect[j] == 68) {
+                } else if (spell.m_effect[j] == SPELL_EFFECT_INTERRUPT_CAST) {
                     CGSpellBook::m_interruptSchoolMask |= spell.m_schoolMask;
                 }
             }
 
-            if (spell.m_attributesExG & 0x800) {
+            if (spell.m_attributesExG & SPELL_ATTR7::SPELL_ATTR7_CAN_CAUSE_INTERRUPT) {
                 CGSpellBook::m_interruptSpecialSchoolMask |= spell.m_schoolMask;
             }
 
-            if (spell.m_attributesExG & 0x1000) {
+            if (spell.m_attributesExG & SPELL_ATTR7::SPELL_ATTR7_CAN_CAUSE_SILENCE) {
                 CGSpellBook::m_silenceSpecialSchoolMask |= spell.m_schoolMask;
             }
         }
@@ -809,15 +816,15 @@ void CGSpellBook::UpdateSpells(int32_t a1, int32_t a2, int32_t a3) {
 // VERIFY: 5c7e305b manual
 // OFFSET: 0x0053B970
 int32_t GetActionBarPageOffset(const CGPlayer_C* player, const SpellRec* spell) {
-    uint8_t classId = player->m_unit->m_unitFieldBytes0[1];
+    uint8_t classId = player->m_unit->m_classID;
 
-    if (classId != 1 && classId != 4 && classId != 11) {
+    if (classId != CLASS_WARRIOR && classId != CLASS_ROGUE && classId != CLASS_DRUID) {
         return 0;
     }
 
     SpellShapeshiftFormRec* form;
 
-    if ((spell->m_shapeshiftMask[0] || spell->m_shapeshiftMask[1]) && !(spell->m_attributesExB & 0x80000)) {
+    if ((spell->m_shapeshiftMask[0] || spell->m_shapeshiftMask[1]) && !(spell->m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_ALLOW_WHILE_NOT_SHAPESHIFTED_CASTER_FORM)) {
         uint32_t mask = spell->m_shapeshiftMask[0];
         bool high = false;
 
@@ -837,12 +844,12 @@ int32_t GetActionBarPageOffset(const CGPlayer_C* player, const SpellRec* spell) 
         }
 
         if (high) {
-            index += 32;
+            index += SPELL_MASK_BITS_PER_WORD;
         }
 
         form = g_spellShapeshiftFormDB.GetRecord(index);
     } else {
-        if (classId != 1) {
+        if (classId != CLASS_WARRIOR) {
             return 0;
         }
 
@@ -1154,13 +1161,13 @@ int32_t GetSpellSlot(int32_t spellId, int32_t petSpell) {
 // OFFSET: 0x0053C5F0
 static uint32_t GetSpellSkillInfoIndex(int32_t spellId) {
     int32_t skillLine = 0;
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         SkillLineAbilityRec* ability = player->LookupAbility(spellId);
 
         if (ability) {
-            const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], ability->m_skillLine);
+            const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_raceID, player->m_unit->m_classID, ability->m_skillLine);
 
             if (info && !(info->m_flags & 0x80)) {
                 skillLine = info->m_skillID;
@@ -1227,7 +1234,7 @@ int __cdecl SortSpellsForDisplay(const void* a, const void* b) {
 
 // VERIFY: c77f786b manual
 // OFFSET: 0x00541DF0
-void CGSpellBook::AddSpellToNameCache(int32_t spellId, int32_t a2) {
+void CGSpellBook::AddSpellToNameCache(int32_t spellId, int32_t isPet) {
     SpellRec spell;
 
     if (!g_spellDB.GetRecord(spellId, &spell)) {
@@ -1253,7 +1260,7 @@ void CGSpellBook::AddSpellToNameCache(int32_t spellId, int32_t a2) {
             return;
         }
 
-        if (rank > node->m_rank && !a2) {
+        if (rank > node->m_rank && !isPet) {
             next = node;
             break;
         }
@@ -1261,7 +1268,7 @@ void CGSpellBook::AddSpellToNameCache(int32_t spellId, int32_t a2) {
 
     SPELLRANKNODE* node = new (SMemAlloc(sizeof(SPELLRANKNODE), __FILE__, __LINE__, 0)) SPELLRANKNODE;
     node->m_spellId = spellId;
-    node->m_petSpell = a2;
+    node->m_petSpell = isPet;
 
     if (*spell.m_nameSubtext) {
         node->m_subtext.Copy(spell.m_nameSubtext);
@@ -1270,7 +1277,7 @@ void CGSpellBook::AddSpellToNameCache(int32_t spellId, int32_t a2) {
     node->m_rank = rank;
 
     if (next) {
-        entry->m_spells.LinkNode(node, 2, next);
+        entry->m_spells.LinkNode(node, TSLIST_LINK_BEFORE, next);
     } else {
         entry->m_spells.LinkToTail(node);
     }
@@ -1288,11 +1295,11 @@ void CGSpellBook::UpdateSelection() {
 // VERIFY: e14c5005 manual
 // OFFSET: 0x0053B410
 int32_t CGSpellBook::GetCompanionType(const SpellRec* spell) {
-    if (spell->m_effect[0] == 28) {
+    if (spell->m_effect[0] == SPELL_EFFECT_SUMMON) {
         return 0;
     }
 
-    return (spell->m_effectAura[0] != 78) + 1;
+    return (spell->m_effectAura[0] != SPELL_AURA_MOUNTED) + 1;
 }
 
 // VERIFY: d8053ee4 manual
@@ -1485,11 +1492,11 @@ const char* CGSpellBook::GetSpellTexture(int32_t slot, int32_t petSpell) {
         return nullptr;
     }
 
-    if (spell.m_effect[0] == 78) {
+    if (spell.m_effect[0] == SPELL_EFFECT_ATTACK) {
         return CGActionBar::GetAttackTexture();
     }
 
-    if ((spell.m_attributes & 0x2) && (spell.m_attributesExB & 0x20)) {
+    if ((spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) && (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_AUTO_REPEAT)) {
         const char* texture = CGActionBar::GetRangedTexture();
 
         if (texture) {
@@ -1516,9 +1523,9 @@ int32_t CGSpellBook::IsSelectedSlot(int32_t slot, int32_t petSpell) {
         return 0;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player && spell.m_effect[0] == 47) {
+    if (player && spell.m_effect[0] == SPELL_EFFECT_TRADE_SKILL) {
         SkillLineAbilityRec* ability = player->LookupAbility(spell.m_id);
 
         if (ability && !CGTradeSkillInfo::m_linkData && CGTradeSkillInfo::m_skillLineID == ability->m_skillLine) {
@@ -1526,8 +1533,8 @@ int32_t CGSpellBook::IsSelectedSlot(int32_t slot, int32_t petSpell) {
         }
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
-        if (spell.m_effectAura[i] != 36) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+        if (spell.m_effectAura[i] != SPELL_AURA_MOD_SHAPESHIFT) {
             continue;
         }
 
@@ -1629,7 +1636,7 @@ int32_t CGSpellBook::GetSpellRankOrLevel(const SpellRec* spell) {
 // VERIFY: 97097f8a manual
 // OFFSET: 0x0053BAF0
 void CGSpellBook::PickupSpell(int32_t slot, int32_t petSpell) {
-    if (!CGGameUI::CanPerformAction(14)) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION)) {
         return;
     }
 
@@ -1664,7 +1671,7 @@ void CGSpellBook::PickupSpell(int32_t slot, int32_t petSpell) {
 // VERIFY: e86b1382 auto
 // OFFSET: 0x0053BBC0
 void CGSpellBook::PickupCompanion(int32_t type, uint32_t index) {
-    if (!CGGameUI::CanPerformAction(14) || index >= CGSpellBook::m_companions[type].m_count) {
+    if (!CGGameUI::CanPerformAction(UI_ACTION::UI_ACTION_ACTION_MANIPULATION) || index >= CGSpellBook::m_companions[type].m_count) {
         return;
     }
 
@@ -1721,7 +1728,7 @@ int32_t CGSpellBook::IsAuraCaster(WOWGUID guid, const WOWGUID* caster) {
         return 1;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*caster, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*caster, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
@@ -1803,7 +1810,7 @@ void CGSpellBook::ReplaceSpell(int32_t oldSpell, int32_t newSpell) {
 void CGSpellBook::AddPetSpell(int32_t spellId) {
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(spellId, &spell) && !(spell.m_attributes & 0x80) && !(spell.m_attributesExD & 0x8000)) {
+    if (g_spellDB.GetRecord(spellId, &spell) && !(spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG) && !(spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_NOT_IN_SPELLBOOK)) {
         CGSpellBook::AddSpellToNameCache(spellId, 1);
         s_petSpellList[CGSpellBook::m_numPetSpells++] = spellId;
     }
@@ -1892,11 +1899,11 @@ uint32_t CGSpellBook::GetShapeshiftForm(int32_t requireForm) {
 // VERIFY: cfe23c3b manual
 // OFFSET: 0x0053D580
 int32_t CGSpellBook::CanShowAura(const SpellRec* spell, const WOWGUID* caster, bool helpful) {
-    if ((spell->m_attributes & 0x80) || (spell->m_attributesEx & 0x10000000)) {
+    if ((spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG) || (spell->m_attributesEx & SPELL_ATTR1::SPELL_ATTR1_NO_AURA_ICON)) {
         return 0;
     }
 
-    if (spell->m_attributes & 0x40) {
+    if (spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE) {
         uint32_t i = 0;
 
         while (!Spell_IsAreaAuraEffect(spell->m_effect[i])) {
@@ -1906,13 +1913,13 @@ int32_t CGSpellBook::CanShowAura(const SpellRec* spell, const WOWGUID* caster, b
         }
     }
 
-    bool hidden = helpful ? (spell->m_attributesExE & 0x8000000) != 0 : (spell->m_attributesExE & 0x10000000) != 0;
+    bool hidden = helpful ? (spell->m_attributesExE & SPELL_ATTR5::SPELL_ATTR5_NO_CASTER_AURA_ICON) != 0 : (spell->m_attributesExE & SPELL_ATTR5::SPELL_ATTR5_NO_TARGET_AURA_ICON) != 0;
 
     if (hidden) {
         return 0;
     }
 
-    if ((spell->m_attributesExF & 0x100000) && !(caster->m_guid && (*caster == ClntObjMgrGetActivePlayer() || *caster == CGPetInfo::GetPet(0)))) {
+    if ((spell->m_attributesExF & SPELL_ATTR6::SPELL_ATTR6_AURA_ICON_ONLY_FOR_CASTER_LIMIT10) && !(caster->m_guid && (*caster == ClntObjMgrGetActivePlayer() || *caster == CGPetInfo::GetPet(0)))) {
         return 0;
     }
 
@@ -1945,7 +1952,7 @@ int32_t CGSpellBook::CanApplyAura(const AuraData* aura) {
             return 0;
         }
 
-        for (uint32_t i = 0; i < 3; i++) {
+        for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
             if (Spell_IsAuraEffect(spell.m_effect[i])) {
                 return 1;
             }
@@ -1956,7 +1963,7 @@ int32_t CGSpellBook::CanApplyAura(const AuraData* aura) {
         return 0;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(aura->m_creator, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(aura->m_creator, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit || !unit->m_creatureCacheEntry) {
         return 0;
@@ -1988,14 +1995,14 @@ int32_t CGSpellBook::FindRaidBuff(int32_t spellId) {
 
     SpellRec spell;
 
-    if (!g_spellDB.GetRecord(spellId, &spell) || (spell.m_attributesExC & 0x4000) || spell.m_implicitTargetA[0] == 1) {
+    if (!g_spellDB.GetRecord(spellId, &spell) || (spell.m_attributesExC & SPELL_ATTR3::SPELL_ATTR3_HIDE_IN_RAID_FILTER) || spell.m_implicitTargetA[0] == SPELL_IMPLICIT_TARGET::TARGET_UNIT_CASTER) {
         return 0;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
         int32_t effect = spell.m_effect[i];
 
-        if (effect == 35 || effect == 65 || effect == 119 || effect == 143 || effect == 128 || effect == 129 || effect == 27) {
+        if (effect == SPELL_EFFECT_APPLY_AREA_AURA_PARTY || effect == SPELL_EFFECT_APPLY_AREA_AURA_RAID || effect == SPELL_EFFECT_APPLY_AREA_AURA_PET || effect == SPELL_EFFECT_APPLY_AREA_AURA_OWNER || effect == SPELL_EFFECT_APPLY_AREA_AURA_FRIEND || effect == SPELL_EFFECT_APPLY_AREA_AURA_ENEMY || effect == SPELL_EFFECT_PERSISTENT_AREA_AURA) {
             return 0;
         }
     }
@@ -2008,7 +2015,7 @@ int32_t CGSpellBook::FindRaidBuff(int32_t spellId) {
 void CGSpellBook::GetAppropriateSpellRank(uint32_t* spellId, CGUnit_C* caster, CGUnit_C* target) {
     SpellRec spell;
 
-    if (!g_spellDB.GetRecord(*spellId, &spell) || (spell.m_attributes & 0x4000000) || (spell.m_attributesExB & 0x8)) {
+    if (!g_spellDB.GetRecord(*spellId, &spell) || (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_AURA_IS_DEBUFF) || (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_ALLOW_LOW_LEVEL_BUFF)) {
         return;
     }
 
@@ -2035,7 +2042,7 @@ void CGSpellBook::GetAppropriateSpellRank(uint32_t* spellId, CGUnit_C* caster, C
     uint32_t level = target->m_unit->m_unitFieldLevel;
 
     if (target->m_unit->m_unitFieldSummonedby.m_guid) {
-        CGUnit_C* summoner = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target->m_unit->m_unitFieldSummonedby, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* summoner = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target->m_unit->m_unitFieldSummonedby, TYPE_UNIT, __FILE__, __LINE__));
 
         if (summoner) {
             level = summoner->m_unit->m_unitFieldLevel;
@@ -2087,21 +2094,21 @@ int32_t CGSpellBook::CanStealAura(const CGUnit_C* unit, const AuraData* aura, co
 
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
 
-    if (!player || !player->CanAttack(unit) || (aura->m_flags & 0x80)) {
+    if (!player || !player->CanAttack(unit) || (aura->m_flags & AURA_FLAG_HARMFUL)) {
         return 0;
     }
 
-    if (spell->m_attributes & 0x40) {
+    if (spell->m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE) {
         return 0;
     }
 
-    for (uint32_t i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
         if (((1 << i) & aura->m_flags) && Spell_IsAreaAuraEffect(spell->m_effect[i])) {
             return 0;
         }
     }
 
-    if ((spell->m_attributesEx & 0x44) || (spell->m_attributesExD & 0x40)) {
+    if ((spell->m_attributesEx & (SPELL_ATTR1::SPELL_ATTR1_IS_CHANNELLED | SPELL_ATTR1::SPELL_ATTR1_IS_SELF_CHANNELLED)) || (spell->m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_CANNOT_BE_STOLEN)) {
         return 0;
     }
 
@@ -2276,7 +2283,7 @@ void CGSpellBook::DelKnownSpell(int32_t spellId, int32_t notify) {
             SkillLineAbilityRec* ability = player->LookupAbility(spellId);
 
             if (ability) {
-                const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_unitFieldBytes0[0], player->m_unit->m_unitFieldBytes0[1], ability->m_skillLine);
+                const SkillRaceClassInfoRec* info = SpellTableLookupInfo(player->m_unit->m_raceID, player->m_unit->m_classID, ability->m_skillLine);
 
                 if (info && info->m_flags >= 0) {
                     skillLine = info->m_skillID;
@@ -2308,8 +2315,8 @@ void CGSpellBook::DelKnownSpell(int32_t spellId, int32_t notify) {
     if (g_spellDB.GetRecord(spellId, &spell) && SpellRec::WillSummonCritter(&spell)) {
         uint32_t type = 0;
 
-        if (spell.m_effect[0] != 28) {
-            type = (spell.m_effectAura[0] != 78) + 1;
+        if (spell.m_effect[0] != SPELL_EFFECT_SUMMON) {
+            type = (spell.m_effectAura[0] != SPELL_AURA_MOUNTED) + 1;
         }
 
         TSGrowableArray<int32_t>& companions = (&CGSpellBook::m_companions[0])[type];

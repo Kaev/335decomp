@@ -44,7 +44,7 @@ void CGGameObject_C_Type_TrapDoor::UpdateState(int32_t oldState, int32_t newStat
     }
 
     if (newState) {
-        World::ObjectSetSequence(this->m_worldObject, 146, 0, 0);
+        World::ObjectSetSequence(this->m_worldObject, ANIM_GAMEOBJ_CLOSE, 0, 0);
         this->m_owner->m_hasWorldBounds = 1;
         World::ObjectEnableCollision(this->m_worldObject, 1);
         return;
@@ -68,7 +68,7 @@ void CGGameObject_C_Type_TrapDoor::UpdateState(int32_t oldState, int32_t newStat
         }
     }
 
-    World::ObjectSetSequence(this->m_worldObject, 148, 0, 0);
+    World::ObjectSetSequence(this->m_worldObject, ANIM_GAMEOBJ_OPEN, 0, 0);
     this->m_owner->m_hasWorldBounds = 0;
     World::ObjectEnableCollision(this->m_worldObject, 0);
 }
@@ -99,8 +99,8 @@ void CGGameObject_C_Type_TrapDoor::UpdateMovement(uint32_t time, uint32_t elapse
         return;
     }
 
-    if (!this->unk_0034 && World::ObjectIsLoaded(this->m_worldObject)) {
-        this->unk_0034 = 1;
+    if (!this->m_worldObjectReady && World::ObjectIsLoaded(this->m_worldObject)) {
+        this->m_worldObjectReady = 1;
         int32_t moved;
         this->MovePassengers(&moved);
         return;

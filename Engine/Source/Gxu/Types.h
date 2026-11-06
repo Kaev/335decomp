@@ -4,16 +4,36 @@
 #include <cstddef>
 #include <cstdint>
 
+enum EGxStringFlags : uint32_t {
+    EGxStringFlags_None = 0,
+    EGxStringFlags_Shadow = 1,
+    EGxStringFlags_NoWordWrap = 2,
+    EGxStringFlags_FixedSize = 4,
+    EGxStringFlags_UniformColor = 8,
+    EGxStringFlags_FixedWidth = 0x10,
+    EGxStringFlags_Gradient = 0x20,
+    EGxStringFlags_NonSpaceWrap = 0x40,
+    EGxStringFlags_Unscaled = 0x80,
+    EGxStringFlags_IgnoreColorCodes = 0x100,
+    EGxStringFlags_IgnoreNewlineCodes = 0x200,
+    EGxStringFlags_IgnoreHyperlinkCodes = 0x400,
+    EGxStringFlags_IgnorePipeCodes = 0x800,
+    EGxStringFlags_IgnoreTextureCodes = 0x1000,
+    EGxStringFlags_Indented = 0x2000,
+};
+
 enum EGxFontHJusts {
     GxHJ_Left = 0,
     GxHJ_Center = 1,
     GxHJ_Right = 2,
+    GxHJ_Last = 3,
 };
 
 enum EGxFontVJusts {
     GxVJ_Top = 0,
     GxVJ_Middle = 1,
     GxVJ_Bottom = 2,
+    GxVJ_Last = 3,
 };
 
 enum QUOTEDCODE {

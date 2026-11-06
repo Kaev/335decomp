@@ -30,6 +30,7 @@
 #include "WoW/Source/Ui/PartyFrame.h"
 #include <cstring>
 #include "Engine/Source/Base/Coordinate.h"
+#include "Engine/Source/ShaderEffect/Types.h"
 
 // STATIC: 0x00C5CDF0
 static CTexture* s_portraitMaskTexture;
@@ -78,7 +79,7 @@ int32_t RTAlphaSupported() {
     }
 
     int32_t supported = 0;
-    GxSceneClear(3, CImVector());
+    GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, CImVector());
 
     CiRect rect;
     rect.minY = 0;
@@ -143,7 +144,7 @@ void PortraitInitialize() {
 // VERIFY: 59c574b9 auto
 // OFFSET: 0x00616B40
 static int32_t IsPortraitDrawable(CGUnit_C* unit) {
-    if (unit->m_clientFlags & 0x400000) {
+    if (unit->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_COMPONENT_INITIALIZATION_PENDING) {
         return 0;
     }
 
@@ -170,14 +171,14 @@ void UpdatePendingPortraits() {
     for (PORTRAITREQUEST* request = s_pendingPortraits.Head(); !s_pendingPortraits.IsEnd(request); request = next) {
         next = s_pendingPortraits.RawNext(request);
         WOWGUID guid = request->m_guid;
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (!unit) {
             s_freePortraits.LinkToTail(request);
             continue;
         }
 
-        if ((unit->m_clientFlags & 0x400000) && !unit->InitializeComponent()) {
+        if ((unit->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_COMPONENT_INITIALIZATION_PENDING) && !unit->InitializeComponent()) {
             continue;
         }
 
@@ -220,6 +221,24 @@ void UpdateModelForUI(const WOWGUID& guid, uint32_t flags) {
 
 // STATIC: 0x00AD6628
 const char* s_sexNames[3] = { "Male", "Female", "NOSEX" };
+
+// INLINED
+PORTRAITCACHE::PORTRAITCACHE() : m_dirty(1), m_texture(nullptr), m_prev(nullptr), m_next(nullptr) {
+}
+
+// INLINED
+PORTRAITCACHE::~PORTRAITCACHE() {
+    if (this->m_texture) {
+        HandleClose(reinterpret_cast<HOBJECT>(this->m_texture));
+    }
+}
+
+// INLINED
+ITEMPORTRAIT::~ITEMPORTRAIT() {
+    if (this->m_texture) {
+        HandleClose(reinterpret_cast<HOBJECT>(this->m_texture));
+    }
+}
 
 // VERIFY: 3458775d auto
 // OFFSET: 0x00616950
@@ -518,7 +537,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         return;
     }
 
-    if (unit->m_obj->m_type & TYPEMASK_PLAYER) {
+    if (unit->m_obj->m_type & TYPE_PLAYER) {
         WOWGUID guid = unit->m_obj->m_guid;
         PLAYERPORTRAIT* portrait = s_playerPortraits.Ptr(static_cast<uint32_t>(guid.m_guid), CHashKeyGUID(guid.m_guid));
 
@@ -558,8 +577,8 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
     CCamera* createdCamera = nullptr;
     CCamera* camera;
 
-    if (model->HasCamera(0)) {
-        camera = model->GetCameraById(0);
+    if (model->HasCamera(CAMERA_PORTRAIT)) {
+        camera = model->GetCameraById(CAMERA_PORTRAIT);
     } else {
         camera = CameraCreate();
         createdCamera = camera;
@@ -573,7 +592,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         C3Vector target(0.0f, 0.0f, 0.0f);
         M2SequenceInfo info;
         info.Clear();
-        model->GetSequenceInfo(0, 0, info);
+        model->GetSequenceInfo(ANIM_STAND, 0, info);
         C3Vector position;
         position.x = info.m_radius * 1.7f + info.m_center.x;
         target = info.m_center;
@@ -586,7 +605,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
     }
 
     CCharacterComponent::RemoveVisuals(model);
-    model->SetBoneSequence(0xFFFFFFFF, 0, 0, 0, 0.0f, 0, 1);
+    model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0, 0, 0.0f, 0, 1);
 
     float viewportMinX;
     float viewportMaxX;
@@ -602,7 +621,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
     GxXformProjection(savedProjection);
     GxXformView(savedView);
     int32_t fogEnabled = GxMasterEnable(GxMasterEnable_Fog);
-    GxMasterEnableSet(GxMasterEnable_Fog, 0);
+    GxMasterEnableSet(GxMasterEnable_Fog, Gx_Disable);
 
     static C44Matrix s_identity;
 
@@ -643,7 +662,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
 
     PORTRAITCACHE* cache;
 
-    if (unit->m_obj->m_type & TYPEMASK_PLAYER) {
+    if (unit->m_obj->m_type & TYPE_PLAYER) {
         WOWGUID guid = unit->m_obj->m_guid;
         PLAYERPORTRAIT* portrait = s_playerPortraits.Ptr(static_cast<uint32_t>(guid.m_guid), CHashKeyGUID(guid.m_guid));
 
@@ -658,7 +677,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         UNITPORTRAIT* portrait = s_unitPortraits.Ptr(displayId, HASHKEY_DWORD{ displayId });
 
         if (!portrait) {
-            portrait = s_unitPortraits.InternalNewNode(displayId, 0, 0);
+            portrait = s_unitPortraits.New(displayId, HASHKEY_DWORD{ displayId }, 0, 0);
         }
 
         cache = &portrait->m_cache;
@@ -717,20 +736,20 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         GxXformSetViewport(viewport.minX, viewport.maxX, viewport.minY, viewport.maxY, 0.0f, 1.0f);
     }
 
-    GxSceneClear(3, CImVector());
+    GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, CImVector());
     model->IsDrawable(1, 1);
     model->SetAnimating(1);
 
     if (model->m_attachParent) {
-        model->m_fFlags |= 0x80;
+        model->m_runtimeFlags |= 0x80;
     } else {
-        model->m_fFlags |= 0x8;
+        model->m_runtimeFlags |= 0x8;
     }
 
     if (model->m_attachParent) {
-        model->m_fFlags |= 0x20000;
+        model->m_runtimeFlags |= 0x20000;
     } else {
-        model->m_fFlags |= 0x10000;
+        model->m_runtimeFlags |= 0x10000;
     }
 
     model->m_lightingCallback = PortraitLightingCallback;
@@ -747,8 +766,8 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         GxXformSetProjection(ortho);
         g_theGxDevicePtr->RsPush();
         GxRsSet(GxRs_Texture0, s_portraitMaskGxTex);
-        GxRsSet(GxRs_ColorOp0, 0);
-        GxRsSet(GxRs_AlphaOp0, 0);
+        GxRsSet(GxRs_ColorOp0, GxTexOp_Mod);
+        GxRsSet(GxRs_AlphaOp0, GxTexOp_Mod);
         GxRsSet(GxRs_ColorWrite, 8);
         GxRsSet(GxRs_BlendingMode, 0);
         GxRsSet(GxRs_Lighting, 0);
@@ -778,7 +797,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         black.g = 0;
         black.r = 0;
         black.a = 0xFF;
-        GxSceneClear(2, black);
+        GxSceneClear(GxBufferBit_Depth, black);
     } else if (g_theGxDevicePtr->DeviceApi() != GxApi_D3d10 && g_theGxDevicePtr->DeviceApi() != GxApi_D3d11) {
         CiRect rect;
         rect.minY = 0;
@@ -793,7 +812,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
         }
 
         GxTexUpdate(gxTex, rect, 1);
-        GxSceneClear(3, CImVector());
+        GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, CImVector());
     }
 
     GxXformSetProjection(savedProjection);
@@ -808,7 +827,7 @@ void RenderPortraitTexture(CSimpleTexture* texture, CGUnit_C* unit) {
     model->Release();
     scene->Release();
 
-    if (unit->m_obj->m_type & TYPEMASK_PLAYER) {
+    if (unit->m_obj->m_type & TYPE_PLAYER) {
         PortraitCachePurge(&s_playerPortraitCache, 40, 0);
     } else {
         PortraitCachePurge(&s_unitPortraitCache, 8, 0);

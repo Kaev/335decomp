@@ -1,6 +1,8 @@
 #ifndef WOW_SOURCE_UIUTIL_TOOLTIP_H
 #define WOW_SOURCE_UIUTIL_TOOLTIP_H
 
+#include "WoW/Common/ComponentCore/Types.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -29,7 +31,7 @@ class ItemLinkInfo {
     /* 0064 */ int32_t m_enchantCharges [12];
     /* 0094 */ uint32_t m_cooldown;
     /* 0098 */ int32_t m_proposedEnchant;
-    /* 009C */ uint32_t unk_009C;
+    /* 009C */ uint32_t unused_009C;
     /* 00A0 */ WOWGUID m_creator;
     /* 00A8 */ WOWGUID m_giftCreator;
     /* 00B0 */ uint32_t m_propertySeed;
@@ -47,7 +49,7 @@ class ItemLinkInfo {
     int32_t GetItemIdFromLink(const char* link);
 };
 
-extern const char* s_inventoryTypeTokens[29];
+extern const char* s_inventoryTypeTokens[INVTYPE_COUNT];
 
 class CGItemStatsSummary;
 class CGTalentGroup_C;
@@ -127,7 +129,7 @@ class CGTooltip : public CSimpleFrame {
     static void RegisterScriptMethods(lua_State* L);
 
     /* 029C */ CSimpleFrame* m_owner;
-    /* 02A0 */ int32_t m_anchorType;
+    /* 02A0 */ TOOLTIP_ANCHORPOINT m_anchorType;
     /* 02A4 */ uint32_t m_numLines;
     /* 02A8 */ uint32_t m_maxLines;
     /* 02AC */ TSFixedArray<CSimpleFontString*> m_leftStrings;
@@ -139,19 +141,19 @@ class CGTooltip : public CSimpleFrame {
     /* 0324 */ uint32_t m_numTextures;
     /* 0328 */ WOWGUID m_unitGuid;
     /* 0330 */ WOWGUID m_objectGuid;
-    /* 0338 */ uint32_t unk_0338;
-    /* 033C */ uint32_t unk_033C;
+    /* 0338 */ uint32_t unused_0338;
+    /* 033C */ uint32_t unused_033C;
     /* 0340 */ WOWGUID m_itemGuid;
     /* 0348 */ WOWGUID m_corpseGuid;
-    /* 0350 */ uint32_t unk_0350;
-    /* 0354 */ uint32_t unk_0354;
+    /* 0350 */ uint32_t m_corpseOwnerGuid;
+    /* 0354 */ uint32_t unused_0354;
     /* 0358 */ WOWGUID m_healthGuid;
     /* 0360 */ int32_t m_itemId;
     /* 0364 */ int32_t m_spellId;
     /* 0368 */ int32_t m_questId;
     /* 036C */ int32_t m_achievementId;
     /* 0370 */ int32_t m_nextRankSpellId;
-    /* 0374 */ uint32_t unk_0374;
+    /* 0374 */ uint32_t unused_0374;
     /* 0378 */ WOWGUID m_achievementGuid;
     /* 0380 */ bool m_achievementCompleted;
     /* 0384 */ WowTime m_achievementTime;
@@ -184,7 +186,7 @@ class CGTooltip : public CSimpleFrame {
     /* 050C */ FrameScript_Object::ScriptIx m_onTooltipSetAchievement;
     /* 0514 */ FrameScript_Object::ScriptIx m_onTooltipSetEquipmentSet;
     /* 051C */ FrameScript_Object::ScriptIx m_onTooltipSetFrameStack;
-    /* 0524 */ uint32_t unk_0524;
+    /* 0524 */ uint32_t unused_0524;
 
     ~CGTooltip() override;
     int32_t GetScriptMetaTable() override;
@@ -243,6 +245,18 @@ class CGTooltip : public CSimpleFrame {
 
 class CGItemStatsSummary {
     public:
+    enum SUMMARY_FLAGS : uint32_t {
+        SUMMARY_NONE = 0,
+        SUMMARY_ITEM_SPELLS = 0x1,
+        SUMMARY_RANDOM_PROPERTIES = 0x2,
+        SUMMARY_DPS = 0x4,
+        SUMMARY_RESISTANCES = 0x8,
+        SUMMARY_SOCKETS = 0x10,
+        SUMMARY_STAT_MODS = 0x20,
+        SUMMARY_BLOCK = 0x40,
+        SUMMARY_SCALING_ITEM = 0x80,
+    };
+
     static int32_t GetItemComparison(CGTooltip* first, CGTooltip* second, CGItemStatsSummary* result);
 
     /* 0000 */ float m_dps;
@@ -274,16 +288,16 @@ class CGItemStatsSummary {
 
 class CSimpleUI {
     public:
-    /* 0000 */ uint8_t unk_0000[720];
-    /* 02D0 */ uint32_t unk_02D0;
-    /* 02D4 */ uint8_t unk_02D4[84];
-    /* 0328 */ uint32_t unk_0328;
-    /* 032C */ uint32_t unk_032C;
-    /* 0330 */ uint8_t unk_0330[40];
-    /* 0358 */ uint32_t unk_0358;
-    /* 035C */ uint32_t unk_035C;
-    /* 0360 */ uint8_t unk_0360[396];
-    /* 04EC */ uint32_t unk_04EC;
+    /* 0000 */ uint8_t unused_0000[720];
+    /* 02D0 */ uint32_t unused_02D0;
+    /* 02D4 */ uint8_t unused_02D4[84];
+    /* 0328 */ uint32_t unused_0328;
+    /* 032C */ uint32_t unused_032C;
+    /* 0330 */ uint8_t unused_0330[40];
+    /* 0358 */ uint32_t unused_0358;
+    /* 035C */ uint32_t unused_035C;
+    /* 0360 */ uint8_t unused_0360[396];
+    /* 04EC */ uint32_t unused_04EC;
 };
 
 extern uint32_t s_tooltipTitleColor;

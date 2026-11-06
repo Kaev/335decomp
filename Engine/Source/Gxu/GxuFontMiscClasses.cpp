@@ -14,6 +14,8 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Tempest/C44Matrix.h"
 
+static const double ONEOVERTEXSIZE = (1.0 / 256.0);
+
 // STATIC: 0x00AD9BCC
 TSList<TEXTLINETEXTURE, TSGetLink<TEXTLINETEXTURE> > TEXTLINETEXTURE::s_freeTextLineTextures;
 
@@ -82,12 +84,12 @@ void CHARCODEDESC::GenerateTextureCoords(uint32_t rowNumber, uint32_t cellHeight
     float left = this->m_glyphStartPixel;
 
     CRect coords;
-    coords.minY = top * (1.0 / 256.0);
-    coords.minX = left * (1.0 / 256.0);
-    coords.maxY = (top + cellHeight) * (1.0 / 256.0);
+    coords.minY = top * ONEOVERTEXSIZE;
+    coords.minX = left * ONEOVERTEXSIZE;
+    coords.maxY = (top + cellHeight) * ONEOVERTEXSIZE;
 
     float right = left + this->m_bitmapData.m_glyphCellWidth;
-    coords.maxX = (1.0 / 256.0) * right;
+    coords.maxX = ONEOVERTEXSIZE * right;
 
     this->m_bitmapData.m_textureCoords = coords;
 }
@@ -263,11 +265,11 @@ void BATCHEDRENDERFONTDESC::Shutdown() {
 CGxVertexPCT* BATCHEDRENDERFONTDESC::UnlockVertexPtrAndRender(CGxBuf*& buf, int32_t count) {
     GxBufUnlock(buf, sizeof(CGxVertexPCT) * count);
 
-    if (!BATCHEDRENDERFONTDESC::s_indexBuf->unk_001C || !BATCHEDRENDERFONTDESC::s_indexBuf->unk_001D) {
+    if (!BATCHEDRENDERFONTDESC::s_indexBuf->m_hasData || !BATCHEDRENDERFONTDESC::s_indexBuf->m_valid) {
         BATCHEDRENDERFONTDESC::InitializeIndexBuff();
     }
 
-    if (BATCHEDRENDERFONTDESC::s_indexBuf->unk_001C && BATCHEDRENDERFONTDESC::s_indexBuf->unk_001D) {
+    if (BATCHEDRENDERFONTDESC::s_indexBuf->m_hasData && BATCHEDRENDERFONTDESC::s_indexBuf->m_valid) {
         GxPrimVertexPtr(buf, GxVBF_PCT);
         g_theGxDevicePtr->PrimIndexPtr(BATCHEDRENDERFONTDESC::s_indexBuf);
 
@@ -445,7 +447,7 @@ CHARCODEDESC* TEXTURECACHEROW::CreateNewDesc(GLYPHBITMAPDATA* data, uint32_t row
 
     if (this->m_widestFreeSlot >= width) {
         CHARCODEDESC* desc = new (__FILE__, __LINE__) CHARCODEDESC;
-        this->m_glyphlist.LinkNode(desc, 2, head);
+        this->m_glyphlist.LinkNode(desc, TSLIST_LINK_BEFORE, head);
         desc->m_glyphEndPixel = head->m_glyphStartPixel - 1;
         desc->m_glyphStartPixel = desc->m_glyphEndPixel - width + 1;
         desc->m_rowNumber = rowNumber;
@@ -480,13 +482,14 @@ CHARCODEDESC* TEXTURECACHEROW::CreateNewDesc(GLYPHBITMAPDATA* data, uint32_t row
             }
         } else if (gap >= width) {
             desc = new (__FILE__, __LINE__) CHARCODEDESC;
-            this->m_glyphlist.LinkNode(desc, 1, glyph);
+            this->m_glyphlist.LinkNode(desc, TSLIST_LINK_AFTER, glyph);
             desc->m_glyphStartPixel = glyph->m_glyphEndPixel + 1;
             desc->m_glyphEndPixel = glyph->m_glyphEndPixel + width;
             desc->m_rowNumber = rowNumber;
             desc->m_bitmapData.CopyFrom(data);
             desc->GenerateTextureCoords(rowNumber, cellHeight);
             inserted = 1;
+            next = desc;
         } else if (!next) {
             return nullptr;
         }

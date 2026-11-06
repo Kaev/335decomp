@@ -1,4 +1,7 @@
 #include "Map.h"
+#include "WoW/Source/Object/ObjectClient/Types.h"
+#include "WoW/Source/WorldClient/WorldLightingConstants.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include "Engine/Source/ShaderEffect/ShadowCache.h"
 #if defined(_MSC_VER)
 #include <malloc.h>
@@ -84,6 +87,11 @@
 #include "WoW/Source/Game/GameClient/ProjectTex.h"
 #include "WoW/Source/DB/Rec/TerrainTypeRec.h"
 
+static const int32_t MAXALPHA = 127;
+static const float FOOTPRINT_FADEOUT_RATE = 0.00016666666f;
+
+static const float MD_RIVER_DEPTH_SCALE = 0.11111111f;
+
 // STATIC: 0x00CF4938
 TSGrowableArray<CGxVertexPC> CMap::debugVertexArray;
 
@@ -106,7 +114,7 @@ FVBBList CMap::s_vbbList;
 TSExplicitList<CMapRenderChunk, offsetof(CMapRenderChunk, m_renderChunkLink)> CMap::s_mapRenderChunkFreeList;
 
 // STATIC: 0x00AEED80
-TSExplicitList<CMapChunkBuf, offsetof(CMapChunkBuf, unk_0014)> CMap::s_chunkBufFreeList;
+TSExplicitList<CMapChunkBuf, offsetof(CMapChunkBuf, m_freeLink)> CMap::s_chunkBufFreeList;
 
 // STATIC: 0x00AEED8C
 TSList<CMapArea, TSGetExplicitLink<CMapArea> > CMap::s_allocatedAreas = TSExplicitList<CMapArea, offsetof(CMapArea, m_lameAssLink)>();
@@ -280,7 +288,7 @@ uint32_t* CMap::chunkLiquidHeap;
 TSList<CMapDoodadDef, TSGetExplicitLink<CMapDoodadDef> > CMap::doodadDefList = TSExplicitList<CMapDoodadDef, offsetof(CMapDoodadDef, m_doodadDefLink)>();
 
 // STATIC: 0x00ADFC64
-C3Vector CMap::s_subchunkCoords[5] = { C3Vector(0.0f, 0.0f, 0.0f), C3Vector(0.0f, -4.1666665f, 0.0f), C3Vector(-4.1666665f, -4.1666665f, 0.0f), C3Vector(-4.1666665f, 0.0f, 0.0f), C3Vector(-2.0833333f, -2.0833333f, 0.0f) };
+C3Vector CMap::s_subchunkCoords[5] = { C3Vector(0.0f, 0.0f, 0.0f), C3Vector(0.0f, -SMOLTILE_SIZE, 0.0f), C3Vector(-SMOLTILE_SIZE, -SMOLTILE_SIZE, 0.0f), C3Vector(-SMOLTILE_SIZE, 0.0f, 0.0f), C3Vector(-HALF_SMOLTILE_SIZE, -HALF_SMOLTILE_SIZE, 0.0f) };
 
 // STATIC: 0x00A3FAF0
 uint32_t CMap::s_holeMask[16] = { 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80, 0x100, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000 };
@@ -382,13 +390,13 @@ static const int32_t s_flightBoundsTriangles[24] = { 3, 0, 4, 0, 1, 4, 1, 2, 4, 
 static const float s_flightBoundsOffsets[9][2] = {
     { 0.0f, 0.0f },
     { 0.0f, -266.66666f },
-    { 0.0f, -533.33331f },
+    { 0.0f, -MD_AREA_POLY_SIZE },
     { -266.66666f, 0.0f },
     { -266.66666f, -266.66666f },
-    { -266.66666f, -533.33331f },
-    { -533.33331f, 0.0f },
-    { -533.33331f, -266.66666f },
-    { -533.33331f, -533.33331f },
+    { -266.66666f, -MD_AREA_POLY_SIZE },
+    { -MD_AREA_POLY_SIZE, 0.0f },
+    { -MD_AREA_POLY_SIZE, -266.66666f },
+    { -MD_AREA_POLY_SIZE, -MD_AREA_POLY_SIZE },
 };
 
 // STATIC: 0x00CD7768
@@ -488,8 +496,8 @@ void CDestructibleProxy::FindOrCreate(CDestructibleProxy* proxy) {
         }
     }
 
-    CDestructibleProxy* created = CMap::s_destructibleProxyList.NewNode(2, 0, 0);
-    created->unk_0000 = proxy->unk_0000;
+    CDestructibleProxy* created = CMap::s_destructibleProxyList.NewNode(TSLIST_LINK_BEFORE, 0, 0);
+    created->unused_0000 = proxy->unused_0000;
     created->m_sphere = proxy->m_sphere;
     created->m_uniqueId = proxy->m_uniqueId;
     CMap::s_destructibleProxyList.LinkToHead(created);
@@ -648,7 +656,7 @@ void CMap::InitializeLiquidTables() {
         float alpha = static_cast<float>(i) * CMap::s_liquidAlphaScale * scale;
         CMap::s_depthCoordTable1[i] = alpha >= 1.0f ? 1.0f : alpha;
 
-        float depth = static_cast<float>(i) * 0.11111111f;
+        float depth = static_cast<float>(i) * MD_RIVER_DEPTH_SCALE;
         CMap::s_depthCoordTable0[i] = depth <= 4.6666665f ? depth * 0.21428572f : 1.0f;
     }
 
@@ -859,15 +867,15 @@ CGxShader* CMap::GetPixelShader(bool a1, bool a2, bool a3) {
 // VERIFY: 70d4ac15 manual
 // OFFSET: 0x007A06A0
 bool CMap::QueryShadow(C3Vector* pos) {
-    float y = -(pos->y - 17066.666f);
-    float x = -(pos->x - 17066.666f);
+    float y = -(pos->y - HALF_WORLD_SIZE);
+    float x = -(pos->x - HALF_WORLD_SIZE);
 
     if (y < 0.0f || x < 0.0f || y >= 34133.332f || x >= 34133.332f) {
         return false;
     }
 
-    int32_t cellX = CMath::fint_(y * 0.029999999f - 0.5f);
-    int32_t cellY = CMath::fint_(x * 0.029999999f - 0.5f);
+    int32_t cellX = CMath::fint_(y * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t cellY = CMath::fint_(x * OO_COORD_TO_CHUNK - 0.5f);
     CMapArea* area = CMap::GetLoadedArea((cellX >> 4) & 0x3F, (cellY >> 4) & 0x3F);
 
     if (!area) {
@@ -880,8 +888,8 @@ bool CMap::QueryShadow(C3Vector* pos) {
         return false;
     }
 
-    int32_t shadowX = CMath::fint_(y * 1.92f - 0.5f) & 0x3F;
-    int32_t shadowY = CMath::fint_(x * 1.92f - 0.5f) & 0x3F;
+    int32_t shadowX = CMath::fint_(y * OO_COORD_TO_SHADOW - 0.5f) & 0x3F;
+    int32_t shadowY = CMath::fint_(x * OO_COORD_TO_SHADOW - 0.5f) & 0x3F;
     uint8_t mamp = area->m_header->m_mampValue;
     int32_t bitX = shadowX >> mamp;
 
@@ -891,8 +899,8 @@ bool CMap::QueryShadow(C3Vector* pos) {
 // VERIFY: cdb37c44 manual
 // OFFSET: 0x007A0820
 bool CMap::QueryLiquidTerrain(const C3Vector* pos, int32_t* liquidType, float* height, int32_t checkGround) {
-    float cellYf = -(pos->y - 17066.666f) * 0.24f;
-    float cellXf = 0.24f * -(pos->x - 17066.666f);
+    float cellYf = -(pos->y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK;
+    float cellXf = OO_COORD_TO_SUBCHUNK * -(pos->x - HALF_WORLD_SIZE);
     int32_t cellX = CMath::fint_(cellYf - 0.5f);
     int32_t cellY = CMath::fint_(cellXf - 0.5f);
 
@@ -1060,7 +1068,7 @@ void CMap::VectorIntersectDX(C3Vector& start, C3Vector& end, CiRect& cells) {
         step = 1;
     }
 
-    float edge = next * 4.1666665f;
+    float edge = next * SMOLTILE_SIZE;
 
     CMap::scCollideList.m_data[CMap::cCount++] = x;
     CMap::scCollideList.m_data[CMap::cCount++] = y;
@@ -1070,7 +1078,7 @@ void CMap::VectorIntersectDX(C3Vector& start, C3Vector& end, CiRect& cells) {
             return;
         }
 
-        int32_t edgeY = CMath::fint_((slope * edge + intercept) * 0.24f - 0.5f);
+        int32_t edgeY = CMath::fint_((slope * edge + intercept) * OO_COORD_TO_SUBCHUNK - 0.5f);
 
         if (edgeY != y) {
             CMap::scCollideList.m_data[CMap::cCount++] = x;
@@ -1078,7 +1086,7 @@ void CMap::VectorIntersectDX(C3Vector& start, C3Vector& end, CiRect& cells) {
         }
 
         x += step;
-        edge = step * 4.1666665f + edge;
+        edge = step * SMOLTILE_SIZE + edge;
 
         CMap::scCollideList.m_data[CMap::cCount++] = x;
         CMap::scCollideList.m_data[CMap::cCount++] = edgeY;
@@ -1112,7 +1120,7 @@ void CMap::VectorIntersectDY(C3Vector& start, C3Vector& end, CiRect& cells) {
         step = 1;
     }
 
-    float edge = next * 4.1666665f;
+    float edge = next * SMOLTILE_SIZE;
 
     CMap::scCollideList.m_data[CMap::cCount++] = cells.minX;
     CMap::scCollideList.m_data[CMap::cCount++] = cells.minY;
@@ -1122,7 +1130,7 @@ void CMap::VectorIntersectDY(C3Vector& start, C3Vector& end, CiRect& cells) {
             return;
         }
 
-        int32_t edgeX = CMath::fint_((edge - intercept) * invSlope * 0.24f - 0.5f);
+        int32_t edgeX = CMath::fint_((edge - intercept) * invSlope * OO_COORD_TO_SUBCHUNK - 0.5f);
 
         if (edgeX != x) {
             CMap::scCollideList.m_data[CMap::cCount++] = edgeX;
@@ -1130,7 +1138,7 @@ void CMap::VectorIntersectDY(C3Vector& start, C3Vector& end, CiRect& cells) {
         }
 
         CMap::scCollideList.m_data[CMap::cCount++] = edgeX;
-        edge = step * 4.1666665f + edge;
+        edge = step * SMOLTILE_SIZE + edge;
         y += step;
         CMap::scCollideList.m_data[CMap::cCount++] = y;
 
@@ -1165,9 +1173,9 @@ static void AddHitDebugModel(World::HitTestDebug* hitInfo, int32_t depth, CM2Mod
         entry->m_numGeometryBatches = model->GetNumGeometryBatches();
         entry->m_numPrimitives = model->GetNumPrimitives();
         entry->m_numOtherBatches = model->GetNumBatches() - entry->m_numGeometryBatches;
-        entry->m_numBones = (model->m_fFlags & 1) ? model->m_shared->m_data->m_bones.m_count : 0;
+        entry->m_numBones = (model->m_runtimeFlags & 1) ? model->m_shared->m_data->m_bones.m_count : 0;
 
-        if (!(model->m_fFlags & 1)) {
+        if (!(model->m_runtimeFlags & 1)) {
             model->WaitForLoad(nullptr);
         }
 
@@ -1176,7 +1184,7 @@ static void AddHitDebugModel(World::HitTestDebug* hitInfo, int32_t depth, CM2Mod
         entry->m_attachmentId = model->m_attachmentId;
         entry->m_attachmentScale = 1.0f;
 
-        if (model->m_attachmentId != 0xFFFFFFFF && model->m_attachParent) {
+        if (model->m_attachmentId != MODEL_ATTACHMENT_ID::ATTACH_NONE && model->m_attachParent) {
             entry->m_attachmentScale = model->m_attachParent->GetAttachmentWorldScale(model->m_attachmentId);
         }
 
@@ -1212,7 +1220,7 @@ void CMap::VectorIntersectDoodadDefs(TSList<CMapBaseObjLink, TSGetExplicitLink<C
 
         int32_t mode = -1;
 
-        if (doodadDef->unk_00B8) {
+        if (doodadDef->m_collisionGuid) {
             if (flags & 0x100000) {
                 mode = 3;
             } else if (flags & 0x600000) {
@@ -1224,7 +1232,7 @@ void CMap::VectorIntersectDoodadDefs(TSList<CMapBaseObjLink, TSGetExplicitLink<C
             mode = (flags & 0x8) ? 2 : (flags >> 24) & 1;
         }
 
-        if (mode >= 0 && (model->m_fFlags & 1)) {
+        if (mode >= 0 && (model->m_runtimeFlags & 1)) {
             if (!model->m_hitTestPrev) {
                 model->m_hitTestPrev = &model->m_scene->m_hitTestList;
                 model->m_hitTestNext = model->m_scene->m_hitTestList;
@@ -1258,11 +1266,11 @@ void CMap::VectorIntersectEntitys(TSList<CMapBaseObjLink, TSGetExplicitLink<CMap
             continue;
         }
 
-        if (!(entity->unk_007C & 0x2)) {
+        if (!(entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_COLLIDABLE)) {
             return;
         }
 
-        if (entity->m_unkCounter == CMap::s_queryTag || (entity->unk_007C & 0x4)) {
+        if (entity->m_unkCounter == CMap::s_queryTag || (entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_HIDDEN)) {
             continue;
         }
 
@@ -1279,7 +1287,7 @@ void CMap::VectorIntersectEntitys(TSList<CMapBaseObjLink, TSGetExplicitLink<CMap
             continue;
         }
 
-        if (model->m_fFlags & 1) {
+        if (model->m_runtimeFlags & 1) {
             if (!model->m_hitTestPrev) {
                 model->m_hitTestPrev = &model->m_scene->m_hitTestList;
                 model->m_hitTestNext = model->m_scene->m_hitTestList;
@@ -1439,19 +1447,19 @@ bool CMap::VectorIntersectSubChunkList(C3Vector* start, C3Vector* end, float* di
 // VERIFY: 2f69e7ee auto
 // OFFSET: 0x007A39F0
 bool CMap::VectorIntersectTerrain(C3Vector* start, C3Vector* end, float* distance, uint32_t flags, CMapChunk** hitChunk) {
-    float startX = -(start->y - 17066.666f);
-    float startY = -(start->x - 17066.666f);
-    float endX = -(end->y - 17066.666f);
-    float endY = -(end->x - 17066.666f);
+    float startX = -(start->y - HALF_WORLD_SIZE);
+    float startY = -(start->x - HALF_WORLD_SIZE);
+    float endX = -(end->y - HALF_WORLD_SIZE);
+    float endY = -(end->x - HALF_WORLD_SIZE);
 
     float dX = endX - startX;
     float dY = endY - startY;
 
     CiRect cells;
-    cells.maxY = CMath::fint_(endY * 0.24f - 0.5f);
-    cells.minX = CMath::fint_(startX * 0.24f - 0.5f);
-    cells.minY = CMath::fint_(startY * 0.24f - 0.5f);
-    cells.maxX = CMath::fint_(endX * 0.24f - 0.5f);
+    cells.maxY = CMath::fint_(endY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cells.minX = CMath::fint_(startX * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cells.minY = CMath::fint_(startY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cells.maxX = CMath::fint_(endX * OO_COORD_TO_SUBCHUNK - 0.5f);
 
     CMap::cCount = 0;
 
@@ -1545,7 +1553,7 @@ void CMap::AppendMapObjFacets(CMapDoodadDef* def, CAaBox* box, World::FacetData*
     facets->facetIds.SetCount(count);
 
     for (uint32_t i = first; i < count; i++) {
-        facets->facetIds.m_data[i] = def->unk_00B8.m_guid;
+        facets->facetIds.m_data[i] = def->m_collisionGuid.m_guid;
     }
 }
 
@@ -1580,8 +1588,8 @@ bool CMap::GetHeightTerrain(CMapChunk* chunk, C3Vector& pos, int32_t cellX, int3
         return false;
     }
 
-    float originX = row * -4.1666665f;
-    float originY = -4.1666665f * col;
+    float originX = row * -SMOLTILE_SIZE;
+    float originY = -SMOLTILE_SIZE * col;
 
     float dx = pos.x - chunk->m_topLeftCoords.x;
     float dy = pos.y - chunk->m_topLeftCoords.y;
@@ -1657,8 +1665,8 @@ static int32_t CompareAreaEntries(const void* a, const void* b) {
 // VERIFY: 9faa97d5 manual
 // OFFSET: 0x007B4960
 CMapArea* CMap::GetAreaAtPosition(const C2Vector* pos) {
-    float x = -(pos->x - 17066.666f);
-    float y = -(pos->y - 17066.666f) * 0.001875f;
+    float x = -(pos->x - HALF_WORLD_SIZE);
+    float y = -(pos->y - HALF_WORLD_SIZE) * 0.001875f;
     x = x * 0.001875f;
 
     return CMap::m_areaTable[64 * CMath::fint_(x - 0.5f) + CMath::fint_(y - 0.5f)];
@@ -1667,9 +1675,9 @@ CMapArea* CMap::GetAreaAtPosition(const C2Vector* pos) {
 // VERIFY: 8231832c manual
 // OFFSET: 0x007B49C0
 CMapChunk* CMap::GetChunkAtPosition(const C2Vector* pos) {
-    float x = -(pos->x - 17066.666f);
-    float y = -(pos->y - 17066.666f) * 0.03f;
-    x = x * 0.03f;
+    float x = -(pos->x - HALF_WORLD_SIZE);
+    float y = -(pos->y - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK;
+    x = x * OO_COORD_TO_CHUNK;
 
     int32_t chunkY = CMath::fint_(x - 0.5f);
     int32_t chunkX = CMath::fint_(y - 0.5f);
@@ -1851,8 +1859,8 @@ uint32_t CMap::ComputeMapObjLoadProgress(CMapChunk* chunk, float* progress, uint
             for (CMapBaseObjLink* doodadLink = defGroup->m_doodadDefLinkList.Head(); doodadLink; doodadLink = defGroup->m_doodadDefLinkList.Next(doodadLink)) {
                 CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(doodadLink->m_owner);
 
-                if ((!doodadDef->m_model || !(doodadDef->m_flags & MAPOBJ_FLAG_PREPARED)) && !(doodadDef->unk_007C & 0x10000)) {
-                    doodadDef->unk_007C |= 0x10000;
+                if ((!doodadDef->m_model || !(doodadDef->m_flags & MAPOBJ_FLAG_PREPARED)) && !(doodadDef->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING)) {
+                    doodadDef->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING;
 
                     if (!pending) {
                         pending = 1;
@@ -1950,7 +1958,7 @@ void CMap::PrepareEntitys(int32_t addToScene) {
     }
 
     for (CMapEntity* entity = CMap::entityList.Head(); entity; entity = CMap::entityList.Next(entity)) {
-        if (!(entity->unk_007C & 0x4)) {
+        if (!(entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_HIDDEN)) {
             CWorldScene::AddEntityToSortTable(entity);
         }
     }
@@ -1967,7 +1975,7 @@ void CMap::PrepareMapDoodadDefs() {
         CMapDoodadDef* next = CMap::doodadDefList.Next(doodadDef);
 
         if (!model || model->IsLoaded(0, 0)) {
-            if (!(doodadDef->unk_007C & 0x10)) {
+            if (!(doodadDef->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_RUNTIME_DOODAD)) {
                 doodadDef->UpdateBounds();
 
                 if (!(doodadDef->m_flags & MAPOBJ_FLAG_INTERIOR) && CMap::QueryShadow(&doodadDef->m_position)) {
@@ -1979,9 +1987,9 @@ void CMap::PrepareMapDoodadDefs() {
             }
 
             doodadDef->m_doodadDefLink.Unlink();
-        } else if (streaming && (doodadDef->unk_007C & 0x10000)) {
+        } else if (streaming && (doodadDef->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING)) {
             doodadDef->m_model->LinkToAsyncHead(1);
-            doodadDef->unk_007C &= ~0x10000u;
+            doodadDef->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING;
         }
 
         doodadDef = next;
@@ -1990,7 +1998,7 @@ void CMap::PrepareMapDoodadDefs() {
 
 // VERIFY: d6c4755a manual
 // OFFSET: 0x007B5950
-void CMap::PreUpdateAreas(bool a1) {
+void CMap::PreUpdateAreas(bool addToScene) {
     int32_t maxY = CWorld::gbChunkRect.maxY >> 4;
     int32_t minX = CWorld::gbChunkRect.minX >> 4;
     int32_t minY = CWorld::gbChunkRect.minY >> 4;
@@ -2074,7 +2082,7 @@ void CMap::PreUpdateAreas(bool a1) {
             rect.minY = area->m_tileChunkIndex.y;
             rect.maxX = area->m_tileChunkIndex.x + 15;
             rect.maxY = area->m_tileChunkIndex.y + 15;
-            CMap::UpdateArea(a1, area, &rect, 0);
+            CMap::UpdateArea(addToScene, area, &rect, 0);
         }
     }
 
@@ -2092,7 +2100,7 @@ void CMap::PreUpdateAreas(bool a1) {
         AsyncFile::LeaveQueueLock();
     }
 
-    if (a1) {
+    if (addToScene) {
         CMap::UpdateBarriers();
     }
 }
@@ -2153,7 +2161,7 @@ uint32_t CMap::ComputeDoodadLoadProgress(CMapChunk* chunk, float* progress, uint
     for (CMapBaseObjLink* link = list->Head(); link; link = list->Next(link)) {
         CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(link->m_owner);
 
-        if ((doodadDef->m_model && (doodadDef->m_flags & MAPOBJ_FLAG_PREPARED)) || (doodadDef->unk_007C & 0x10000)) {
+        if ((doodadDef->m_model && (doodadDef->m_flags & MAPOBJ_FLAG_PREPARED)) || (doodadDef->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING)) {
             continue;
         }
 
@@ -2164,7 +2172,7 @@ uint32_t CMap::ComputeDoodadLoadProgress(CMapChunk* chunk, float* progress, uint
             *progress += static_cast<float>(loaded) / static_cast<float>(size) * scale;
         }
 
-        doodadDef->unk_007C |= 0x10000;
+        doodadDef->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING;
         remaining++;
     }
 
@@ -2194,7 +2202,7 @@ uint32_t CMap::ComputeDoodadLoadProgress(CMapChunk* chunk, float* progress, uint
 
 // VERIFY: 61aca6d6 manual
 // OFFSET: 0x007B6110
-void CMap::PrepareMapObjDefs(bool a1) {
+void CMap::PrepareMapObjDefs(bool addToScene) {
     int32_t waitLoad = 1;
 
     if (CMap::s_isStreamingMode || CMap::bPreload) {
@@ -2229,7 +2237,7 @@ void CMap::PrepareMapObjDefs(bool a1) {
             CAaBox& box = defGroup->m_bbox;
 
             if (CWorld::s_objectAreaOfInterest.b.x <= box.t.x && CWorld::s_objectAreaOfInterest.b.y <= box.t.y && CWorld::s_objectAreaOfInterest.b.z <= box.t.z && CWorld::s_objectAreaOfInterest.t.x >= box.b.x && CWorld::s_objectAreaOfInterest.t.y >= box.b.y && CWorld::s_objectAreaOfInterest.t.z >= box.b.z) {
-                if (!(group->m_unkLoadedFlag & 1)) {
+                if (!(group->m_unkLoadedFlag & CMapObjGroup::RUNTIME_FLAGS::LOADED)) {
                     if (!group->m_asyncObjPtr) {
                         mapObj->ReadGroup(defGroup->m_groupNum);
                     }
@@ -2239,9 +2247,9 @@ void CMap::PrepareMapObjDefs(bool a1) {
                     }
                 }
 
-                group->unk_0190 = 0.0f;
+                group->unused_0190 = 0.0f;
 
-                if (group->m_unkLoadedFlag & 1) {
+                if (group->m_unkLoadedFlag & CMapObjGroup::RUNTIME_FLAGS::LOADED) {
                     if (!(defGroup->m_flags & MAPOBJ_FLAG_GROUP_INIT)) {
                         CMapObj::InitDefGroup(mapObj, group, mapObjDef, defGroup);
                     }
@@ -2259,11 +2267,11 @@ void CMap::PrepareMapObjDefs(bool a1) {
                 group->m_distToCamera = groupDist;
             }
 
-            if (!a1 || !(mapObjDef->m_flags & MAPOBJ_FLAG_PREPARED)) {
+            if (!addToScene || !(mapObjDef->m_flags & MAPOBJ_FLAG_PREPARED)) {
                 continue;
             }
 
-            if (!(group->m_unkLoadedFlag & 1)) {
+            if (!(group->m_unkLoadedFlag & CMapObjGroup::RUNTIME_FLAGS::LOADED)) {
                 CWorldScene::s_barrier.AddBarrierMapObjDefGroup(defGroup, 50.0f);
                 continue;
             }
@@ -2293,7 +2301,7 @@ void CMap::PrepareMapObjDefs(bool a1) {
 
 // VERIFY: 6908aa4f manual
 // OFFSET: 0x007B6B00
-void CMap::PrepareUpdate(bool a1) {
+void CMap::PrepareUpdate(bool addToScene) {
     if (CWorld::status.m_chunksChanged) {
         CMap::PurgeMaps();
     }
@@ -2304,10 +2312,10 @@ void CMap::PrepareUpdate(bool a1) {
     CMapChunkLiquidBuf::Update(FrameTime::s_tickTimeSec);
     CMapObj::PrepareUpdate();
     CMapRenderChunk::PurgeChunkBufBlocks();
-    CMap::PreUpdateAreas(a1);
-    CMap::PrepareMapObjDefs(a1);
+    CMap::PreUpdateAreas(addToScene);
+    CMap::PrepareMapObjDefs(addToScene);
     CMap::PrepareMapDoodadDefs();
-    CMap::PrepareEntitys(a1);
+    CMap::PrepareEntitys(addToScene);
 
     if (!CMap::bPreload) {
         return;
@@ -2320,8 +2328,8 @@ void CMap::PrepareUpdate(bool a1) {
             World::s_loadProgressCallback(0.25f, World::s_loadProgressParam);
         }
 
-        CMap::PreUpdateAreas(a1);
-        CMap::PrepareMapObjDefs(a1);
+        CMap::PreUpdateAreas(addToScene);
+        CMap::PrepareMapObjDefs(addToScene);
         CMapObj::PrepareUpdate();
         CMap::PrepareMapDoodadDefs();
         AsyncFileReadWaitAll();
@@ -2330,8 +2338,8 @@ void CMap::PrepareUpdate(bool a1) {
             World::s_loadProgressCallback(0.5f, World::s_loadProgressParam);
         }
 
-        CMap::PreUpdateAreas(a1);
-        CMap::PrepareMapObjDefs(a1);
+        CMap::PreUpdateAreas(addToScene);
+        CMap::PrepareMapObjDefs(addToScene);
         CMapObj::PrepareUpdate();
         CMap::PrepareMapDoodadDefs();
         AsyncFileReadWaitAll();
@@ -2340,8 +2348,8 @@ void CMap::PrepareUpdate(bool a1) {
             World::s_loadProgressCallback(0.66000003f, World::s_loadProgressParam);
         }
 
-        CMap::PreUpdateAreas(a1);
-        CMap::PrepareMapObjDefs(a1);
+        CMap::PreUpdateAreas(addToScene);
+        CMap::PrepareMapObjDefs(addToScene);
         CMapObj::PrepareUpdate();
         CMap::PrepareMapDoodadDefs();
         AsyncFileReadWaitAll();
@@ -2380,8 +2388,8 @@ void CMap::PrepareUpdate(bool a1) {
         World::s_loadProgressCallback(0.2f, World::s_loadProgressParam);
     }
 
-    CMap::PreUpdateAreas(a1);
-    CMap::PrepareMapObjDefs(a1);
+    CMap::PreUpdateAreas(addToScene);
+    CMap::PrepareMapObjDefs(addToScene);
     CMapObj::PrepareUpdate();
     CMap::PrepareMapDoodadDefs();
     AsyncFileReadPollHandler(nullptr, nullptr);
@@ -2396,8 +2404,8 @@ void CMap::PrepareUpdate(bool a1) {
         do {
             OsSleep(10);
             AsyncFileReadPollHandler(nullptr, nullptr);
-            CMap::PreUpdateAreas(a1);
-            CMap::PrepareMapObjDefs(a1);
+            CMap::PreUpdateAreas(addToScene);
+            CMap::PrepareMapObjDefs(addToScene);
             CMapObj::PrepareUpdate();
             CMap::PrepareMapDoodadDefs();
             remaining = CMap::ComputeDoodadLoadProgress(chunk, &progress, doodadTotal);
@@ -2408,8 +2416,8 @@ void CMap::PrepareUpdate(bool a1) {
         } while (remaining);
     }
 
-    CMap::PreUpdateAreas(a1);
-    CMap::PrepareMapObjDefs(a1);
+    CMap::PreUpdateAreas(addToScene);
+    CMap::PrepareMapObjDefs(addToScene);
     CMapObj::PrepareUpdate();
     CMap::PrepareMapDoodadDefs();
     AsyncFileReadPollHandler(nullptr, nullptr);
@@ -2423,8 +2431,8 @@ void CMap::PrepareUpdate(bool a1) {
         do {
             OsSleep(10);
             AsyncFileReadPollHandler(nullptr, nullptr);
-            CMap::PreUpdateAreas(a1);
-            CMap::PrepareMapObjDefs(a1);
+            CMap::PreUpdateAreas(addToScene);
+            CMap::PrepareMapObjDefs(addToScene);
             CMapObj::PrepareUpdate();
             CMap::PrepareMapDoodadDefs();
             remaining = CMap::ComputeMapObjLoadProgress(chunk, &progress, mapObjTotal);
@@ -2435,8 +2443,8 @@ void CMap::PrepareUpdate(bool a1) {
         } while (remaining);
     }
 
-    CMap::PreUpdateAreas(a1);
-    CMap::PrepareMapObjDefs(a1);
+    CMap::PreUpdateAreas(addToScene);
+    CMap::PrepareMapObjDefs(addToScene);
     CMapObj::PrepareUpdate();
     CMap::PrepareMapDoodadDefs();
     AsyncFileReadPollHandler(nullptr, nullptr);
@@ -2624,18 +2632,18 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, SMDoodadDef* doodadDe
     mapDoodadDef->m_mat.RotateAroundY(rotY);
     mapDoodadDef->m_mat.RotateAroundX(rotX);
     mapDoodadDef->m_mat.Scale(mapDoodadDef->m_scale);
-    mapDoodadDef->m_identity = C44Matrix();
+    mapDoodadDef->m_lMat = C44Matrix();
 
     CM2Model* model = World::s_m2Scene->CreateModel(fileName, 0x20);
     mapDoodadDef->m_model = model;
 
     if (model) {
-        model->m_fFlags |= 0x8000;
+        model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         model->m_worldTransform = mapDoodadDef->m_mat;
-        mapDoodadDef->m_model->SetEventCallback(reinterpret_cast<void*>(CMapStaticEntity::ModelEventCallback), reinterpret_cast<uintptr_t>(mapDoodadDef));
+        mapDoodadDef->m_model->SetEventCallback(CMapStaticEntity::ModelEventCallback, reinterpret_cast<uintptr_t>(mapDoodadDef));
         mapDoodadDef->m_model->m_lightingCallback = CMapStaticEntity::ModelLightingCallback;
         mapDoodadDef->m_model->m_lightingArg = mapDoodadDef;
-        mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
+        mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, 0, 1.0f, 1, 1);
     }
 
     return mapDoodadDef;
@@ -2643,7 +2651,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, SMDoodadDef* doodadDe
 
 // VERIFY: 84c1a3e9 manual
 // OFFSET: 0x007BEB40
-CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, const C3Vector* position, float facing, int32_t a4) {
+CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, const C3Vector* position, float facing, int32_t waitForLoad) {
     int32_t id = CMap::uniqueId--;
     HASHKEY_DWORD key = { 0 };
     CMap::doodadDefHash.Ptr(id, key);
@@ -2661,10 +2669,10 @@ CMapDoodadDef* CMap::CreateDoodadDef(const char* fileName, const C3Vector* posit
     doodadDef->m_mat.d1 = position->y;
     doodadDef->m_mat.d2 = position->z;
     doodadDef->m_mat.RotateAroundZ(facing);
-    doodadDef->m_identity = C44Matrix();
+    doodadDef->m_lMat = C44Matrix();
     doodadDef->m_flags = MAPOBJ_FLAG_UNPLACED;
     doodadDef->m_model = nullptr;
-    CMapDoodadDef::CreateModel(fileName, doodadDef, a4, 0);
+    CMapDoodadDef::CreateModel(fileName, doodadDef, waitForLoad, 0);
 
     return doodadDef;
 }
@@ -2690,7 +2698,7 @@ CMapDoodadDef* CMap::CreateDoodadDef(uint32_t doodadRef, SMODoodadDef* doodadDef
     mapDoodadDef->m_sphere.r = 0.0f;
     mapDoodadDef->m_bbox.b = mapDoodadDef->m_position;
     mapDoodadDef->m_bbox.t = mapDoodadDef->m_position;
-    mapDoodadDef->unk_016C = doodadSet;
+    mapDoodadDef->m_doodadSet = doodadSet;
     mapDoodadDef->m_flags = MAPOBJ_FLAG_UNPLACED;
 
     if (doodadDef->m_flags & 0x1000000) {
@@ -2702,23 +2710,23 @@ CMapDoodadDef* CMap::CreateDoodadDef(uint32_t doodadRef, SMODoodadDef* doodadDef
     mapDoodadDef->m_mat.Translate(doodadDef->m_position);
     mapDoodadDef->m_mat.Rotate(doodadDef->m_orientation);
     mapDoodadDef->m_mat.Scale(mapDoodadDef->m_scale);
-    mapDoodadDef->m_identity = mapDoodadDef->m_mat;
+    mapDoodadDef->m_lMat = mapDoodadDef->m_mat;
     mapDoodadDef->m_mat *= *mat;
 
     CImVector limit;
-    *reinterpret_cast<uint32_t*>(&limit) = 112;
-    mapDoodadDef->AdjustLightmap(&doodadDef->m_color, &mapDoodadDef->m_m2DiffuseColor, limit, &mapDoodadDef->m_m2AmbientColor, 96);
+    *reinterpret_cast<uint32_t*>(&limit) = MIN_DOODAD_DIRCOLOR;
+    mapDoodadDef->AdjustLightmap(&doodadDef->m_color, &mapDoodadDef->m_m2DiffuseColor, limit, &mapDoodadDef->m_m2AmbientColor, MAX_AMBIENT);
 
     CM2Model* model = World::s_m2Scene->CreateModel(name, 0x20);
     mapDoodadDef->m_model = model;
 
     if (model) {
-        model->m_fFlags |= 0x8000;
+        model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         model->m_worldTransform = mapDoodadDef->m_mat;
-        mapDoodadDef->m_model->SetEventCallback(reinterpret_cast<void*>(CMapStaticEntity::ModelEventCallback), reinterpret_cast<uintptr_t>(mapDoodadDef));
+        mapDoodadDef->m_model->SetEventCallback(CMapStaticEntity::ModelEventCallback, reinterpret_cast<uintptr_t>(mapDoodadDef));
         mapDoodadDef->m_model->m_lightingCallback = CMapStaticEntity::ModelLightingCallback;
         mapDoodadDef->m_model->m_lightingArg = mapDoodadDef;
-        mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
+        mapDoodadDef->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, 0, 1.0f, 1, 1);
     }
 
     return mapDoodadDef;
@@ -3208,7 +3216,7 @@ CMapRenderChunk* CMap::AllocRenderChunk() {
     CMapRenderChunk* renderChunk = CMap::s_mapRenderChunkFreeList.Head();
 
     if (!renderChunk) {
-        renderChunk = CMap::s_mapRenderChunkFreeList.NewNode(2, 0, 0);
+        renderChunk = CMap::s_mapRenderChunkFreeList.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         renderChunk->m_renderChunkLink.Unlink();
         return renderChunk;
     }
@@ -3428,8 +3436,8 @@ void CMap::ClassifyStaticEntityLink(CMapStaticEntity* entity, CMapObjDef* mapObj
 bool CMap::LinkStaticEntityGetChunk(C3Vector& pos, float* outHeight, CMapChunk** outChunk) {
     *outChunk = nullptr;
 
-    int32_t cellX = CMath::fint_(-(pos.y - 17066.666f) * 0.24f - 0.5f);
-    int32_t cellY = CMath::fint_(0.24f * -(pos.x - 17066.666f) - 0.5f);
+    int32_t cellX = CMath::fint_(-(pos.y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    int32_t cellY = CMath::fint_(OO_COORD_TO_SUBCHUNK * -(pos.x - HALF_WORLD_SIZE) - 0.5f);
 
     CMapArea* area = CMap::m_areaTable[64 * ((cellY >> 7) & 0x3F) + ((cellX >> 7) & 0x3F)];
 
@@ -3462,8 +3470,8 @@ void CMap::LinkIntersectMapObjDefGroup(CMapObjDef* mapObjDef, CMapObjDefGroup* m
     int32_t groundFace = -1;
 
     C3Segment seg;
-    seg.b = start;
-    seg.t = end;
+    seg.start = start;
+    seg.end = end;
 
     int16_t interior = !(group->m_flags & 0x8);
 
@@ -3522,14 +3530,14 @@ void CMap::LinkObjectToMapObjDefGroup(CMapStaticEntity* object, CMapObjDefGroup*
     CMapBaseObjLink* link = CMap::AllocBaseObjLink(object);
     link->m_ref = mapObjDefGroup;
 
-    if (object->m_type & 0x20) {
-        if (object->unk_007C & 0x2) {
+    if (object->m_type & CMapBaseObj::Type_Entity) {
+        if (object->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_COLLIDABLE) {
             mapObjDefGroup->m_entityLinkList.LinkToHead(link);
             return;
         }
 
         mapObjDefGroup->m_entityLinkList.LinkToTail(link);
-    } else if (object->m_type & 0x40) {
+    } else if (object->m_type & CMapBaseObj::Type_DoodadDef) {
         mapObjDefGroup->m_doodadDefLinkList.LinkToTail(link);
     }
 }
@@ -3543,14 +3551,14 @@ bool CMap::LinkObjectToMapExterior(CMapStaticEntity* object) {
         return false;
     }
 
-    float maxX = -(object->m_bbox.t.x - 17066.666f);
-    float maxY = -(object->m_bbox.t.y - 17066.666f);
-    float minX = -(object->m_bbox.b.x - 17066.666f);
+    float maxX = -(object->m_bbox.t.x - HALF_WORLD_SIZE);
+    float maxY = -(object->m_bbox.t.y - HALF_WORLD_SIZE);
+    float minX = -(object->m_bbox.b.x - HALF_WORLD_SIZE);
 
-    int32_t lastCol = CMath::fint_(-(object->m_bbox.b.y - 17066.666f) * 0.03f - 0.5f);
-    int32_t lastRow = CMath::fint_(minX * 0.03f - 0.5f);
-    int32_t firstCol = CMath::fint_(maxY * 0.03f - 0.5f);
-    int32_t firstRow = CMath::fint_(maxX * 0.03f - 0.5f);
+    int32_t lastCol = CMath::fint_(-(object->m_bbox.b.y - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t lastRow = CMath::fint_(minX * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t firstCol = CMath::fint_(maxY * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t firstRow = CMath::fint_(maxX * OO_COORD_TO_CHUNK - 0.5f);
 
     for (int32_t row = firstRow; row <= lastRow; row++) {
         for (int32_t col = firstCol; col <= lastCol; col++) {
@@ -3569,13 +3577,13 @@ bool CMap::LinkObjectToMapExterior(CMapStaticEntity* object) {
             CMapBaseObjLink* link = CMap::AllocBaseObjLink(object);
             link->m_ref = chunk;
 
-            if (object->m_type & 0x20) {
-                if (object->unk_007C & 0x2) {
+            if (object->m_type & CMapBaseObj::Type_Entity) {
+                if (object->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_COLLIDABLE) {
                     chunk->m_entityLinkList.LinkToHead(link);
                 } else {
                     chunk->m_entityLinkList.LinkToTail(link);
                 }
-            } else if (object->m_type & 0x40) {
+            } else if (object->m_type & CMapBaseObj::Type_DoodadDef) {
                 chunk->m_doodadDefLinkList.LinkToTail(link);
             }
 
@@ -3712,7 +3720,7 @@ void CMap::LinkStaticEntity(CMapStaticEntity* entity, C3Vector& top, C3Vector& b
         CMap::LinkIntersectMapObjDefs(top, bottom, mid, interiorHit, groundHit, nullptr);
     }
 
-    if (entity->unk_007C & 0x2000) {
+    if (entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LINK_MULTIPLE_WMO_GROUPS) {
         interiorHit[1].def = nullptr;
         groundHit[1].def = nullptr;
     }
@@ -3761,7 +3769,7 @@ void CMap::LinkStaticEntitySingle2(CMapStaticEntity* entity) {
 
     CMap::LinkStaticEntity(entity, top, bottom, top, interior, hit, interiorHit, groundHit);
 
-    uint32_t isEntity = entity->m_type & 0x20;
+    uint32_t isEntity = entity->m_type & CMapBaseObj::Type_Entity;
     uint32_t groundType = 0xFFFFFFFF;
 
     if (!hit) {
@@ -3798,7 +3806,7 @@ void CMap::LinkStaticEntitySingle2(CMapStaticEntity* entity) {
         return;
     }
 
-    entity->unk_007C |= 0x1;
+    entity->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_INSIDE;
 
     C3Vector pos(entity->m_vec2.x, entity->m_vec2.y, entity->m_vec2.z - (bottom.z - top.z) * groundHit[index].t);
     CMap::ClassifyStaticEntityLink(entity, groundHit[index].def, groundHit[index].group, groundHit[index].faceIndex, &pos);
@@ -3885,7 +3893,7 @@ void CMap::LinkStaticEntityMultiple2(CMapStaticEntity* entity) {
 
     if (interior) {
         CMap::LinkStaticEntityMultiple2ToMapObjDefInterior(entity, interiorHit[0].def, interiorHit[0].group);
-        entity->unk_007C |= 0x1;
+        entity->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_INSIDE;
 
         C3Vector pos(entity->m_vec2.x, entity->m_vec2.y, entity->m_vec2.z - (bottom.z - top.z) * groundHit[0].t);
         CMap::ClassifyStaticEntityLink(entity, groundHit[0].def, groundHit[0].group, groundHit[0].faceIndex, &pos);
@@ -3907,11 +3915,11 @@ void CMap::LinkStaticEntity(CMapStaticEntity* entity) {
         link = next;
     }
 
-    if (entity->m_type & 0x20) {
+    if (entity->m_type & CMapBaseObj::Type_Entity) {
         static_cast<CMapEntity*>(entity)->m_groundType = -1;
     }
 
-    if (entity->unk_007C & 0x2000) {
+    if (entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LINK_MULTIPLE_WMO_GROUPS) {
         CMap::LinkStaticEntityMultiple2(entity);
     } else {
         CMap::LinkStaticEntitySingle2(entity);
@@ -4076,13 +4084,13 @@ bool CMap::LocateViewerMapObjs(C3Vector& start, C3Vector& end, float dist, CMapO
             }
 
             C3Segment seg;
-            seg.b = localStart;
-            seg.t = localEnd;
+            seg.start = localStart;
+            seg.end = localEnd;
             World::TriData::statusFlags = 0;
             World::TriData::nBatches = 0;
             World::TriData::faceIndexCursor = 0;
             World::TriData::indexCursor = 0;
-            World::TriData::unk_CB7538 = 0;
+            World::TriData::matrixPoolCount = 0;
 
             World::TriData triData;
 
@@ -4096,8 +4104,8 @@ bool CMap::LocateViewerMapObjs(C3Vector& start, C3Vector& end, float dist, CMapO
 
         float portalT = 1.05f;
         C3Segment seg;
-        seg.b = localStart;
-        seg.t = localEnd;
+        seg.start = localStart;
+        seg.end = localEnd;
         uint32_t portalGroups[2];
 
         if (mapObj->VectorIntersectPortal(seg, &portalT, portalGroups, 0) && portalT - dists[slot] < 0.000099999997f) {
@@ -4173,12 +4181,12 @@ CMapArea* CMap::PrepareArea(int32_t areaIndexX, int32_t areaIndexY) {
     area->m_index.x = areaIndexX;
     area->m_tileChunkIndex.y = 16 * areaIndexY;
 
-    area->m_topLeft2.x = 17066.666f - area->m_tileChunkIndex.y * 33.333332f;
+    area->m_topLeft2.x = HALF_WORLD_SIZE - area->m_tileChunkIndex.y * 33.333332f;
     area->m_bounds.t.x = area->m_topLeft2.x;
-    area->m_topLeft2.y = area->m_tileChunkIndex.x * -33.333332f + 17066.666f;
+    area->m_topLeft2.y = area->m_tileChunkIndex.x * -33.333332f + HALF_WORLD_SIZE;
     area->m_bounds.t.y = area->m_topLeft2.y;
-    area->m_bounds.b.x = area->m_topLeft2.x - 533.33331f;
-    area->m_bounds.b.y = area->m_topLeft2.y - 533.33331f;
+    area->m_bounds.b.x = area->m_topLeft2.x - MD_AREA_POLY_SIZE;
+    area->m_bounds.b.y = area->m_topLeft2.y - MD_AREA_POLY_SIZE;
 
     CMap::m_areaTable[64 * areaIndexY + areaIndexX] = area;
 
@@ -4189,27 +4197,27 @@ CMapArea* CMap::PrepareArea(int32_t areaIndexX, int32_t areaIndexY) {
 // OFFSET: 0x007D9B10
 CMapLight::CMapLight() {
     this->m_sphere.r = 0.0f;
-    this->m_type |= 0x80;
-    this->unk_00CC = 0.0f;
-    this->m_radius = 0.0f;
-    this->unk_00D0 = 0;
-    this->unk_00C4 = 0.0f;
+    this->m_type |= CMapBaseObj::Type_Light;
+    this->m_attenDenom = 0.0f;
+    this->m_attenEnd = 0.0f;
+    this->m_dynamic = 0;
+    this->m_attenStart = 0.0f;
 }
 
 // VERIFY: 0aba9189 manual
 // OFFSET: 0x007D9BD0
-CMapLight* CMap::CreateLight(uint8_t a1, uint8_t a2) {
+CMapLight* CMap::CreateLight(uint8_t dynamic, uint8_t a2) {
     CMapLight* light = CMap::AllocLight();
     light->m_flags = static_cast<MapObjFlag>(0);
     light->m_position = C3Vector(0.0f, 0.0f, 0.0f);
     light->m_sphere.r = 0.0f;
     light->m_sphere.c = C3Vector(0.0f, 0.0f, 0.0f);
     light->m_bbox.b = C3Vector(0.0f, 0.0f, 0.0f);
-    light->unk_00CC = 0.0f;
-    light->m_radius = 0.0f;
+    light->m_attenDenom = 0.0f;
+    light->m_attenEnd = 0.0f;
     light->m_bbox.t = C3Vector(0.0f, 0.0f, 0.0f);
-    light->unk_00C4 = 0.0f;
-    light->unk_00D0 = a1;
+    light->m_attenStart = 0.0f;
+    light->m_dynamic = dynamic;
     light->unk_00D1 = a2;
 
     return light;
@@ -4218,13 +4226,13 @@ CMapLight* CMap::CreateLight(uint8_t a1, uint8_t a2) {
 // VERIFY: e4a742da manual
 // OFFSET: 0x007D9C80
 void CMap::UpdateLightBounds(CMapLight* light) {
-    float radius = light->m_radius;
+    float radius = light->m_attenEnd;
 
-    if (light->unk_00CC == 0.0f) {
+    if (light->m_attenDenom == 0.0f) {
         radius = 5.0f;
     }
 
-    light->m_radius = radius;
+    light->m_attenEnd = radius;
 
     C3Vector& pos = light->m_light.m_pos;
     light->m_position = pos;
@@ -4251,9 +4259,9 @@ void CMap::DestroyLight(CMapLight* light) {
         CMapBaseObjLink* next = light->m_parentLinkList.Next(link);
 
         if (ref) {
-            if (ref->m_type & 0x4) {
+            if (ref->m_type & CMapBaseObj::Type_Chunk) {
                 static_cast<CMapChunk*>(ref)->UpdateLights();
-            } else if (ref->m_type & 0x10) {
+            } else if (ref->m_type & CMapBaseObj::Type_MapObjDefGroup) {
                 static_cast<CMapObjDefGroup*>(ref)->UpdateLights();
             }
         }
@@ -4268,10 +4276,10 @@ void CMap::DestroyLight(CMapLight* light) {
 // VERIFY: 8d2bb286 auto
 // OFFSET: 0x007D9DE0
 void CMap::LinkLightToChunks(CMapLight* light) {
-    int32_t maxY = CMath::fint_(-(light->m_bbox.b.y - 17066.666f) * 0.03f - 0.5f);
-    int32_t maxX = CMath::fint_(-(light->m_bbox.b.x - 17066.666f) * 0.03f - 0.5f);
-    int32_t minY = CMath::fint_(-(light->m_bbox.t.y - 17066.666f) * 0.03f - 0.5f);
-    int32_t minX = CMath::fint_(-(light->m_bbox.t.x - 17066.666f) * 0.03f - 0.5f);
+    int32_t maxY = CMath::fint_(-(light->m_bbox.b.y - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t maxX = CMath::fint_(-(light->m_bbox.b.x - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t minY = CMath::fint_(-(light->m_bbox.t.y - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK - 0.5f);
+    int32_t minX = CMath::fint_(-(light->m_bbox.t.x - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK - 0.5f);
 
     for (int32_t x = minX; x <= maxX; x++) {
         for (int32_t y = minY; y <= maxY; y++) {
@@ -4363,14 +4371,14 @@ bool CMap::GetDoodadDefFacets(TSList<CMapBaseObjLink, TSGetExplicitLink<CMapBase
             continue;
         }
 
-        if (def->unk_00B8.m_guid ? !(flags & 0xF00000) : !(flags & 0xF)) {
+        if (def->m_collisionGuid.m_guid ? !(flags & 0xF00000) : !(flags & 0xF)) {
             continue;
         }
 
-        CAaBox bbox = def->m_bboxDoodadDef;
+        CAaBox bbox = def->m_collideExt;
 
         if (!(def->m_flags & 0x80)) {
-            def->unk_007C |= 0x10000;
+            def->m_staticFlags |= MAP_STATIC_FLAGS::MAP_STATIC_FLAG_STREAMING_LOAD_PENDING;
             CAaBox modelBox = def->m_model->m_shared->m_boundingBox;
             CWorldMath::TransformAABox(def->m_mat, modelBox, bbox);
         }
@@ -4412,11 +4420,11 @@ void CMap::QueryDestructibleFacets(TSList<CMapBaseObjLink, TSGetExplicitLink<CMa
     for (CMapBaseObjLink* link = list->Head(); link; link = list->Next(link)) {
         CMapEntity* entity = static_cast<CMapEntity*>(link->m_owner);
 
-        if (!(entity->unk_007C & 0x2)) {
+        if (!(entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_COLLIDABLE)) {
             break;
         }
 
-        if (entity->m_unkCounter == CMap::s_queryTag || (entity->unk_007C & 0x4)) {
+        if (entity->m_unkCounter == CMap::s_queryTag || (entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_HIDDEN)) {
             continue;
         }
 
@@ -4438,7 +4446,7 @@ bool CMap::GetChunkLiquidFacets(CMapChunk* chunk, CAaBox* box, CiRect* rect, CCh
     World::TriData::nBatches = 0;
     World::TriData::faceIndexCursor = 0;
     World::TriData::indexCursor = 0;
-    World::TriData::unk_CB7538 = 0;
+    World::TriData::matrixPoolCount = 0;
     World::TriData triData;
 
     if (!liquid->GetTris(&triData, *box, *rect)) {
@@ -4533,11 +4541,11 @@ bool CMap::GetChunkFacets(int32_t chunkX, int32_t chunkY, CiRect* subRect, CAaBo
     }
 
     CAaBox cellBox = *box;
-    cellBox.b.x = (chunkY + 1) * -33.333332f + 17066.666f;
-    cellBox.b.y = (chunkX + 1) * -33.333332f + 17066.666f;
+    cellBox.b.x = (chunkY + 1) * -33.333332f + HALF_WORLD_SIZE;
+    cellBox.b.y = (chunkX + 1) * -33.333332f + HALF_WORLD_SIZE;
     cellBox.b.z = box->b.z - 1000.0f;
-    cellBox.t.x = chunkY * -33.333332f + 17066.666f;
-    cellBox.t.y = -33.333332f * chunkX + 17066.666f;
+    cellBox.t.x = chunkY * -33.333332f + HALF_WORLD_SIZE;
+    cellBox.t.y = -33.333332f * chunkX + HALF_WORLD_SIZE;
     cellBox.t.z = box->t.z + 1000.0f;
 
     if (cellBox.Intersects(*queryBox)) {
@@ -4608,7 +4616,7 @@ bool CMap::GetMapObjFacets(CAaBox* queryBox, CAaBox* box, World::FacetData* face
                 World::TriData::nBatches = 0;
                 World::TriData::faceIndexCursor = 0;
                 World::TriData::indexCursor = 0;
-                World::TriData::unk_CB7538 = 0;
+                World::TriData::matrixPoolCount = 0;
                 World::TriData triData;
                 owner->GetTris(localBox, flags, &triData, def);
                 World::TriDataToFacetData(&triData, facets, def->m_objectGuid);
@@ -4744,25 +4752,25 @@ bool CMap::GetFacets(CAaBox* a1, CAaBox* a2, World::FacetData* a3, uint32_t a4, 
         return true;
     }
 
-    float topX = -(a2->t.x - 17066.666f);
-    float topY = -(a2->t.y - 17066.666f);
-    float bottomX = -(a2->b.x - 17066.666f);
+    float topX = -(a2->t.x - HALF_WORLD_SIZE);
+    float topY = -(a2->t.y - HALF_WORLD_SIZE);
+    float bottomX = -(a2->b.x - HALF_WORLD_SIZE);
 
     if (topY < 0.0f) {
         return false;
     }
 
-    float bottomY = -(a2->b.y - 17066.666f);
+    float bottomY = -(a2->b.y - HALF_WORLD_SIZE);
 
     if (topX < 0.0f || bottomY >= 34133.332f || bottomX >= 34133.332f) {
         return false;
     }
 
     CiRect rect;
-    rect.maxX = CMath::fint_(bottomY * 0.24f - 0.5f);
-    rect.maxY = CMath::fint_(bottomX * 0.24f - 0.5f);
-    rect.minX = CMath::fint_(topY * 0.24f - 0.5f);
-    rect.minY = CMath::fint_(topX * 0.24f - 0.5f);
+    rect.maxX = CMath::fint_(bottomY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.maxY = CMath::fint_(bottomX * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.minX = CMath::fint_(topY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.minY = CMath::fint_(topX * OO_COORD_TO_SUBCHUNK - 0.5f);
     bool result = true;
 
     for (int32_t y = rect.minY >> 3; y <= rect.maxY >> 3; y++) {
@@ -4812,7 +4820,7 @@ void CMap::SetHitTestDebug(World::HitTestDebug* hitInfo, CMapBaseObj* hitObject)
 
     CM2Model* model = nullptr;
 
-    if (hitObject->m_type & 0x40) {
+    if (hitObject->m_type & CMapBaseObj::Type_DoodadDef) {
         CMapStaticEntity* entity = static_cast<CMapStaticEntity*>(hitObject);
         hitInfo->m_type = 1;
         hitInfo->m_bbox = entity->m_bbox;
@@ -4820,21 +4828,21 @@ void CMap::SetHitTestDebug(World::HitTestDebug* hitInfo, CMapBaseObj* hitObject)
         hitInfo->m_labelPos = entity->m_vec2;
         hitInfo->m_labelPos.z += 0.1f;
         model = entity->m_model;
-    } else if (hitObject->m_type & 0x20) {
+    } else if (hitObject->m_type & CMapBaseObj::Type_Entity) {
         CMapStaticEntity* entity = static_cast<CMapStaticEntity*>(hitObject);
         hitInfo->m_type = 2;
         hitInfo->m_bbox = entity->m_bbox;
         hitInfo->m_sphere = entity->m_sphere;
         hitInfo->m_labelPos = entity->m_vec2;
 
-        if (entity->unk_007C & 0x2000) {
+        if (entity->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LINK_MULTIPLE_WMO_GROUPS) {
             float raised = hitInfo->m_labelPos.z + 4.0f;
             float top = entity->m_bbox.t.z + 0.1f;
             hitInfo->m_labelPos.z = top > raised ? raised : top;
         }
 
         model = entity->m_model;
-    } else if (hitObject->m_type & 0x10) {
+    } else if (hitObject->m_type & CMapBaseObj::Type_MapObjDefGroup) {
         CMapObjDefGroup* defGroup = static_cast<CMapObjDefGroup*>(hitObject);
         CMapObjDef* mapObjDef = static_cast<CMapObjDef*>(defGroup->m_parentLinkList.Head()->m_ref);
         CMapObj* mapObj = mapObjDef->m_owner;
@@ -4853,7 +4861,7 @@ void CMap::SetHitTestDebug(World::HitTestDebug* hitInfo, CMapBaseObj* hitObject)
         entry->m_numBones = 0;
         entry->m_numLights = 0;
         entry->m_numCurrentLights = 0;
-        entry->m_attachmentId = 0;
+        entry->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_SHIELD;
         entry->m_numCombinableBatches = 0;
         entry->m_instanceCountMax = 0;
         entry->m_groupName = group->m_groupName;
@@ -4864,7 +4872,7 @@ void CMap::SetHitTestDebug(World::HitTestDebug* hitInfo, CMapBaseObj* hitObject)
 
     CMapBaseObj* object = hitObject;
 
-    if (object->m_type & 0x10) {
+    if (object->m_type & CMapBaseObj::Type_MapObjDefGroup) {
         object = object->m_parentLinkList.Head()->m_ref;
     }
 
@@ -4875,14 +4883,14 @@ void CMap::SetHitTestDebug(World::HitTestDebug* hitInfo, CMapBaseObj* hitObject)
             continue;
         }
 
-        if (parent->m_type & 0x4) {
+        if (parent->m_type & CMapBaseObj::Type_Chunk) {
             if (hitInfo->m_numParents < 8) {
                 World::HitTestDebug::Parent* entry = &hitInfo->m_parents[hitInfo->m_numParents++];
                 entry->m_name = "Terrain";
                 entry->m_groupName = nullptr;
                 entry->m_chunkOffset = static_cast<CMapChunk*>(parent)->m_cOffset;
             }
-        } else if (parent->m_type & 0x10) {
+        } else if (parent->m_type & CMapBaseObj::Type_MapObjDefGroup) {
             CMapObjDefGroup* defGroup = static_cast<CMapObjDefGroup*>(parent);
             CMapObj* mapObj = static_cast<CMapObjDef*>(defGroup->m_parentLinkList.Head()->m_ref)->m_owner;
             CMapObjGroup* group = mapObj->GetGroup(defGroup->m_groupNum, 0);
@@ -5014,8 +5022,8 @@ bool CMap::VectorIntersect(C3Vector* start, C3Vector* end, uint32_t flags, uint3
         CMapBaseObj* owner = static_cast<CMapBaseObj*>(World::s_m2Scene->EndHitTest(localStart, localEnd, t, 0));
 
         if (t < *distance) {
-            if ((owner->m_type & 0x40) && static_cast<CMapDoodadDef*>(owner)->unk_00B8.m_guid) {
-                s_lastCollisionGUID = static_cast<CMapDoodadDef*>(owner)->unk_00B8;
+            if ((owner->m_type & CMapBaseObj::Type_DoodadDef) && static_cast<CMapDoodadDef*>(owner)->m_collisionGuid.m_guid) {
+                s_lastCollisionGUID = static_cast<CMapDoodadDef*>(owner)->m_collisionGuid;
             }
 
             *distance = t;
@@ -5098,10 +5106,10 @@ bool CMap::Intersect(C3Vector* start, C3Vector* end, C3Vector* hitPoint, float* 
 // VERIFY: 7a1bc3ec manual
 // OFFSET: 0x007A0490
 int32_t CMap::QueryAreaIdTerrain(const C3Vector* pos) {
-    float x = -(pos->x - 17066.666f);
-    float y = -(pos->y - 17066.666f) * 0.03f;
+    float x = -(pos->x - HALF_WORLD_SIZE);
+    float y = -(pos->y - HALF_WORLD_SIZE) * OO_COORD_TO_CHUNK;
     int32_t cellY = CMath::fint_(y - 0.5f);
-    x = x * 0.03f;
+    x = x * OO_COORD_TO_CHUNK;
     int32_t cellX = CMath::fint_(x - 0.5f);
     CMapArea* area = CMap::m_areaTable[64 * ((cellX >> 4) & 0x3F) + ((cellY >> 4) & 0x3F)];
 
@@ -5139,7 +5147,7 @@ bool CMap::QueryAreaId(CMapEntity* entity, uint32_t& areaId) {
     CMapBaseObjLink* link = entity->m_parentLinkList.Head();
 
     if (link) {
-        if (link->m_ref->m_type & 0x4) {
+        if (link->m_ref->m_type & CMapBaseObj::Type_Chunk) {
             areaId = static_cast<CMapChunk*>(link->m_ref)->m_areaId;
             return true;
         }
@@ -5235,7 +5243,7 @@ bool CMap::GetChunkLiquidFacets(CMapChunk* chunk, CWFrustum* frustum, CiRect* re
     World::TriData::nBatches = 0;
     World::TriData::faceIndexCursor = 0;
     World::TriData::indexCursor = 0;
-    World::TriData::unk_CB7538 = 0;
+    World::TriData::matrixPoolCount = 0;
     World::TriData triData;
 
     if (!liquid->GetTris(&triData, *frustum, *rect)) {
@@ -5312,7 +5320,7 @@ bool CMap::GetChunkFacets(int32_t chunkX, int32_t chunkY, CiRect* subRect, CFrus
 
             CM2Model* model = def->m_model;
 
-            if (model && box.Intersects(def->m_bboxDoodadDef)) {
+            if (model && box.Intersects(def->m_collideExt)) {
                 model->GetCollisionFacets(box, def->m_mat, facets->facets);
                 def->m_unkCounter = CMap::s_queryTag;
             }
@@ -5346,7 +5354,7 @@ bool CMap::GetMapObjFacets(CFrustum* frustum, World::FacetData* facets, uint32_t
             World::TriData::nBatches = 0;
             World::TriData::faceIndexCursor = 0;
             World::TriData::indexCursor = 0;
-            World::TriData::unk_CB7538 = 0;
+            World::TriData::matrixPoolCount = 0;
             World::TriData triData;
             result |= owner->GetTris(localFrustum, flags, &triData, def);
             World::TriDataToFacetData(&triData, facets, WOWGUID{ 0 });
@@ -5362,19 +5370,19 @@ bool CMap::GetMapObjFacets(CFrustum* frustum, World::FacetData* facets, uint32_t
 
 // VERIFY: 041a89f8 manual
 // OFFSET: 0x007A5DD0
-bool CMap::QueryFacets(CFrustum* frustum, World::FacetData* facets, uint32_t flags, uint32_t* a4) {
+bool CMap::QueryFacets(CFrustum* frustum, World::FacetData* facets, uint32_t flags, uint32_t* count) {
     CMap::s_queryTag++;
     facets->facets.SetCount(0);
     CAaBox box = CAaBox::Bounding(frustum->corners, 8);
-    float topX = -(box.t.x - 17066.666f);
-    float topY = -(box.t.y - 17066.666f);
-    float bottomX = -(box.b.x - 17066.666f);
-    float bottomY = -(box.b.y - 17066.666f);
+    float topX = -(box.t.x - HALF_WORLD_SIZE);
+    float topY = -(box.t.y - HALF_WORLD_SIZE);
+    float bottomX = -(box.b.x - HALF_WORLD_SIZE);
+    float bottomY = -(box.b.y - HALF_WORLD_SIZE);
     CiRect rect;
-    rect.maxX = CMath::fint_(bottomY * 0.24f - 0.5f);
-    rect.maxY = CMath::fint_(bottomX * 0.24f - 0.5f);
-    rect.minX = CMath::fint_(topY * 0.24f - 0.5f);
-    rect.minY = CMath::fint_(topX * 0.24f - 0.5f);
+    rect.maxX = CMath::fint_(bottomY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.maxY = CMath::fint_(bottomX * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.minX = CMath::fint_(topY * OO_COORD_TO_SUBCHUNK - 0.5f);
+    rect.minY = CMath::fint_(topX * OO_COORD_TO_SUBCHUNK - 0.5f);
 
     for (int32_t y = rect.minY >> 3; y <= rect.maxY >> 3; y++) {
         for (int32_t x = rect.minX >> 3; x <= rect.maxX >> 3; x++) {
@@ -5382,7 +5390,7 @@ bool CMap::QueryFacets(CFrustum* frustum, World::FacetData* facets, uint32_t fla
         }
     }
 
-    CMap::GetMapObjFacets(frustum, facets, flags, a4);
+    CMap::GetMapObjFacets(frustum, facets, flags, count);
     return facets->facets.Count() != 0;
 }
 
@@ -5395,15 +5403,15 @@ int32_t CMap::QueryFlightBounds(const C3Vector& pos, float* height) {
 // VERIFY: 680c26b6 manual
 // OFFSET: 0x007A0530
 bool CMap::QueryGroundTypeTerrain(C3Vector* pos, uint32_t* groundType) {
-    float y = -(pos->y - 17066.666f);
-    float x = -(pos->x - 17066.666f);
+    float y = -(pos->y - HALF_WORLD_SIZE);
+    float x = -(pos->x - HALF_WORLD_SIZE);
 
     if (y < 0.0f || x < 0.0f || y >= 34133.332f || x >= 34133.332f) {
         return false;
     }
 
-    float cellYf = x * 0.24f;
-    float cellXf = y * 0.24f;
+    float cellYf = x * OO_COORD_TO_SUBCHUNK;
+    float cellXf = y * OO_COORD_TO_SUBCHUNK;
     int32_t cellY = CMath::fint_(cellYf - 0.5f);
     int32_t cellX = CMath::fint_(cellXf - 0.5f);
 
@@ -5426,8 +5434,8 @@ bool CMap::QueryGroundTypeTerrain(C3Vector* pos, uint32_t* groundType) {
         return false;
     }
 
-    uint32_t layer = (CMap::s_2bitSplatMask[col] & reinterpret_cast<uint16_t*>(chunk->m_lowQualityTexMap)[row]) >> CMap::s_2bitSplatShft[col];
-    GroundEffectTextureRec* rec = g_groundEffectTextureDB.GetRecord(chunk->m_layers[layer].m_offectId);
+    uint32_t layer = (CMap::s_2bitSplatMask[col] & chunk->m_predTex[row]) >> CMap::s_2bitSplatShft[col];
+    GroundEffectTextureRec* rec = g_groundEffectTextureDB.GetRecord(chunk->m_layers[layer].m_effectId);
 
     if (!rec) {
         return false;
@@ -5440,10 +5448,10 @@ bool CMap::QueryGroundTypeTerrain(C3Vector* pos, uint32_t* groundType) {
 // VERIFY: ddd4e04d manual
 // OFFSET: 0x0079D2B0
 void CMap::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<World::LiquidQueryResult>& results) {
-    float x = -(pos->x - 17066.666f);
-    float cellYf = -(pos->y - 17066.666f) * 0.24f;
+    float x = -(pos->x - HALF_WORLD_SIZE);
+    float cellYf = -(pos->y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK;
     int32_t cellY = CMath::fint_(cellYf - 0.5f);
-    x = x * 0.24f;
+    x = x * OO_COORD_TO_SUBCHUNK;
     int32_t cellX = CMath::fint_(x - 0.5f);
 
     CAaSphere sphere;
@@ -5468,8 +5476,8 @@ void CMap::QueryLiquidSounds(C3Vector* pos, float radius, TSGrowableArray<World:
             }
 
             CAaBox box;
-            box.b.x = area->m_topLeft2.x - 533.33331f;
-            box.b.y = area->m_topLeft2.y - 533.33331f;
+            box.b.x = area->m_topLeft2.x - MD_AREA_POLY_SIZE;
+            box.b.y = area->m_topLeft2.y - MD_AREA_POLY_SIZE;
             box.b.z = 0.0f;
             box.t.x = area->m_topLeft2.x;
             box.t.y = area->m_topLeft2.y;
@@ -5498,13 +5506,13 @@ static const uint32_t s_flightTriangles[8][3] = {
 static const float s_flightVertices[9][2] = {
     { 0.0f, 0.0f },
     { 0.0f, -266.66666f },
-    { 0.0f, -533.33331f },
+    { 0.0f, -MD_AREA_POLY_SIZE },
     { -266.66666f, 0.0f },
     { -266.66666f, -266.66666f },
-    { -266.66666f, -533.33331f },
-    { -533.33331f, 0.0f },
-    { -533.33331f, -266.66666f },
-    { -533.33331f, -533.33331f },
+    { -266.66666f, -MD_AREA_POLY_SIZE },
+    { -MD_AREA_POLY_SIZE, 0.0f },
+    { -MD_AREA_POLY_SIZE, -266.66666f },
+    { -MD_AREA_POLY_SIZE, -MD_AREA_POLY_SIZE },
 };
 
 // VERIFY: b2919fa1 manual
@@ -5515,8 +5523,8 @@ int32_t CMap::GetFlightBounds(const C3Vector& pos, float* height, int32_t which)
     }
 
     int32_t layer = which == 1 ? 9 : 0;
-    float x = -(pos.x - 17066.666f);
-    float y = -(pos.y - 17066.666f) * 0.00375f;
+    float x = -(pos.x - HALF_WORLD_SIZE);
+    float y = -(pos.y - HALF_WORLD_SIZE) * 0.00375f;
     int32_t cellY = CMath::fint_(y - 0.5f);
     x = x * 0.00375f;
     int32_t cellX = CMath::fint_(x - 0.5f);
@@ -5536,11 +5544,11 @@ int32_t CMap::GetFlightBounds(const C3Vector& pos, float* height, int32_t which)
         if (cellX & 1) {
             triangle = dy < dx ? 4 : 5;
         } else {
-            triangle = dy < -533.33331f - dx ? 3 : 2;
+            triangle = dy < -MD_AREA_POLY_SIZE - dx ? 3 : 2;
         }
     } else {
         if (cellX & 1) {
-            triangle = dy < -533.33331f - dx ? 6 : 7;
+            triangle = dy < -MD_AREA_POLY_SIZE - dx ? 6 : 7;
         } else {
             triangle = dy < dx ? 1 : 0;
         }
@@ -5580,7 +5588,7 @@ void CMap::QueryDoodadDefHitTests(TSList<CMapBaseObjLink, TSGetExplicitLink<CMap
     for (CMapBaseObjLink* link = list->Head(); link; link = list->Next(link)) {
         CMapDoodadDef* doodadDef = static_cast<CMapDoodadDef*>(link->m_owner);
 
-        if (doodadDef->m_unkCounter == CMap::s_queryTag || doodadDef->unk_00B8) {
+        if (doodadDef->m_unkCounter == CMap::s_queryTag || doodadDef->m_collisionGuid) {
             continue;
         }
 
@@ -5598,7 +5606,7 @@ void CMap::QueryDoodadDefHitTests(TSList<CMapBaseObjLink, TSGetExplicitLink<CMap
             continue;
         }
 
-        if (model->m_fFlags & 1) {
+        if (model->m_runtimeFlags & 1) {
             if (!model->m_hitTestPrev) {
                 model->m_hitTestPrev = &model->m_scene->m_hitTestList;
                 model->m_hitTestNext = model->m_scene->m_hitTestList;
@@ -5727,8 +5735,8 @@ bool CMap::QueryHeight(const C3Vector& position, float range, float* height) {
     CMapChunk* chunk = nullptr;
 
     if (!CMap::bDungeon) {
-        float chunkY = -(position.y - 17066.666f) * 0.24f;
-        float chunkX = 0.24f * -(position.x - 17066.666f);
+        float chunkY = -(position.y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK;
+        float chunkX = OO_COORD_TO_SUBCHUNK * -(position.x - HALF_WORLD_SIZE);
         int32_t cellY = CMath::fint_(chunkY - 0.5f);
         int32_t cellX = CMath::fint_(chunkX - 0.5f);
         CMapArea* area = CMap::m_areaTable[64 * ((cellX >> 7) & 0x3F) + ((cellY >> 7) & 0x3F)];
@@ -5797,14 +5805,14 @@ void CMap::RenderFootprints() {
 
         if (footprint->m_vertices.Count()) {
             uint32_t elapsed = now - footprint->m_startTime;
-            float fade = 1.0f - static_cast<float>(elapsed) * 0.00016666666f;
+            float fade = 1.0f - static_cast<float>(elapsed) * FOOTPRINT_FADEOUT_RATE;
 
             if (fade >= 0.0f) {
                 float alpha = fade * 255.0f;
                 int32_t value = CMath::fint_(alpha - 0.5f);
-                footprint->m_alpha = value < 127 ? CMath::fint_(alpha - 0.5f) : 127;
+                footprint->m_alpha = value < MAXALPHA ? CMath::fint_(alpha - 0.5f) : MAXALPHA;
                 CMapFootprintTexture& texture = s_footprintTextures.m_data[footprint->m_textureIndex];
-                texture.unk_0004.Add(1, &index);
+                texture.m_footprintIndices.Add(1, &index);
                 texture.m_vertexCount += footprint->m_vertices.Count();
             } else {
                 footprint->m_vertices.SetCount(0);
@@ -5836,14 +5844,14 @@ void CMap::RenderFootprints() {
             CGxTex* gxTex = TextureGetGxTex(texture.m_texture, 0, nullptr);
 
             if (gxTex) {
-                CGxBuf* vertexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, 44, texture.m_vertexCount);
-                float* vertices = reinterpret_cast<float*>(g_theGxDevicePtr->BufLock(vertexBuf));
+                CGxBuf* vertexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Vertex, sizeof(CGxVertexPNCT2), texture.m_vertexCount);
+                CGxVertexPNCT2* vertices = reinterpret_cast<CGxVertexPNCT2*>(g_theGxDevicePtr->BufLock(vertexBuf));
                 CGxBuf* indexBuf = g_theGxDevicePtr->BufStream(GxPoolTarget_Index, 2, texture.m_vertexCount);
                 uint16_t* indices = reinterpret_cast<uint16_t*>(g_theGxDevicePtr->BufLock(indexBuf));
                 uint16_t next = 0;
 
-                for (uint32_t k = 0; k < texture.unk_0004.Count(); k++) {
-                    CMapFootprint* footprint = &footprints[texture.unk_0004.m_data[k]];
+                for (uint32_t k = 0; k < texture.m_footprintIndices.Count(); k++) {
+                    CMapFootprint* footprint = &footprints[texture.m_footprintIndices.m_data[k]];
                     CImVector color;
                     color.b = 0xFF;
                     color.g = 0xFF;
@@ -5852,27 +5860,27 @@ void CMap::RenderFootprints() {
 
                     for (uint32_t v = 0; v < footprint->m_vertices.Count(); v++) {
                         CGxVertexPT0T1& src = footprint->m_vertices.m_data[v];
-                        vertices[0] = src.m_position.x;
-                        vertices[1] = src.m_position.y;
-                        vertices[2] = src.m_position.z;
-                        vertices[3] = 0.0f;
-                        vertices[4] = 0.0f;
-                        vertices[5] = 1.0f;
-                        *reinterpret_cast<CImVector*>(&vertices[6]) = color;
-                        vertices[7] = src.m_texture0.x;
-                        vertices[8] = src.m_texture0.y;
-                        vertices[9] = src.m_texture1.x;
-                        vertices[10] = src.m_texture1.y;
+                        vertices->p.x = src.m_position.x;
+                        vertices->p.y = src.m_position.y;
+                        vertices->p.z = src.m_position.z;
+                        vertices->n.x = 0.0f;
+                        vertices->n.y = 0.0f;
+                        vertices->n.z = 1.0f;
+                        vertices->c = color;
+                        vertices->tc[0].x = src.m_texture0.x;
+                        vertices->tc[0].y = src.m_texture0.y;
+                        vertices->tc[1].x = src.m_texture1.x;
+                        vertices->tc[1].y = src.m_texture1.y;
                         *indices = next++;
-                        vertices += 11;
+                        vertices++;
                         indices++;
                     }
                 }
 
                 g_theGxDevicePtr->BufUnlock(vertexBuf, 0);
-                vertexBuf->unk_001C = 1;
+                vertexBuf->m_hasData = 1;
                 g_theGxDevicePtr->BufUnlock(indexBuf, 0);
-                indexBuf->unk_001C = 1;
+                indexBuf->m_hasData = 1;
                 GxPrimVertexPtr(vertexBuf, GxVBF_PNCT2);
                 g_theGxDevicePtr->PrimIndexPtr(indexBuf);
                 g_theGxDevicePtr->RsSet(GxRs_Texture0, gxTex);
@@ -5887,7 +5895,7 @@ void CMap::RenderFootprints() {
             }
         }
 
-        texture.unk_0004.m_count = 0;
+        texture.m_footprintIndices.m_count = 0;
         texture.m_vertexCount = 0;
     }
 
@@ -5914,7 +5922,7 @@ void CMap::Unload() {
         CMapBaseObj* owner = link->m_owner;
         CMap::FreeBaseObjLink(link);
 
-        if (!(owner->m_type & 0x200)) {
+        if (!(owner->m_type & CMapBaseObj::Type_UserCreated)) {
             CMapDoodadDef::Purge(static_cast<CMapDoodadDef*>(owner));
         }
 
@@ -5975,7 +5983,7 @@ void CMap::SnapBaseObjToSubChunk(CMapBaseObj* baseObj, const C3Vector* position,
     C44Matrix rotation = C44Matrix::RotationAroundZ(facing);
     CAaBox bounds(C3Vector(0.0f, 0.0f, 0.0f), C3Vector(0.0f, 0.0f, 0.0f));
 
-    if (baseObj->m_type & 0x8) {
+    if (baseObj->m_type & CMapBaseObj::Type_MapObjDef) {
         static_cast<CMapObjDef*>(baseObj)->m_owner->GetBounds(&bounds);
     } else {
         bounds = static_cast<CMapStaticEntity*>(baseObj)->m_model->GetBoundingBox();
@@ -5995,10 +6003,10 @@ void CMap::SnapBaseObjToSubChunk(CMapBaseObj* baseObj, const C3Vector* position,
     C3Vector* snapped = const_cast<C3Vector*>(position);
     float x = snapped->x + rotated.t.x;
     float y = snapped->y + rotated.t.y;
-    int32_t cellX = CMath::fint_((x + 4.1666665f) * 0.24f - 0.5f);
-    int32_t cellY = CMath::fint_((y + 4.1666665f) * 0.24f - 0.5f);
-    snapped->x = snapped->x - (x - cellX * 4.1666665f);
-    snapped->y = snapped->y - (y - 4.1666665f * cellY);
+    int32_t cellX = CMath::fint_((x + SMOLTILE_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    int32_t cellY = CMath::fint_((y + SMOLTILE_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    snapped->x = snapped->x - (x - cellX * SMOLTILE_SIZE);
+    snapped->y = snapped->y - (y - SMOLTILE_SIZE * cellY);
 }
 
 // VERIFY: 153db93c manual
@@ -6146,8 +6154,8 @@ bool CMap::GetTriSubchunk(CMapChunk* chunk, const CiRect* rect, const CAaBox* bo
                         batch->m_def = reinterpret_cast<CMapObjDef*>(chunk);
                         C44Matrix* matrix;
 
-                        if (World::TriData::unk_CB7538 + 1 < 32) {
-                            matrix = &World::TriData::matrixPool[World::TriData::unk_CB7538++];
+                        if (World::TriData::matrixPoolCount + 1 < 32) {
+                            matrix = &World::TriData::matrixPool[World::TriData::matrixPoolCount++];
                         } else {
                             World::TriData::statusFlags |= 1;
                             matrix = nullptr;
@@ -6261,10 +6269,10 @@ bool CMap::GetTrisChunk(int32_t chunkX, int32_t chunkY, const CiRect& cellRect, 
 bool CMap::GetTrisTerrain(const CAaBox& box, World::TriData* triData, uint32_t flags) {
     bool result = false;
     CiRect cellRect;
-    cellRect.minY = CMath::fint_(-(box.t.x - 17066.666f) * 0.23999999f - 0.5f);
-    cellRect.minX = CMath::fint_(-(box.t.y - 17066.666f) * 0.23999999f - 0.5f);
-    cellRect.maxY = CMath::fint_(-(box.b.x - 17066.666f) * 0.23999999f - 0.5f);
-    cellRect.maxX = CMath::fint_(-(box.b.y - 17066.666f) * 0.23999999f - 0.5f);
+    cellRect.minY = CMath::fint_(-(box.t.x - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cellRect.minX = CMath::fint_(-(box.t.y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cellRect.maxY = CMath::fint_(-(box.b.x - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
+    cellRect.maxX = CMath::fint_(-(box.b.y - HALF_WORLD_SIZE) * OO_COORD_TO_SUBCHUNK - 0.5f);
 
     for (int32_t chunkY = cellRect.minY >> 3; chunkY <= cellRect.maxY >> 3; chunkY++) {
         for (int32_t chunkX = cellRect.minX >> 3; chunkX <= cellRect.maxX >> 3; chunkX++) {
@@ -6415,11 +6423,11 @@ void CMap::UpdateDoodadDefBounds(CMapDoodadDef* doodadDef) {
         }
 
         CM2Model* current = doodadDef->m_model;
-        current->m_fFlags |= 0x8000;
+        current->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         current->m_worldTransform = doodadDef->m_mat;
     }
 
-    doodadDef->unk_007C &= ~0x1u;
+    doodadDef->m_staticFlags &= ~MAP_STATIC_FLAGS::MAP_STATIC_FLAG_INSIDE;
     doodadDef->m_flags = static_cast<MapObjFlag>((doodadDef->m_flags & 0xFFFFFFF8) | MAPOBJ_FLAG_UNPLACED);
     CMap::LinkStaticEntity(doodadDef);
     doodadDef->ExtendChunkBounds();

@@ -4,18 +4,284 @@
 #include <cstddef>
 #include <cstdint>
 
+enum : int32_t {
+    TYPE_NONE = -1,
+    TYPE_DOOR = 0,
+    TYPE_BUTTON = 1,
+    TYPE_QUESTGIVER = 2,
+    TYPE_CHEST = 3,
+    TYPE_BINDER = 4,
+    TYPE_GENERIC = 5,
+    TYPE_TRAP = 6,
+    TYPE_CHAIR = 7,
+    TYPE_SPELL_FOCUS = 8,
+    TYPE_TEXT = 9,
+    TYPE_GOOBER = 10,
+    TYPE_TRANSPORT = 11,
+    TYPE_AREADAMAGE = 12,
+    TYPE_CAMERA = 13,
+    TYPE_MAP_OBJECT = 14,
+    TYPE_MO_TRANSPORT = 15,
+    TYPE_DUEL_ARBITER = 16,
+    TYPE_FISHINGNODE = 17,
+    TYPE_RITUAL = 18,
+    TYPE_MAILBOX = 19,
+    // Slot 20 is marked DONOTUSE in the native type table.
+    TYPE_GUARDPOST = 21, // Metadata kind; no client constructor case.
+    TYPE_SPELLCASTER = 22,
+    TYPE_MEETINGSTONE = 23,
+    TYPE_FLAGSTAND = 24,
+    TYPE_FISHINGHOLE = 25,
+    TYPE_FLAGDROP = 26,
+    TYPE_MINIGAME = 27,
+    // Slot 28 is marked DONOTUSE in the native type table.
+    TYPE_CAPTUREPOINT = 29,
+    TYPE_AURAGENERATOR = 30,
+    TYPE_DUNGEON_DIFFICULTY = 31,
+    TYPE_BARBER_CHAIR = 32,
+    TYPE_DESTRUCTIBLE_BUILDING = 33,
+    TYPE_GUILD_BANK = 34,
+    TYPE_TRAPDOOR = 35,
+    NUM_GAMEOBJECT_TYPE = 36,
+};
+
 class CGameObjectDef {
     public:
-    struct TypeInfo {
-        /* 0000 */ const char* m_name;
-        /* 0004 */ int32_t m_numProps;
-        /* 0008 */ const int32_t* m_props;
-        /* 000C */ const void* m_propInfo;
+    // Names after the historical domain are reconstructed from 3.3.5 metadata.
+    // UNUSED IDs occur in no current object definition; UNKNOWN IDs have an unrecovered meaning.
+    enum PROPERTY_ID : int32_t {
+        PROP_TYPE = 0,
+        PROP_STARTOPEN = 1,
+        PROP_STARTDESTROYED = 2,
+        PROP_AUTOCLOSE = 3,
+        PROP_LOCK = 4,
+        PROP_QUESTLISTID = 5,
+        PROP_CHESTLOOT = 6,
+        PROP_CHESTLOOTTIME = 7,
+        PROP_CONSUMABLE = 8,
+        PROP_CHARGES = 9,
+        PROP_SPELL = 10,
+        PROP_CHAIRSLOTS = 11,
+        PROP_CHAIRHEIGHT = 12,
+        PROP_TRIGGEREDEVENT = 13,
+        PROP_SPELLFOCUSTYPE = 14,
+        PROP_TEXTID = 15,
+        PROP_TEXTLANGUAGE = 16,
+        PROP_TEXTMATERIAL = 17,
+        PROP_HIGHLIGHT = 18,
+        PROP_FLOATINGTOOLTIP = 19,
+        PROP_QUESTID = 20,
+        PROP_EVENTID = 21,
+        PROP_CUSTOMANIM = 22,
+        PROP_COOLDOWN = 23,
+        PROP_RADIUS = 24,
+        PROP_MINRESTOCK = 25,
+        PROP_MAXRESTOCK = 26,
+        PROP_DAMAGE_MIN = 27,
+        PROP_DAMAGE_MAX = 28,
+        PROP_DAMAGE_SCHOOL = 29,
+        PROP_LINKED_TRAP = 30,
+        PROP_LEVEL = 31,
+        PROP_STARTDELAY = 32,
+        PROP_CAMERAID = 33,
+        PROP_CASTERS = 34,
+        PROP_TAXIPATHID = 35,
+        PROP_MOVESPEED = 36,
+        PROP_SERVERONLY = 37,
+        PROP_GOSSIPID = 38,
+        PROP_ANIMSPELL = 39,
+        PROP_RITUALPERSISTENT = 40,
+        PROP_ACTIONHOUSEID = 41,
+        PROP_CREATUREID = 42,
+        PROP_ACCELRATE = 43,
+        PROP_STARTEVENTID = 44,
+        PROP_STOPEVENTID = 45,
+        PROP_RITUALNOTARGETCHECK = 46,
+        PROP_PARTYONLY = 47,
+        PROP_LARGE = 48,
+        PROP_CASTERTARGETSPELL = 49,
+        PROP_CASTERTARGETSPELLTARGETS = 50,
+        PROP_MINLEVEL = 51,
+        PROP_MAXLEVEL = 52,
+        PROP_AREAID = 53,
+        PROP_CASTERSGROUPED = 54,
+        PROP_LOSOK = 55,
+        PROP_LEAVELOOT = 56,
+        PROP_NODAMAGEIMMUNE = 57,
+        PROP_STEALTHAFFECTED = 58,
+        PROP_PICKUPSPELL = 59,
+        PROP_RETURNAURA = 60,
+        PROP_RETURNSPELL = 61,
+        PROP_NOTINCOMBAT = 62,
+        PROP_FLOATONWATER = 63,
+        PROP_GAMETYPE = 64,
+        PROP_STEALTHED = 65,
+        PROP_LOG_LOOT = 66,
+        PROP_WORLDSTATE1 = 67,
+        PROP_WORLDSTATE2 = 68,
+        PROP_WORLDSTATE3 = 69,
+        PROP_WINEVENTID1 = 70,
+        PROP_WINEVENTID2 = 71,
+        PROP_CONTESTEDEVENTID1 = 72,
+        PROP_CONTESTEDEVENTID2 = 73,
+        PROP_PROGRESSEVENTID1 = 74,
+        PROP_PROGRESSEVENTID2 = 75,
+        PROP_NEUTRALEVENTID1 = 76,
+        PROP_NEUTRALEVENTID2 = 77,
+        PROP_NEUTRALPERCENT = 78,
+        PROP_MINSUPERIORITY = 79,
+        PROP_MAXSUPERIORITY = 80,
+        PROP_MINTIME = 81,
+        PROP_MAXTIME = 82,
+        PROP_AURAID1 = 83,
+        PROP_AURAID2 = 84,
+        PROP_CONDITIONID1 = 85,
+        PROP_CONDITIONID2 = 86,
+        PROP_MAPID = 87,
+        PROP_DIFFICULTY = 88,
+        PROP_OPENTEXTID = 89,
+        PROP_CLOSETEXTID = 90,
+        PROP_ALLOWMOUNTED = 91,
+        PROP_USE_GROUP_LOOT_RULES = 92,
+        PROP_WHEN_TO_PAUSE_MS = 93,
+        PROP_ONLYCREATORUSE = 94,
+        PROP_INTACT_NUM_HITS = 95,
+        PROP_DAMAGED_NUM_HITS = 96,
+        PROP_CREDIT_PROXY_CREATURE = 97,
+        PROP_UNUSED_98 = 98,
+        PROP_TRANSPORTPHYSICS = 99,
+        PROP_UNUSED_100 = 100,
+        PROP_UNUSED_101 = 101,
+        PROP_UNUSED_102 = 102,
+        PROP_UNKNOWN_103 = 103,
+        PROP_UNUSED_104 = 104,
+        PROP_UNUSED_105 = 105,
+        PROP_UNUSED_106 = 106,
+        PROP_UNUSED_107 = 107,
+        PROP_UNUSED_108 = 108,
+        PROP_INTACT_EVENT = 109,
+        PROP_DAMAGED_EVENT = 110,
+        PROP_DESTROYED_EVENT = 111,
+        PROP_REBUILDING_TIME_SECS = 112,
+        PROP_UNUSED_113 = 113,
+        PROP_REBUILDING_EVENT = 114,
+        PROP_UNUSED_115 = 115,
+        PROP_UNUSED_116 = 116,
+        PROP_IGNORED_BY_PATHING = 117,
+        PROP_STARTINGVALUE = 118,
+        PROP_UNIDIRECTIONAL = 119,
+        PROP_DAMAGE_EVENT = 120,
+        PROP_HEIGHT_OFFSET_INCHES = 121,
+        PROP_UNUSED_122 = 122,
+        PROP_IGNORE_TOTEMS = 123,
+        PROP_DESTRUCTIBLE_DATA = 124,
+        PROP_PAUSE1EVENTID = 125,
+        PROP_PAUSE2EVENTID = 126,
+        PROP_WORLDSTATESETSSTATE = 127,
+        PROP_ALLOW_STOPPING = 128,
+        NUM_PROP = 129,
     };
 
-    static const TypeInfo s_typeInfo[36];
+    // Additional value-kind names describe the current property schema.
+    // No current descriptor uses kinds 23, 24 or 26; their meanings and the total count are unknown.
+    enum VALUE_TYPE : int32_t {
+        VALUE_TYPE_TYPE = 0,
+        VALUE_TYPE_BOOL = 1,
+        VALUE_TYPE_INT = 2,
+        VALUE_TYPE_FLOAT = 3,
+        VALUE_TYPE_NAME = 4,
+        VALUE_TYPE_LOCK = 5,
+        VALUE_TYPE_QUESTGIVER = 6,
+        VALUE_TYPE_LOOTTABLE = 7,
+        VALUE_TYPE_SPELL = 8,
+        VALUE_TYPE_PAGETEXT = 9,
+        VALUE_TYPE_PAGEMATERIAL = 10,
+        VALUE_TYPE_TRAP = 11,
+        VALUE_TYPE_CAMERA = 12,
+        VALUE_TYPE_GOSSIP = 13,
+        VALUE_TYPE_AUCTIONHOUSE = 14,
+        VALUE_TYPE_CREATURE = 15,
+        VALUE_TYPE_QUEST = 16,
+        VALUE_TYPE_EVENT = 17,
+        VALUE_TYPE_AREA = 18,
+        VALUE_TYPE_WORLDSTATE = 19,
+        VALUE_TYPE_CONDITION = 20,
+        VALUE_TYPE_MAP = 21,
+        VALUE_TYPE_TEXT = 22,
+        VALUE_TYPE_TRANSPORTPHYSICS = 25,
+        VALUE_TYPE_DESTRUCTIBLEMODELDATA = 27,
+    };
 
-    static int32_t GetPropNum(int32_t typeId, int32_t prop);
+    enum BOOL_INDEX : int32_t {
+        BOOL_FALSE = 0,
+        BOOL_TRUE = 1,
+        NUM_BOOL_VALUES = 2,
+    };
+
+    static const int32_t NUM_DOOR_PROPERTIES = 8;
+    static const int32_t NUM_BUTTON_PROPERTIES = 10;
+    static const int32_t NUM_QUESTGIVER_PROPERTIES = 11;
+    static const int32_t NUM_CHEST_PROPERTIES = 18;
+    static const int32_t NUM_GENERIC_PROPERTIES = 7;
+    static const int32_t NUM_TRAP_PROPERTIES = 16;
+    static const int32_t NUM_CHAIR_PROPERTIES = 5;
+    static const int32_t NUM_SPELLFOCUS_PROPERTIES = 9;
+    static const int32_t NUM_TEXT_PROPERTIES = 5;
+    static const int32_t NUM_GOOBER_PROPERTIES = 23;
+    static const int32_t NUM_TRANSPORT_PROPERTIES = 6;
+    static const int32_t NUM_AREADAMAGE_PROPERTIES = 8;
+    static const int32_t NUM_CAMERA_PROPERTIES = 5;
+    static const int32_t NUM_MOTRANSPORT_PROPERTIES = 9;
+    static const int32_t NUM_RITUAL_PROPERTIES = 9;
+    static const int32_t NUM_MAILBOX_PROPERTIES = 1;
+    static const int32_t NUM_GUARDPOST_PROPERTIES = 2;
+    static const int32_t NUM_SPELLCASTER_PROPERTIES = 6;
+    static const int32_t NUM_MEETINGSTONE_PROPERTIES = 3;
+    static const int32_t NUM_FLAGSTAND_PROPERTIES = 9;
+    static const int32_t NUM_FISHINGHOLE_PROPERTIES = 5;
+    static const int32_t NUM_FLAGDROP_PROPERTIES = 5;
+    static const int32_t NUM_MINIGAME_PROPERTIES = 1;
+    static const int32_t NUM_CAPTUREPOINT_PROPERTIES = 22;
+    static const int32_t NUM_AURAGENERATOR_PROPERTIES = 7;
+    static const int32_t NUM_DUNGEONDIFFICULTY_PROPERTIES = 2;
+    static const int32_t NUM_BARBERCHAIR_PROPERTIES = 2;
+    static const int32_t NUM_DESTRUCTIBLEBUILDING_PROPERTIES = 24;
+    static const int32_t NUM_GUILD_BANK_PROPERTIES = 1;
+    static const int32_t NUM_TRAPDOOR_PROPERTIES = 3;
+
+    struct EnumValue {
+        int32_t count;
+        const char** list;
+        int32_t defaultIndex;
+    };
+
+    struct NumberValue {
+        float min;
+        float max;
+        float step;
+        float defaultValue;
+    };
+
+    struct StringValue {
+        const char* defaultValue;
+    };
+
+    union ValueInfo {
+        EnumValue e;
+        NumberValue n;
+        StringValue s;
+    };
+
+    struct ObjectInfo {
+        /* 0000 */ const char* name;
+        /* 0004 */ int32_t numProperties;
+        /* 0008 */ const PROPERTY_ID* propertyInfo;
+        /* 000C */ const ValueInfo** valueInfo;
+    };
+
+    static const ObjectInfo s_objectInfo[NUM_GAMEOBJECT_TYPE];
+
+    static int32_t GetPropNum(int32_t typeId, int32_t propId);
 };
 
 #endif

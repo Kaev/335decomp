@@ -38,15 +38,15 @@ void CDrawBowString::DrawBowString(CM2Model* model, const CM2Lighting* lighting,
         color = swapped;
     }
 
-    C3Vector top = model->GetEventPosition('TTW$');
-    C3Vector bottom = model->GetEventPosition('BTW$');
+    C3Vector top = model->GetEventPosition(M2_EVENT_ID::WeaponTop_WTT);
+    C3Vector bottom = model->GetEventPosition(M2_EVENT_ID::WeaponBottom_WTB);
     C3Vector hand(0.0f, 0.0f, 0.0f);
 
-    if (unit && (unit->m_animationState & 0x4000)) {
-        if (unit->m_worldModel->HasAttachment(35)) {
-            hand = unit->m_worldModel->GetAttachmentPosition(35);
-        } else if (unit->m_worldModel->HasAttachment(1)) {
-            hand = unit->m_worldModel->GetAttachmentPosition(1);
+    if (unit && (unit->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_RANGED_WEAPON_LOADED)) {
+        if (unit->m_worldModel->HasAttachment(MODEL_ATTACHMENT_ID::ATTACH_HANDARROW)) {
+            hand = unit->m_worldModel->GetAttachmentPosition(MODEL_ATTACHMENT_ID::ATTACH_HANDARROW);
+        } else if (unit->m_worldModel->HasAttachment(MODEL_ATTACHMENT_ID::ATTACH_HANDR)) {
+            hand = unit->m_worldModel->GetAttachmentPosition(MODEL_ATTACHMENT_ID::ATTACH_HANDR);
         }
     } else {
         hand.x = (bottom.x + top.x) * 0.5f;

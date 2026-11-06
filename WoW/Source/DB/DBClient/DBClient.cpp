@@ -6,7 +6,7 @@
 #include "WoW/Source/DB/Rec/MapDifficultyRec.h"
 
 // STATIC: 0x00AD3028
-const char* g_localeNames[12] = { "deDE", "enGB", "enUS", "esES", "frFR", "koKR", "zhCN", "zhTW", "enCN", "enTW", "esMX", "ruRU" };
+const char* g_localeNames[NUM_DB_LOCALES] = { "deDE", "enGB", "enUS", "esES", "frFR", "koKR", "zhCN", "zhTW", "enCN", "enTW", "esMX", "ruRU" };
 
 // STATIC: 0x00C5DEA0
 int32_t g_clientDbPerformCompress;
@@ -1102,6 +1102,12 @@ void InitWeaponSubclasses() {
     for (int32_t i = g_itemSubClassDB.m_numRecords - 1; i >= 0; i--) {
         const ItemSubClassRec* rec = i >= 0 && i < g_itemSubClassDB.m_numRecords ? &g_itemSubClassDB.m_records[i] : nullptr;
 
+#if defined(WOWDECOMP_ARCH_64)
+        if (rec->m_subClassID < 0 || rec->m_subClassID == INT32_MAX) {
+            continue;
+        }
+#endif
+
         if (rec->m_classID == weaponClass && count <= rec->m_subClassID + 1) {
             count = rec->m_subClassID + 1;
         }
@@ -1113,9 +1119,15 @@ void InitWeaponSubclasses() {
         const ItemSubClassRec* rec = i >= 0 && i < g_itemSubClassDB.m_numRecords ? &g_itemSubClassDB.m_records[i] : nullptr;
 
         if (rec->m_classID == weaponClass) {
+#if defined(WOWDECOMP_ARCH_64)
+            if (static_cast<uint32_t>(rec->m_subClassID) >= s_weaponSubclasses.Count()) {
+                continue;
+            }
+#endif
+
             s_weaponSubclasses[rec->m_subClassID] = rec;
 
-            if (rec->m_flags & 4) {
+            if (rec->m_flags & ITEM_SUBCLASS_FLAG_UNARMED) {
                 s_unarmedWeapon = rec;
             }
         }
@@ -1151,19 +1163,19 @@ void ClientDBInitialize() {
 
 // VERIFY: 144a65d1 auto
 // OFFSET: 0x00635D90
-int32_t LocaleNameToIndex(const char* locale) {
-    for (int32_t i = 0; i < 12; i++) {
+DB_LOCALE_INDEX LocaleNameToIndex(const char* locale) {
+    for (int32_t i = 0; i < NUM_DB_LOCALES; i++) {
         if (!SStrCmpI(locale, g_localeNames[i], 4)) {
-            return i;
+            return static_cast<DB_LOCALE_INDEX>(i);
         }
     }
 
-    return 2;
+    return DB_LOCALE_enUS;
 }
 
 // VERIFY: d0d3fe1b auto
 // OFFSET: 0x00634910
-const char* ClientDBStringLookup(uint32_t lookup) {
+const char* ClientDBStringLookup(STRINGLOOKUP lookup) {
     StringLookupsRec* rec = g_stringLookupsDB.GetRecord(lookup);
     return rec ? rec->m_string : nullptr;
 }

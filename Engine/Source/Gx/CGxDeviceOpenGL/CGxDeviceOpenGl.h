@@ -12,6 +12,14 @@
 
 class CGxDeviceOpenGl : public CGxDevice {
     public:
+    enum MATERIAL_DIRTY_FLAGS : int32_t {
+        MATERIAL_DIRTY_NONE = 0,
+        MATERIAL_DIRTY_DIFFUSE = 0x1,
+        MATERIAL_DIRTY_SPECULAR = 0x2,
+        MATERIAL_DIRTY_EMISSIVE = 0x4,
+        MATERIAL_DIRTY_ALL = 7,
+    };
+
     enum EDeviceState {
         Ds_DepthMask = 0,
         Ds_ColorMask = 1,
@@ -25,7 +33,7 @@ class CGxDeviceOpenGl : public CGxDevice {
         Ds_AlphaOp0 = 51,
         Ds_VertexArray0 = 59,
         Ds_TexCoordArray0 = 65,
-        Ds_Unk73 = 73,
+        Ds_Reserved73 = 73,
         Ds_PolygonOffsetFill = 74,
         Ds_PolygonOffset = 75,
         Ds_Blend = 76,
@@ -35,7 +43,7 @@ class CGxDeviceOpenGl : public CGxDevice {
         Ds_TextureShader = 80,
         Ds_FragmentProgram = 81,
         Ds_VertexProgram = 82,
-        Ds_Unk83 = 83,
+        Ds_VertexProgramNV = 83,
         Ds_MatrixMode = 84,
         Ds_BlendFunc = 85,
         Ds_ArrayBuffer = 86,
@@ -45,8 +53,8 @@ class CGxDeviceOpenGl : public CGxDevice {
         DeviceStates_Last = 90,
     };
 
-    /* 3968 */ uint32_t m_deviceStates [90];
-    /* 3AD0 */ uint32_t unk_3AD0;
+    /* 3968 */ uint32_t m_deviceStates [DeviceStates_Last];
+    /* 3AD0 */ uint32_t unused_3AD0;
     /* 3AD4 */ uint32_t m_materialDirty;
     /* 3AD8 */ GLenum m_sphereMapMode;
     /* 3ADC */ int32_t m_renderTargetMode;
@@ -56,7 +64,7 @@ class CGxDeviceOpenGl : public CGxDevice {
     /* 3AEC */ HWND m_hwnd;
     /* 3AF0 */ int32_t m_ownhwnd;
     /* 3AF4 */ ATOM m_hwndClass;
-    /* 3AF6 */ uint16_t unk_3AF6;
+    /* 3AF6 */ uint16_t unused_3AF6;
     /* 3AF8 */ HDC m_hdc;
     /* 3AFC */ HGLRC m_hglrc;
     /* 3B00 */ HPBUFFERARB m_pbuffer;
@@ -67,14 +75,14 @@ class CGxDeviceOpenGl : public CGxDevice {
     /* 3B24 */ TSFixedArray<CImVector> m_colorArray;
     /* 3B30 */ TSFixedArray<C2Vector> m_texCoordArray0;
     /* 3B3C */ TSFixedArray<C2Vector> m_texCoordArray1;
-    /* 3B48 */ uint32_t unk_3B48;
-    /* 3B4C */ uint32_t unk_3B4C;
-    /* 3B50 */ uint32_t unk_3B50;
+    /* 3B48 */ uint32_t unused_3B48;
+    /* 3B4C */ uint32_t unused_3B4C;
+    /* 3B50 */ uint32_t unused_3B50;
     /* 3B54 */ uintptr_t m_indexPtr;
     /* 3B58 */ int32_t m_viewDirty;
-    /* 3B5C */ uint32_t unk_3B5C;
-    /* 3B60 */ int32_t m_useVboBroker [2][3];
-    /* 3B78 */ int32_t m_useVbo [2][3];
+    /* 3B5C */ uint32_t unused_3B5C;
+    /* 3B60 */ int32_t m_useVboBroker [2][GxPoolUsages_Last];
+    /* 3B78 */ int32_t m_useVbo [2][GxPoolUsages_Last];
     /* 3B90 */ GLuint m_boundTexture;
     /* 3B94 */ GLuint m_fbo;
     /* 3B98 */ GLuint m_boundFbo;

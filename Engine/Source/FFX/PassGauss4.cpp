@@ -7,10 +7,10 @@
 // VERIFY: f0206923 auto
 // OFFSET: 0x008C1B40
 PassGauss4::PassGauss4(FFX::Tex** inputs, uint32_t count, FFX::Tex* output, EGxBlend blend, bool unk) : FFX::Pass(inputs, count, output, blend, unk) {
-    this->m_shaderIndex = 0;
+    this->m_shaderIndex = FFX::SHADER_TEXCOORD::NORMALIZED_COORDS;
 
     if (FFX::s_useRECT) {
-        this->m_shaderIndex = 1;
+        this->m_shaderIndex = FFX::SHADER_TEXCOORD::RECTANGLE_COORDS;
     }
 
     g_theGxDevicePtr->ShaderCreate(this->m_shaders, GxSh_Pixel, "Shaders\\Pixel", "FFXGauss4", sizeof(this->m_shaders) / sizeof(this->m_shaders[0]));
@@ -55,7 +55,7 @@ void PassGauss4::Execute() {
     vertical[3].y = 2.5f;
 
     FFX::SetupGx(this->m_output);
-    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, FFX::s_gridTex, this->unk_002C);
+    FFX::SetupGeo_Quad(this->m_output->m_size, this->m_inputs[0]->m_size, this->m_inputs[0]->m_texSize, FFX::s_gridPos, FFX::s_gridTex, this->m_flip);
     g_theGxDevicePtr->PrimVertexMask(0x3D1);
     FFX::SetupIB();
     g_theGxDevicePtr->RsSet(GxRs_PixelShader, this->m_shaders[this->m_shaderIndex]);

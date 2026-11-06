@@ -10,15 +10,15 @@
 // VERIFY: a7465a7c manual
 // OFFSET: 0x0070C6A0
 CGGameObject_C_Type_Chair::CGGameObject_C_Type_Chair(CGGameObject_C* owner) : CGGameObject_C_TypeBase(owner) {
-    this->m_interactDistance = 3.0f;
+    this->m_interactDistance = MAX_SITCHAIRUSE_DISTANCE;
 }
 
 // VERIFY: b2eee098 auto
 // OFFSET: 0x00710240
 uint32_t CGGameObject_C_Type_Chair::GetNumSlots() const {
-    uint32_t slotsIndex = CGameObjectDef::GetPropNum(this->m_owner->m_gameObject->m_typeID, 11);
+    uint32_t slotsPropertyIndex = CGameObjectDef::GetPropNum(this->m_owner->m_gameObject->m_typeID, CGameObjectDef::PROPERTY_ID::PROP_CHAIRSLOTS);
     GameObjectStats* slotsStats = this->m_owner->m_stats;
-    uint32_t slots = (slotsStats && slotsIndex < 24) ? slotsStats->m_propValue[slotsIndex] : 0;
+    uint32_t slots = (slotsStats && slotsPropertyIndex < GameObjectStats::NUM_PROP_VALUES) ? slotsStats->m_propValue[slotsPropertyIndex] : 0;
 
     return slots;
 }
@@ -47,10 +47,10 @@ bool CGGameObject_C_Type_Chair::CanUse() const {
         return false;
     }
 
-    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
-    uint8_t standState = player->m_unit->m_unitFieldBytes1[0];
+    CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
+    uint8_t standState = player->m_unit->m_standState;
 
-    if (standState < 4 || standState > 6) {
+    if (standState < UNIT_FIRSTCHAIRSIT || standState > UNIT_LASTCHAIRSIT) {
         return true;
     }
 
@@ -64,7 +64,7 @@ bool CGGameObject_C_Type_Chair::CanUse() const {
         float dy = position.y - slot.y;
         float dz = position.z - slot.z;
 
-        if (dx * dx + dz * dz + dy * dy < 0.16666667f) {
+        if (dx * dx + dz * dz + dy * dy < MAX_SITCHAIR_DISTANCE_SQUARED) {
             return false;
         }
     }

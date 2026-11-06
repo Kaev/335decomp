@@ -1,4 +1,5 @@
 #include "PetitionVendor.h"
+#include "Engine/Source/Tempest/Color.h"
 #include <cstdint>
 #include "Engine/Source/FrameScript/FrameScript.h"
 #include "Engine/Source/FrameScript/FrameScript_Object.h"
@@ -67,7 +68,7 @@ static int32_t Script_GetPetitionItemInfo(lua_State* L) {
         char name[256];
         CGItem_C::BuildItemName(name, sizeof(name), petition->m_itemID, 0);
         lua_pushstring(L, name);
-        const char* path = ClientDBStringLookup(3);
+        const char* path = ClientDBStringLookup(SLOOKUP_INVENTORYICONPATH);
         char texture[260];
         SStrPrintf(texture, sizeof(texture), "%s%s%s", path, *path ? "\\" : "", CGItem_C::GetInventoryArt(petition->m_displayID));
         lua_pushstring(L, texture);
@@ -125,7 +126,7 @@ static int32_t Script_BuyPetition(lua_State* L) {
 
     uint32_t index = static_cast<uint32_t>(lua_tonumber(L, 1)) - 1;
     const char* name = lua_tolstring(L, 2, nullptr);
-    int32_t error = ValidateGuildName(s_locale, name);
+    VALIDATE_NAME_RESULT error = ValidateGuildName(s_locale, name);
 
     if (error) {
         CGGameUI::DisplayNameError(error);
@@ -151,7 +152,7 @@ static int32_t Script_TurnInArenaPetition(lua_State* L) {
     }
 
     uint32_t background = 0xFFFFFFFF;
-    uint32_t emblemColor = 0xFFFFFFFF;
+    uint32_t emblemColor = COLOR_WHITE_ARGB;
     uint32_t borderStyle = 0xFFFFFFFF;
     uint32_t emblemStyle;
     uint32_t borderColor;

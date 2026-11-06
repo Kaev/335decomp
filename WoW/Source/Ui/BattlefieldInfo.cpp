@@ -35,7 +35,7 @@
 WorldPvPQueueStatus CGBattlefieldInfo::m_worldPvPQueues[1];
 
 // STATIC: 0x00BEA2C0
-BattlefieldScoreSortCriteria CGBattlefieldInfo::m_scoreSortCriteria[17];
+BattlefieldScoreSortCriteria CGBattlefieldInfo::m_scoreSortCriteria[CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS];
 
 // STATIC: 0x00BEA720
 TSGrowableArray<int32_t> CGBattlefieldInfo::m_battlegroundTypes;
@@ -255,7 +255,7 @@ WOWGUID CGBattlefieldInfo::GetArenaOpponentPet(uint32_t index) {
         return WOWGUID();
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_arenaOpponents[index], TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_arenaOpponents[index], TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
         CGUnitData* data = unit->m_unit;
@@ -282,7 +282,7 @@ void CGBattlefieldInfo::LeaveWorld() {
     }
 
     CGBattlefieldInfo::m_instances.Clear();
-    CGBattlefieldInfo::m_instanceType = 0;
+    CGBattlefieldInfo::m_instanceType = MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_NOT_INSTANCED;
 }
 
 // VERIFY: cf91ab36 manual
@@ -322,8 +322,8 @@ void CGBattlefieldInfo::EnterWorld() {
         CGBattlefieldInfo::m_teamNames[i][0] = 0;
     }
 
-    CGBattlefieldInfo::m_status[0].m_status = 0;
-    CGBattlefieldInfo::m_status[1].m_status = 0;
+    CGBattlefieldInfo::m_status[0].m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
+    CGBattlefieldInfo::m_status[1].m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
 
     if (!CGGameUI::m_currentlyReloadingUI) {
         memset(CGBattlefieldInfo::m_arenaOpponentPets, 0, sizeof(CGBattlefieldInfo::m_arenaOpponentPets));
@@ -382,7 +382,7 @@ void CGBattlefieldInfo::OnArenaUnitDestroyed(const WOWGUID& guid) {
         }
 
         if (opponent) {
-            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(opponent, TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(opponent, TYPE_UNIT, __FILE__, __LINE__));
 
             if (unit) {
                 const WOWGUID& pet = unit->m_unit->m_unitFieldCharm.m_guid ? unit->m_unit->m_unitFieldCharm : unit->m_unit->m_unitFieldSummon;
@@ -425,7 +425,7 @@ int32_t Packet_SMSG_BATTLEFIELD_STATUS(void* param, NETMESSAGE msgId, uint32_t t
     if (!status->m_queueData) {
         status->m_minLevel = 0;
         status->m_maxLevel = 0;
-        status->m_status = 0;
+        status->m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
         status->m_instanceID = 0;
         status->m_portExpiration = 0;
         status->m_estimatedWaitTime = 0;
@@ -437,7 +437,7 @@ int32_t Packet_SMSG_BATTLEFIELD_STATUS(void* param, NETMESSAGE msgId, uint32_t t
             CGBattlefieldInfo::m_instanceStartTime = 0;
             CGBattlefieldInfo::m_numWorldStateStats = 0;
             CGBattlefieldInfo::m_activeMapID = 0;
-            CGBattlefieldInfo::m_instanceType = 0;
+            CGBattlefieldInfo::m_instanceType = MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_NOT_INSTANCED;
             CGBattlefieldInfo::m_activeIndex = -1;
             CGLCD::ShowBattlefieldScreen();
         }
@@ -464,10 +464,10 @@ int32_t Packet_SMSG_BATTLEFIELD_STATUS(void* param, NETMESSAGE msgId, uint32_t t
     msg->Get(state);
     status->m_status = state;
 
-    if (state == 2) {
+    if (state == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM) {
         msg->Get(status->m_mapID);
         msg->Get(status->m_joinedQueueData);
-        CGTutorial::TriggerTutorial(48);
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_BATTLEGROUND_PORT);
         uint32_t expiration;
         msg->Get(expiration);
         status->m_portExpiration = expiration ? expiration + OsGetAsyncTimeMs() : 0;
@@ -476,7 +476,7 @@ int32_t Packet_SMSG_BATTLEFIELD_STATUS(void* param, NETMESSAGE msgId, uint32_t t
         status->m_portExpiration = 0;
     }
 
-    if (status->m_status == 3) {
+    if (status->m_status == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_ACTIVE) {
         msg->Get(CGBattlefieldInfo::m_activeMapID);
         msg->Get(status->m_joinedQueueData);
         MapRec* map = g_mapDB.GetRecord(CGBattlefieldInfo::m_activeMapID);
@@ -526,8 +526,8 @@ int32_t Packet_SMSG_BATTLEFIELD_STATUS(void* param, NETMESSAGE msgId, uint32_t t
         }
     }
 
-    if (status->m_status == 1) {
-        CGTutorial::TriggerTutorial(47);
+    if (status->m_status == CGBattlefieldInfo::QUEUE_STATUS::QUEUE_QUEUED) {
+        CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_BATTLEGROUND_QUEUE);
         msg->Get(status->m_estimatedWaitTime);
         uint32_t waited;
         msg->Get(waited);
@@ -548,23 +548,23 @@ int32_t Packet_SMSG_GROUP_JOINED_BATTLEGROUND(void* param, NETMESSAGE msgId, uin
     msg->Get(reinterpret_cast<uint32_t&>(result));
 
     switch (result) {
-        case -15: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::IN_NON_RANDOM_BG: {
             CGGameUI::DisplayError(ERR_IN_NON_RANDOM_BG);
             break;
         }
 
-        case -14: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::IN_RANDOM_BG: {
             CGGameUI::DisplayError(ERR_IN_RANDOM_BG);
             break;
         }
 
-        case -13: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::LFG: {
             CGGameUI::DisplayError(ERR_LFG_CANT_USE_BATTLEGROUND);
             break;
         }
 
-        case -12:
-        case -11: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::UNKNOWN_MINUS_12:
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::UNKNOWN_MINUS_11: {
             WOWGUID guid;
             msg->Get(guid.m_guid);
             WOWGUID none = WOWGUID();
@@ -579,52 +579,52 @@ int32_t Packet_SMSG_GROUP_JOINED_BATTLEGROUND(void* param, NETMESSAGE msgId, uin
             break;
         }
 
-        case -10: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::RANGE_INDEX: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_JOIN_RANGE_INDEX);
             break;
         }
 
-        case -9: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::XP_GAIN: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_JOIN_XP_GAIN);
             break;
         }
 
-        case -8: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::NOT_IN_BATTLEGROUND: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND);
             break;
         }
 
-        case -7: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::TEAM_LEFT_QUEUE: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_TEAM_LEFT_QUEUE);
             break;
         }
 
-        case -6: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::QUEUED_FOR_RATED: {
             CGGameUI::DisplayError(ERR_BATTLEDGROUND_QUEUED_FOR_RATED);
             break;
         }
 
-        case -5: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::CANNOT_QUEUE_FOR_RATED: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED);
             break;
         }
 
-        case -4: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::TOO_MANY_QUEUES: {
             CGGameUI::DisplayError(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
             break;
         }
 
-        case -3: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::ARENA_TEAM_PARTY_SIZE: {
             CGGameUI::DisplayError(ERR_ARENA_TEAM_PARTY_SIZE);
             break;
         }
 
-        case -2: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::DESERTERS: {
             CGGameUI::DisplayError(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
             break;
         }
 
-        case -1: {
+        case CGBattlefieldInfo::GROUP_JOIN_RESULT::UNKNOWN_MINUS_1: {
             break;
         }
 
@@ -791,14 +791,14 @@ void CGBattlefieldInfo::InitializeGame() {
     CGBattlefieldInfo::m_allowJoin = 1;
 
     for (uint32_t i = 0; i < 2; i++) {
-        CGBattlefieldInfo::m_status[i].m_status = 0;
+        CGBattlefieldInfo::m_status[i].m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
         CGBattlefieldInfo::m_status[i].m_queueData = 0;
         CGBattlefieldInfo::m_status[i].m_bgTypeID = 0;
         CGBattlefieldInfo::m_status[i].m_mapID = 0;
     }
 
     for (uint32_t i = 0; i < 1; i++) {
-        CGBattlefieldInfo::m_worldPvPQueues[i].m_status = 0;
+        CGBattlefieldInfo::m_worldPvPQueues[i].m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
         CGBattlefieldInfo::m_worldPvPQueues[i].m_areaID = 0;
         CGBattlefieldInfo::m_worldPvPQueues[i].m_queueID = 0;
     }
@@ -807,7 +807,7 @@ void CGBattlefieldInfo::InitializeGame() {
         CGBattlefieldInfo::m_scores[i] = static_cast<BattlefieldScore*>(SMemAlloc(sizeof(BattlefieldScore), __FILE__, __LINE__, 0));
     }
 
-    for (uint32_t i = 0; i < 17; i++) {
+    for (uint32_t i = 0; i < CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS; i++) {
         CGBattlefieldInfo::m_scoreSortCriteria[i].m_column = i;
         CGBattlefieldInfo::m_scoreSortCriteria[i].m_descending = 0;
     }
@@ -841,7 +841,7 @@ void CGBattlefieldInfo::JoinBattlefield(uint32_t index, int32_t asGroup, int32_t
 
     MapRec* map;
 
-    if (!arena && (map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID)) && map->m_instanceType == 3) {
+    if (!arena && (map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID)) && map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PVP_BATTLEFIELD) {
         CGGameUI::DisplayError(ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND);
         return;
     }
@@ -875,7 +875,7 @@ void CGBattlefieldInfo::JoinBattlefield(uint32_t index, int32_t asGroup, int32_t
 // VERIFY: 40539af6 manual
 // OFFSET: 0x0054CE30
 void CGBattlefieldInfo::RequestScoreData() {
-    if (CGBattlefieldInfo::m_nextLogUpdate && (CGBattlefieldInfo::m_mapDone || CGBattlefieldInfo::m_instanceType == 4)) {
+    if (CGBattlefieldInfo::m_nextLogUpdate && (CGBattlefieldInfo::m_mapDone || CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD)) {
         return;
     }
 
@@ -899,13 +899,13 @@ void CGBattlefieldInfo::SetScoreSortColumn(int32_t column) {
 
     uint32_t index;
 
-    for (index = 0; index < 17; index++) {
+    for (index = 0; index < CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS; index++) {
         if (CGBattlefieldInfo::m_scoreSortCriteria[index].m_column == column) {
             break;
         }
     }
 
-    if (index < 17) {
+    if (index < CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS) {
         int32_t descending = CGBattlefieldInfo::m_scoreSortCriteria[index].m_descending;
 
         if (!index) {
@@ -1072,7 +1072,7 @@ int32_t Packet_SMSG_ARENA_OPPONENT_UPDATE(void* param, NETMESSAGE msgId, uint32_
     WOWGUID guid;
     msg->Get(guid.m_guid);
 
-    if (CGBattlefieldInfo::m_instanceType == 4) {
+    if (CGBattlefieldInfo::m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
         CGBattlefieldInfo::OnArenaUnitDestroyed(guid);
     }
 
@@ -1088,7 +1088,7 @@ int32_t Packet_SMSG_BATTLEFIELD_MGR_ENTRY_INVITE(void* param, NETMESSAGE msgId, 
     msg->Get(areaID);
     uint32_t expireTime = 0;
     msg->Get(expireTime);
-    SetWorldPvPQueue(queueID, 2, areaID, expireTime);
+    SetWorldPvPQueue(queueID, CGBattlefieldInfo::QUEUE_STATUS::QUEUE_CONFIRM, areaID, expireTime);
     FrameScript_SignalEvent(SCRIPT_EVENT_BATTLEFIELD_MGR_ENTRY_INVITE, "%d", queueID);
     return 1;
 }
@@ -1234,7 +1234,7 @@ int32_t Packet_SMSG_BATTLEFIELD_MGR_ENTERED(void* param, NETMESSAGE msgId, uint3
 
     if (queue) {
         queue->m_queueID = queueID;
-        queue->m_status = 0;
+        queue->m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
     }
 
     FrameScript_SignalEvent(SCRIPT_EVENT_BATTLEFIELD_MGR_ENTERED, "%d%b%b", queueID, invited != 0, onOffense != 0);
@@ -1254,27 +1254,27 @@ int32_t Packet_SMSG_BATTLEFIELD_MGR_EJECTED(void* param, NETMESSAGE msgId, uint3
     msg->Get(relocated);
 
     switch (reason) {
-        case 1:
-        case 2:
-        case 4:
-        case 5:
-        case 7:
-        case 8:
-        case 9:
-        case 10:
-        case 11: {
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_1:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_2:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_4:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_5:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_7:
+        case CGBattlefieldInfo::EJECTION_REASON::PLAYER_EXIT:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_9:
+        case CGBattlefieldInfo::EJECTION_REASON::LOW_LEVEL:
+        case CGBattlefieldInfo::EJECTION_REASON::UNKNOWN_11: {
             WorldPvPQueueStatus* queue = FindWorldPvPQueue(queueID);
 
             if (queue) {
                 queue->m_queueID = queueID;
-                queue->m_status = 0;
+                queue->m_status = CGBattlefieldInfo::QUEUE_STATUS::QUEUE_NONE;
             }
 
             break;
         }
     }
 
-    FrameScript_SignalEvent(SCRIPT_EVENT_BATTLEFIELD_MGR_EJECTED, "%d%b%b%b%b", queueID, reason == 8, relocated != 0, battleStatus == 2, reason == 10);
+    FrameScript_SignalEvent(SCRIPT_EVENT_BATTLEFIELD_MGR_EJECTED, "%d%b%b%b%b", queueID, reason == CGBattlefieldInfo::EJECTION_REASON::PLAYER_EXIT, relocated != 0, battleStatus == 2, reason == CGBattlefieldInfo::EJECTION_REASON::LOW_LEVEL);
     return 1;
 }
 
@@ -1344,7 +1344,7 @@ void CGBattlefieldInfo::RemoveVehicle(const WOWGUID& guid) {
 // OFFSET: 0x0054A700
 bool IsCurrentMapArena() {
     MapRec* map = g_mapDB.GetRecord(CGGameUI::m_iCurrentMapID);
-    return map && map->m_instanceType == 3;
+    return map && map->m_instanceType == MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_PVP_BATTLEFIELD;
 }
 
 // VERIFY: 9d869e6b manual
@@ -1387,29 +1387,29 @@ int32_t QSortScoreData(const void* a, const void* b) {
         }
     }
 
-    for (uint32_t i = 0; i < 17; i++) {
+    for (uint32_t i = 0; i < CGBattlefieldInfo::SCORE_SORT_COLUMN::NUM_COLUMNS; i++) {
         BattlefieldScoreSortCriteria* criteria = &CGBattlefieldInfo::m_scoreSortCriteria[i];
         int32_t result;
         uint32_t leftValue;
         uint32_t rightValue;
 
         switch (criteria->m_column) {
-            case 0:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_KILLING_BLOWS:
                 leftValue = left->m_killingBlows;
                 rightValue = right->m_killingBlows;
                 break;
 
-            case 1:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_DEATHS:
                 leftValue = left->m_deaths;
                 rightValue = right->m_deaths;
                 break;
 
-            case 2:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_BONUS_HONOR:
                 leftValue = left->m_bonusHonor;
                 rightValue = right->m_bonusHonor;
                 break;
 
-            case 3:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_NAME:
                 result = SStrCmp(leftName->m_name, rightName->m_name, STORM_MAX_STR);
 
                 if (!result) {
@@ -1418,26 +1418,26 @@ int32_t QSortScoreData(const void* a, const void* b) {
 
                 return criteria->m_descending ? -result : result;
 
-            case 4:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_CLASS:
                 result = rightName->m_class < leftName->m_class ? -1 : 1;
                 return criteria->m_descending ? -result : result;
 
-            case 5:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_HONORABLE_KILLS:
                 leftValue = left->m_honorableKills;
                 rightValue = right->m_honorableKills;
                 break;
 
-            case 6:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_DAMAGE_DONE:
                 leftValue = left->m_damageDone;
                 rightValue = right->m_damageDone;
                 break;
 
-            case 7:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_HEALING_DONE:
                 leftValue = left->m_healingDone;
                 rightValue = right->m_healingDone;
                 break;
 
-            case 8:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_TEAM:
                 if (left->m_faction == right->m_faction) {
                     continue;
                 }
@@ -1445,15 +1445,15 @@ int32_t QSortScoreData(const void* a, const void* b) {
                 result = 2 * (left->m_faction >= right->m_faction) - 1;
                 return criteria->m_descending ? -result : result;
 
-            case 9:
-            case 10:
-            case 11:
-            case 12:
-            case 13:
-            case 14:
-            case 15:
-            case 16: {
-                uint32_t stat = criteria->m_column - 9;
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT1:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT2:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT3:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT4:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT5:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT6:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT7:
+            case CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT8: {
+                uint32_t stat = criteria->m_column - CGBattlefieldInfo::SCORE_SORT_COLUMN::COLUMN_STAT1;
 
                 if (stat >= CGBattlefieldInfo::m_numWorldStateStats) {
                     continue;
@@ -1491,7 +1491,7 @@ void BattlefieldNameCacheCallback() {
         WOWGUID none = WOWGUID();
         NameCache* name = g_nameDBCache.GetRecord(CGBattlefieldInfo::m_scores[i]->m_guid.m_guid, none, nullptr, nullptr, false);
 
-        if (CGBattlefieldInfo::m_instanceType != 4) {
+        if (CGBattlefieldInfo::m_instanceType != MAP_INSTANCE_TYPE::MAP_INSTANCE_TYPE_ARENA_BATTLEFIELD) {
             int32_t faction = 0;
 
             if (name) {
@@ -1541,7 +1541,7 @@ void CGBattlefieldInfo::OnArenaUnitOutOfRange(const WOWGUID& guid) {
         }
 
         if (opponent) {
-            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(opponent, TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(opponent, TYPE_UNIT, __FILE__, __LINE__));
 
             if (unit) {
                 CGUnitData* data = unit->m_unit;
@@ -1588,7 +1588,7 @@ const char* CGBattlefieldInfo::GetFlagToken(uint32_t index) {
     }
 
     uint32_t faction = index;
-    CGPlayer_C* carrier = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_flagCarriers[index], TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* carrier = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_flagCarriers[index], TYPE_PLAYER, __FILE__, __LINE__));
 
     if (carrier) {
         faction = carrier->GetPVPFactionIndex();
@@ -1791,7 +1791,7 @@ void CGBattlefieldInfo::ShutdownGame() {
 // VERIFY: 8e23bef8 manual
 // OFFSET: 0x0054E5B0
 void CGBattlefieldInfo::RequestBattlegroundInstanceInfo(uint32_t index) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player || static_cast<int32_t>(index) < 0 || index >= CGBattlefieldInfo::m_battlegroundTypes.m_count) {
         return;
@@ -1812,7 +1812,7 @@ void CGBattlefieldInfo::RequestBattlegroundInstanceInfo(uint32_t index) {
     if (player->m_unit->m_unitFieldLevel >= player->m_player->m_playerFieldMaxLevel) {
         flag = 0;
     } else {
-        flag = (player->m_player->m_playerFlags >> 25) & 1;
+        flag = (player->m_player->m_playerFlags & PLAYER_FLAGS::PLAYER_FLAG_NO_XP_GAIN) != 0;
     }
 
     msg.Put(flag);
@@ -1892,7 +1892,7 @@ int32_t Packet_SMSG_BATTLEFIELD_LIST(void* param, NETMESSAGE msgId, uint32_t tim
 // VERIFY: 225ed4a9 manual
 // OFFSET: 0x0054B840
 void CGBattlefieldInfo::AddArenaOpponentToSlot(const WOWGUID& guid, int32_t slot) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (CGBattlefieldInfo::m_arenaOpponents[slot] != guid) {
         CGBattlefieldInfo::m_arenaOpponents[slot] = guid;
@@ -1915,7 +1915,7 @@ void CGBattlefieldInfo::AddArenaOpponentToSlot(const WOWGUID& guid, int32_t slot
 // VERIFY: c68ace60 manual
 // OFFSET: 0x0054B920
 void CGBattlefieldInfo::AddArenaOpponentPetToSlot(const WOWGUID& petGuid, const WOWGUID& ownerGuid, int32_t slot, int32_t registerNew) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(petGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(petGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (registerNew && CGBattlefieldInfo::m_arenaOpponentPets[slot][0] != petGuid && unit) {
         unit->RegisterScript(0x4000);
@@ -1938,7 +1938,7 @@ void CGBattlefieldInfo::AddArenaOpponentPetToSlot(const WOWGUID& petGuid, const 
 void CGBattlefieldInfo::AddArenaOpponent(const WOWGUID& guid) {
     for (uint32_t i = 0; i < 5; i++) {
         if (CGBattlefieldInfo::m_arenaOpponentPets[i][1] == guid) {
-            CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_arenaOpponentPets[i][0], TYPEMASK_UNIT, __FILE__, __LINE__));
+            CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGBattlefieldInfo::m_arenaOpponentPets[i][0], TYPE_UNIT, __FILE__, __LINE__));
 
             if (pet) {
                 pet->UnregisterScript(0x4000);

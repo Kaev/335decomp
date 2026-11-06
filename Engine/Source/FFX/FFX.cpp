@@ -57,19 +57,19 @@ C44Matrix FFX::s_oldViewMtx;
 
 // STATIC: 0x00AD88C0
 static CGxVertexAttrib s_vertexAttribsPCT[] = {
-    { GxVA_Position, 4, 0, 24 },
-    { GxVA_Color0, 0, 12, 24 },
-    { GxVA_TexCoord0, 3, 16, 24 }
+    { GxVA_Position, GxVAT_Float3, 0, 24 },
+    { GxVA_Color0, GxVAT_Color, 12, 24 },
+    { GxVA_TexCoord0, GxVAT_Float2, 16, 24 }
 };
 
 // STATIC: 0x00AD8940
 static CGxVertexAttrib s_vertexAttribsPCT4[] = {
-    { GxVA_Position, 4, 0, 48 },
-    { GxVA_Color0, 0, 12, 48 },
-    { GxVA_TexCoord0, 3, 16, 48 },
-    { GxVA_TexCoord1, 3, 24, 48 },
-    { GxVA_TexCoord2, 3, 32, 48 },
-    { GxVA_TexCoord3, 3, 40, 48 }
+    { GxVA_Position, GxVAT_Float3, 0, 48 },
+    { GxVA_Color0, GxVAT_Color, 12, 48 },
+    { GxVA_TexCoord0, GxVAT_Float2, 16, 48 },
+    { GxVA_TexCoord1, GxVAT_Float2, 24, 48 },
+    { GxVA_TexCoord2, GxVAT_Float2, 32, 48 },
+    { GxVA_TexCoord3, GxVAT_Float2, 40, 48 }
 };
 
 // INLINED
@@ -121,7 +121,7 @@ FFX::Pass::Pass(Tex** inputs, uint32_t count, Tex* output, EGxBlend blend, bool 
 
     this->m_output = output;
     this->m_blend = blend;
-    this->unk_002C = unk;
+    this->m_flip = unk;
 }
 
 // VERIFY: 2d6c87ac manual

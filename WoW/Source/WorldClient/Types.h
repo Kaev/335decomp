@@ -6,6 +6,19 @@
 #include "Engine/Source/Gx/Types.h"
 #include "Engine/Source/Storm/H/stpl.h"
 
+// Input to CMap::ObjectCreate, separate from entity static/runtime flags.
+enum MAP_OBJECT_CREATE_FLAGS : uint32_t {
+    MAP_OBJECT_CREATE_FLAG_COLLIDABLE = 0x1,
+    MAP_OBJECT_CREATE_FLAG_NO_BLOB_SHADOW = 0x2,
+    MAP_OBJECT_CREATE_FLAG_ALWAYS_ANIMATE = 0x4,
+    MAP_OBJECT_CREATE_FLAG_LINK_MULTIPLE_WMO_GROUPS = 0x8,
+    MAP_OBJECT_CREATE_FLAG_USE_CHARACTER_AMBIENT = 0x10,
+    MAP_OBJECT_CREATE_FLAG_UNKNOWN_5 = 0x20,
+};
+
+// Keep native allocation-bit extraction in its original shift/AND form.
+constexpr int32_t MAP_OBJECT_CREATE_MULTIPLE_GROUPS_SHIFT = 3;
+
 class CMapChunk;
 class CMapChunkDoodadDefLink;
 class CMapDoodadDef;
@@ -108,7 +121,7 @@ struct SMLayer {
     /* 0000 */ uint32_t m_textureId;
     /* 0004 */ uint32_t m_flags;
     /* 0008 */ uint32_t m_offsetInMCAL;
-    /* 000C */ uint32_t m_offectId;
+    /* 000C */ uint32_t m_effectId; // GroundEffectTexture ID; remains 32-bit in 3.3.5.
 };
 
 struct SMOPoly {

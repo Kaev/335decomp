@@ -18,7 +18,7 @@ class StreamingFileEntry {
     /* 001C */ std::vector<std::string> m_files;
     /* 002C */ uint32_t m_cursor;
     /* 0030 */ uint32_t m_next;
-    /* 0034 */ uint32_t unk_0034;
+    /* 0034 */ uint32_t unused_0034;
     /* 0038 */ int64_t m_localAmount;
     /* 0040 */ bool m_complete;
     /* 0044 */ int32_t m_priority;
@@ -36,6 +36,23 @@ class StreamingFileEntry {
 
 class StreamingManager {
     public:
+    // Runtime manifest states, separate from m_gameState. State 8 has no proved key role.
+    enum STATE : int32_t {
+        START_CLIENT = 0,
+        START_CHARACTER = 1,
+        START_RACE_COMMON = 2,
+        START_CURRENT_RACE = 3,
+        BACKGROUND_CURRENT_ZONE = 4,
+        BACKGROUND_CURRENT_RACE = 5,
+        BACKGROUND_ALL_RACES = 6,
+        BACKGROUND_ALL_ZONES = 7,
+        UNKNOWN_8 = 8,
+        LOCALE_ARCHIVES = 9,
+        REGION_ARCHIVES = 10,
+        IDLE = 11,
+        SHUTDOWN = 12,
+    };
+
     /* 0000 */ std::map<std::string, StreamingFileEntry*> m_entries;
     /* 000C */ int32_t m_state;
     /* 0010 */ int32_t m_gameState;
@@ -47,8 +64,8 @@ class StreamingManager {
     /* 0028 */ int32_t m_area;
     /* 002C */ int32_t m_areaChunk;
     /* 0030 */ bool m_dirty;
-    /* 0031 */ bool unk_0031;
-    /* 0034 */ uint8_t unk_0034[260];
+    /* 0031 */ bool unused_0031;
+    /* 0034 */ uint8_t unused_0034[260];
     /* 0138 */ StreamingFileEntry* m_current;
     /* 013C */ Blizzard::Lock::Event m_event;
     /* 0140 */ Blizzard::Thread::ThreadRecord* m_thread;

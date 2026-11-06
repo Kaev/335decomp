@@ -15,21 +15,21 @@
 void CMapStaticEntity::ModelLightingCallback(CM2Model* model, CM2Lighting* lighting, void* userArg) {
     CMapStaticEntity* entity = reinterpret_cast<CMapStaticEntity*>(userArg);
 
-    lighting->m_flags |= 0x10;
+    lighting->m_flags |= CM2Lighting::SHADOW_MAP_ALLOWED;
     auto dayNight = DayNight::GetInfo();
     if (entity) {
         lighting->SetFog(C3Vector(dayNight->m_fog.m_color), dayNight->m_fog.m_start, dayNight->m_fog.m_end, dayNight->m_fog.m_density);
         entity->SelectLights(lighting);
         entity->SelectUnderwater(lighting);
         if ((entity->m_flags & MAPOBJ_FLAG_INTERIOR) != 0) {
-            lighting->m_flags |= 8;
+            lighting->m_flags |= CM2Lighting::INTERIOR;
             return;
         }
     } else {
         lighting->AddAmbient(C3Vector(dayNight->m_light1.m_ambient));
         lighting->AddDiffuse(C3Vector(dayNight->m_light1.m_diffuse), dayNight->m_light1.m_dir);
     }
-    lighting->m_flags &= ~8u;
+    lighting->m_flags &= ~CM2Lighting::INTERIOR;
 }
 
 // VERIFY: 1601e867 manual
@@ -48,7 +48,7 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
     CMapDoodadDef* doodadDef = reinterpret_cast<CMapDoodadDef*>(static_cast<uintptr_t>(param));
 
     switch (eventId) {
-        case 'LSD$': {
+        case M2_EVENT_ID::PlayLoopingSoundKit_DSL: {
             if (SI2::IsPlaying(&doodadDef->m_soundKitObject) || SI2::IsTooCloseToExistingSoundKit(data, position)) {
                 break;
             }
@@ -56,7 +56,7 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             SE2SoundKitProperties properties;
             properties.ResetToDefaults();
             properties.m_fadeInTime = 3.0f;
-            properties.m_loopMode = 1;
+            properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
             properties.m_streaming = true;
             properties.m_software = 1;
             properties.m_maxAudibleBehavior = 0;
@@ -65,16 +65,16 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             break;
         }
 
-        case 'OSD$':
+        case M2_EVENT_ID::PlayOneShotSoundKit_DSO:
             SI2::PlaySoundKit(data, position, nullptr, nullptr, 0, nullptr, 1, 0);
             break;
 
-        case 'ESD$':
+        case M2_EVENT_ID::StopSoundKit_DSE:
             SI2::StopSound(&doodadDef->m_soundKitObject, 0, -1.0f, 1);
             break;
 
-        case 'TWE$': {
-            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->unk_00B8, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        case M2_EVENT_ID::ObjectPackageEnterState2_EWT: {
+            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->m_collisionGuid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
             if (object && object->IsTransport() && object->m_effectManager) {
                 object->m_effectManager->EnterState(2, 1, 0);
@@ -86,8 +86,8 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             break;
         }
 
-        case 'CAE$': {
-            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->unk_00B8, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        case M2_EVENT_ID::ObjectPackageEnterState3_EAC: {
+            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->m_collisionGuid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
             if (object && object->IsTransport() && object->m_effectManager) {
                 object->m_effectManager->EnterState(3, 1, 0);
@@ -99,8 +99,8 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             break;
         }
 
-        case 'VME$': {
-            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->unk_00B8, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        case M2_EVENT_ID::ObjectPackageEnterState4_EMV: {
+            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->m_collisionGuid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
             if (object && object->IsTransport() && object->m_effectManager) {
                 object->m_effectManager->EnterState(4, 1, 0);
@@ -112,8 +112,8 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             break;
         }
 
-        case 'CDE$': {
-            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->unk_00B8, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+        case M2_EVENT_ID::ObjectPackageEnterState5_EDC: {
+            CGObject_C* object = ClntObjMgrObjectPtr(doodadDef->m_collisionGuid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
             if (object && object->IsTransport() && object->m_effectManager) {
                 object->m_effectManager->EnterState(5, 1, 0);
@@ -133,13 +133,13 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
 // VERIFY: f8dfe4b0 manual
 // OFFSET: 0x007C10C0
 void CMapStaticEntity::SelectUnderwater(CM2Lighting* lighting) {
-    if (!(this->unk_007C & 0x20)) {
-        lighting->m_flags = (lighting->m_flags & ~0x60) | 0x20;
-    } else if (!(this->unk_007C & 0x40)) {
-        lighting->m_flags = (lighting->m_flags & ~0x60) | 0x40;
+    if (!(this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_IN_LIQUID)) {
+        lighting->m_flags = (lighting->m_flags & ~CM2Lighting::LIQUID_SIDES_MASK) | CM2Lighting::ABOVE_LIQUID;
+    } else if (!(this->m_staticFlags & MAP_STATIC_FLAGS::MAP_STATIC_FLAG_LIQUID_SURFACE_CLIP)) {
+        lighting->m_flags = (lighting->m_flags & ~CM2Lighting::LIQUID_SIDES_MASK) | CM2Lighting::BELOW_LIQUID;
     } else {
         float d = -this->m_liquidHeight;
-        lighting->m_flags |= 0x60;
+        lighting->m_flags |= CM2Lighting::LIQUID_SIDES_MASK;
         lighting->m_liquidPlane.n.x = 0.0f;
         lighting->m_liquidPlane.n.y = 0.0f;
         lighting->m_liquidPlane.n.z = 1.0f;

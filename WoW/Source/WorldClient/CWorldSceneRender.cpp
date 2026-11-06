@@ -77,13 +77,13 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
     g_theGxDevicePtr->RsPush();
     g_theGxDevicePtr->XformPush(GxXform_World);
 
-    CWorldScene::s_unk_CD8774 = 0;
+    CWorldScene::s_unused_CD8774 = 0;
     CWorldScene::s_chunksRendered = 0;
     CWorldScene::nDoodadsRendered = 0;
-    CWorldScene::s_unk_CD8624 = 0;
+    CWorldScene::s_unused_CD8624 = 0;
     CWorldScene::frustumStack[CWorldScene::frustumIndex].CalcPlanesFromCorners(CWorldScene::s_frustumCorners);
     CWorldScene::s_occlusionFarDepth = World::s_farClip - 33.333332f;
-    CWorldScene::s_unk_CD8778 = CWorldScene::sortTable.m_pendingExteriorGroupList.Head() != nullptr;
+    CWorldScene::s_hasPendingExteriorGroups = CWorldScene::sortTable.m_pendingExteriorGroupList.Head() != nullptr;
 
     CGCamera* camera = CGWorldFrame::GetActiveCamera();
     CWorldScene::s_fogFovPadding = CWorld::farFog / cosf(camera->FOV() * 0.5f) - CWorld::farFog;
@@ -171,7 +171,7 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
         clearColor.a = 0x00;
     }
 
-    GxSceneClear(3, clearColor);
+    GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, clearColor);
     CWorldScene::s_unk_B2EB68.Render();
 
     if (CWorldScene::camTargetEntity) {
@@ -184,10 +184,10 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
     CM2Scene* scene = World::s_m2Scene;
 
     if (scene) {
-        scene->m_flags |= 0x1;
+        scene->m_flags |= CM2Scene::SCENE_FLAGS::WORLD_ANIMATION_ACTIVE;
         scene->AdvanceTime(static_cast<uint32_t>(CMath::fint_(time * 1000.0f)));
         scene->Animate(cameraPos);
-        scene->m_flags &= ~0x1;
+        scene->m_flags &= ~CM2Scene::SCENE_FLAGS::WORLD_ANIMATION_ACTIVE;
     }
 
     CGUnit_C::UpdateMissileTrajectoryTargeting();

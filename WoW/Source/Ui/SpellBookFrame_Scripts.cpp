@@ -14,6 +14,7 @@
 #include "WoW/Source/DB/Rec/SpellRec.h"
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "WoW/Source/Object/ObjectClient/Player_C.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Magic/MagicClient/Spell_C.h"
 #include "WoW/Source/Ui/PetInfo.h"
 #include "Engine/Source/Tempest/CMath.h"
@@ -78,8 +79,8 @@ static int32_t Script_GetKnownSlotFromHighestRankSlot(lua_State* L) {
     uint32_t slot = lua_tointeger(L, 1) - 1;
     int32_t index = -1;
 
-    if (slot < s_unkBE8D9C) {
-        int32_t spell = s_unkBE5D88[slot];
+    if (slot < s_displayedSpellCount) {
+        int32_t spell = s_displayedSpells[slot];
 
         for (uint32_t i = 0; i < s_numSpells; i++) {
             if (s_spellList[i] == spell) {
@@ -187,14 +188,14 @@ static int32_t Script_HasPetSpells(lua_State* L) {
     }
 
     lua_pushnumber(L, CGSpellBook::m_numPetSpells);
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         lua_pushstring(L, "PET");
         return 2;
     }
 
-    ChrClassesRec* rec = g_chrClassesDB.GetRecord(player->m_unit->m_unitFieldBytes0[1]);
+    ChrClassesRec* rec = g_chrClassesDB.GetRecord(player->m_unit->m_classID);
     lua_pushstring(L, rec->m_petNameToken);
     return 2;
 }
@@ -286,7 +287,7 @@ static int32_t Script_IsPassiveSpell(lua_State* L) {
 
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && (spell.m_attributes & 0x40)) {
+    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -307,7 +308,7 @@ static int32_t Script_IsAttackSpell(lua_State* L) {
 
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && spell.m_effect[0] == 78) {
+    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && spell.m_effect[0] == SPELL_EFFECT_ATTACK) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -350,7 +351,7 @@ static int32_t Script_IsConsumableSpell(lua_State* L) {
     SpellRec spell;
 
     if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell)) {
-        for (uint32_t i = 0; i < 8; i++) {
+        for (uint32_t i = 0; i < NUM_SPELL_REAGENTS; i++) {
             if (spell.m_reagent[i] && spell.m_reagentCount[i] > 0) {
                 lua_pushnumber(L, 1.0);
                 return 1;
@@ -453,7 +454,7 @@ static int32_t Script_IsHelpfulSpell(lua_State* L) {
 
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && SpellRec::IsHelpfulOrHarmful(&spell) == 1) {
+    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && SpellRec::IsHelpfulOrHarmful(&spell) == SPELL_DISPOSITION_HELPFUL) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -474,7 +475,7 @@ static int32_t Script_IsHarmfulSpell(lua_State* L) {
 
     SpellRec spell;
 
-    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && SpellRec::IsHelpfulOrHarmful(&spell) == 2) {
+    if (g_spellDB.GetRecord(static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0), &spell) && SpellRec::IsHelpfulOrHarmful(&spell) == SPELL_DISPOSITION_HARMFUL) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -544,13 +545,13 @@ static int32_t Script_GetSpellAutocast(lua_State* L) {
     PetAction* action = nullptr;
     int32_t spellId = static_cast<int32_t>(slot) < 0 ? 0 : petSpell ? (slot < 1024 ? s_petSpellList[slot] : 0) : (slot < s_numSpells ? s_spellList[slot] : 0);
 
-    if (petSpell && (action = CGPetInfo::GetPetSpellAction(spellId)) && (action->m_data & 0x80000000)) {
+    if (petSpell && (action = CGPetInfo::GetPetSpellAction(spellId)) && (action->m_data & PetAction::AutocastFlags::AUTOCAST_ALLOWED)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
     }
 
-    if (action && (action->m_data & 0x40000000)) {
+    if (action && (action->m_data & PetAction::AutocastFlags::AUTOCAST_ENABLED)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -673,7 +674,7 @@ static int32_t Script_IsUsableSpell(lua_State* L) {
     CGUnit_C* caster;
 
     if (g_spellDB.GetRecord(spellId, &spell)
-        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))
+        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))
         && Spell_C_IsUsableAction(caster, &spell, WOWGUID{ 0 }, nullptr, false)
         && !(noMana = !Spell_C_HaveSpellPower(caster, &spell))) {
         lua_pushnumber(L, 1.0);
@@ -707,7 +708,7 @@ static int32_t Script_SpellHasRange(lua_State* L) {
     float maxRange;
 
     if (g_spellDB.GetRecord(spellId, &spell)
-        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))) {
+        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))) {
         Spell_C_GetMinMaxRange(caster, &spell, &minRange, &maxRange, nullptr);
 
         if (fnotequal(minRange, 0.0f) || fnotequal(maxRange, 0.0f)) {
@@ -738,7 +739,7 @@ static int32_t Script_IsSpellInRange(lua_State* L) {
     uint8_t inRange;
 
     if (g_spellDB.GetRecord(spellId, &spell)
-        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))
+        && (caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : static_cast<CGUnit_C*>(ClntObjMgrGetActivePlayerObj()))
         && Script_GetGUIDFromToken(lua_tolstring(L, unitIndex, nullptr), target, true)
         && Spell_C_RangeCheckSelected(caster, &spell, target, &inRange, false, nullptr)) {
         lua_pushnumber(L, inRange ? 1.0 : 0.0);
@@ -1022,7 +1023,7 @@ static int32_t Script_CastSpellByID(lua_State* L) {
         action = &petAction;
     }
 
-    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
 
     if (!pet) {
         return 0;
@@ -1031,7 +1032,7 @@ static int32_t Script_CastSpellByID(lua_State* L) {
     SpellRec spell;
     g_spellDB.GetRecord(spellId, &spell);
 
-    if (!(spell.m_attributesExD & 0x20) && player->GetPossessedUnit() != pet) {
+    if (!(spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_ALLOW_CLIENT_TARGETING) && player->GetPossessedUnit() != pet) {
         Spell_C_StartSpellCooldown(&spell, pet);
 
         CDataStore msg;
@@ -1120,7 +1121,7 @@ static int32_t Script_CastSpellByName(lua_State* L) {
         action = &petAction;
     }
 
-    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* pet = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
 
     if (!pet) {
         return 0;
@@ -1129,7 +1130,7 @@ static int32_t Script_CastSpellByName(lua_State* L) {
     SpellRec spell;
     g_spellDB.GetRecord(spellId, &spell);
 
-    if ((spell.m_attributesExD & 0x20) || player->GetPossessedUnit() == pet) {
+    if ((spell.m_attributesExD & SPELL_ATTR4::SPELL_ATTR4_ALLOW_CLIENT_TARGETING) || player->GetPossessedUnit() == pet) {
         Spell_C_CastSpell(pet, spell.m_id, nullptr, target, nullptr, false);
         return 0;
     }
@@ -1167,7 +1168,7 @@ static int32_t Script_GetSpellLink(lua_State* L) {
     SpellRec spell;
     char link[256];
 
-    if (!g_spellDB.GetRecord(spellId, &spell) || ((spell.m_attributes & 0x80) && (spell.m_attributes & 0x100))) {
+    if (!g_spellDB.GetRecord(spellId, &spell) || ((spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_DISPLAY_SPELLBOOK_AURA_ICON_COMBAT_LOG) && (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_DO_NOT_LOG))) {
         lua_pushnil(L);
         lua_pushnil(L);
         return 2;
@@ -1209,16 +1210,16 @@ static int32_t Script_GetSpellInfo(lua_State* L) {
     }
 
     CGPlayer_C* player = ClntObjMgrGetActivePlayerObj();
-    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__)) : player;
+    CGUnit_C* caster = petSpell ? static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__)) : player;
 
     lua_pushstring(L, spell.m_name);
     lua_pushstring(L, spell.m_nameSubtext);
 
     const char* texture = "";
 
-    if (spell.m_effect[0] == 78) {
+    if (spell.m_effect[0] == SPELL_EFFECT_ATTACK) {
         texture = CGActionBar::GetAttackTexture();
-    } else if ((spell.m_attributes & 0x2) && (spell.m_attributesExB & 0x20)) {
+    } else if ((spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_USES_RANGED_SLOT) && (spell.m_attributesExB & SPELL_ATTR2::SPELL_ATTR2_AUTO_REPEAT)) {
         texture = CGActionBar::GetRangedTexture();
     } else {
         SpellIconRec* icon = g_spellIconDB.GetRecord(spell.m_spellIconID);
@@ -1232,8 +1233,8 @@ static int32_t Script_GetSpellInfo(lua_State* L) {
 
     uint32_t powerCost = Spell_C_GetPowerCost(&spell, caster);
     uint32_t powerCostPerSecond = Spell_C_GetPowerCostPerSecond(&spell, caster);
-    uint32_t cost = powerCost / Spell_C_GetPowerDisplayMod(spell.m_powerType);
-    int32_t costPerSecond = powerCostPerSecond / Spell_C_GetPowerDisplayMod(spell.m_powerType);
+    uint32_t cost = powerCost / Spell_C_GetPowerDisplayMod(static_cast<POWER_TYPE>(spell.m_powerType));
+    int32_t costPerSecond = powerCostPerSecond / Spell_C_GetPowerDisplayMod(static_cast<POWER_TYPE>(spell.m_powerType));
 
     if (costPerSecond <= 0) {
         lua_pushnumber(L, cost);
@@ -1245,7 +1246,7 @@ static int32_t Script_GetSpellInfo(lua_State* L) {
 
     lua_pushnumber(L, spell.m_powerType);
 
-    if (spell.m_attributes & 0x40) {
+    if (spell.m_attributes & SPELL_ATTR0::SPELL_ATTR0_PASSIVE) {
         lua_pushnumber(L, 0.0);
     } else {
         lua_pushnumber(L, static_cast<uint32_t>(SpellRec::GetCastTime(&spell, petSpell, 0, 1)));

@@ -9,6 +9,15 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/CRect.h"
 
+enum EDITBOX_FLAGS : uint32_t {
+    EDITBOX_AUTO_FOCUS = 0x1,
+    EDITBOX_MULTILINE = 0x2,
+    EDITBOX_NUMERIC = 0x4,
+    EDITBOX_PASSWORD = 0x8,
+    EDITBOX_ALT_ARROW_KEY_MODE = 0x10,
+    EDITBOX_COUNT_INVISIBLE_LETTERS = 0x20,
+};
+
 class CEvent;
 class CSimpleFontString;
 class CSimpleMessageFrame;
@@ -16,6 +25,18 @@ class CSimpleTexture;
 
 class CSimpleEditBox : public CSimpleFrame, public CSimpleFontedFrame {
     public:
+    // DIRTY_USER_INPUT is reconstructed from the native OnTextChanged userInput argument.
+    enum DIRTY_BITS : uint32_t {
+        DIRTY_NONE = 0,
+        DIRTY_TEXT = 0x1,
+        DIRTY_HIGHLIGHT = 0x2,
+        DIRTY_CURSOR = 0x4,
+        DIRTY_USER_INPUT = 0x8,
+        DIRTY_TEXT_AND_CURSOR = 0x5,
+        DIRTY_HIGHLIGHT_AND_CURSOR = 0x6,
+        DIRTY_RENDER = 0x7,
+    };
+
     struct EditHistory {
         /* 0000 */ char* m_text;
         /* 0004 */ const char* m_taint;
@@ -58,21 +79,21 @@ class CSimpleEditBox : public CSimpleFrame, public CSimpleFontedFrame {
     /* 02A4 */ uint32_t m_dirtyBits;
     /* 02A8 */ const char* m_textTaint;
     /* 02AC */ CSimpleFontedFrameFont* m_font;
-    /* 02B0 */ CSimpleFontString* m_fontString;
+    /* 02B0 */ CSimpleFontString* m_string; // Rendered text region; the byte buffer is m_text.
     /* 02B4 */ char* m_text;
     /* 02B8 */ uint32_t* m_textInfo;
     /* 02BC */ char* m_textHidden;
     /* 02C0 */ int32_t m_textLength;
-    /* 02C4 */ int32_t m_textMaxLength;
-    /* 02C8 */ int32_t m_textMaxLetters;
+    /* 02C4 */ int32_t m_textLengthMax; // Maximum text bytes excluding the terminator; -1 disables the byte limit.
+    /* 02C8 */ int32_t m_textLettersMax; // Character-count limit; zero disables it. Counting follows edit-box flags.
     /* 02CC */ uint32_t m_textSize;
-    /* 02D0 */ int32_t m_visiblePosition;
-    /* 02D4 */ int32_t m_visibleLength;
-    /* 02D8 */ CSimpleTexture* m_highlightTextures[3];
+    /* 02D0 */ int32_t m_visiblePos; // Byte offset of the visible substring.
+    /* 02D4 */ int32_t m_visibleLen; // Byte length of the visible substring.
+    /* 02D8 */ CSimpleTexture* m_highlight[3]; // First-line, middle-line and last-line selection textures.
     /* 02E4 */ int32_t m_highlightLeft;
     /* 02E8 */ int32_t m_highlightRight;
     /* 02EC */ int32_t m_highlightDrag;
-    /* 02F0 */ CSimpleTexture* m_cursorTexture;
+    /* 02F0 */ CSimpleTexture* m_cursor;
     /* 02F4 */ int32_t m_cursorPos;
     /* 02F8 */ float m_cursorBlinkSpeed;
     /* 02FC */ float m_blinkElapsedTime;

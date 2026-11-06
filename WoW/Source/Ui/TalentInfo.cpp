@@ -179,14 +179,14 @@ int32_t TalentInfoIsSpellKnown(int32_t spellId, int32_t isInspect, int32_t isPet
         return isPet == 0;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!unit) {
         return 0;
     }
 
     if (isPet) {
-        unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPEMASK_UNIT, __FILE__, __LINE__));
+        unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGPetInfo::GetPet(0), TYPE_UNIT, __FILE__, __LINE__));
 
         if (!unit) {
             return 0;
@@ -384,14 +384,14 @@ static void BuildTabInfo(CGPlayer_C* player, TSFixedArray<TalentTabInfo*>* tabs,
 
         if (player) {
             if (tab->m_raceMask) {
-                if (!(tab->m_raceMask & (1 << (player->m_unit->m_unitFieldBytes0[0] - 1)))) {
+                if (!(tab->m_raceMask & (1 << (player->m_unit->m_raceID - 1)))) {
                     continue;
                 }
 
-                if (tab->m_classMask && !(tab->m_classMask & (1 << (player->m_unit->m_unitFieldBytes0[1] - 1)))) {
+                if (tab->m_classMask && !(tab->m_classMask & (1 << (player->m_unit->m_classID - 1)))) {
                     continue;
                 }
-            } else if (!tab->m_classMask || !(tab->m_classMask & (1 << (player->m_unit->m_unitFieldBytes0[1] - 1)))) {
+            } else if (!tab->m_classMask || !(tab->m_classMask & (1 << (player->m_unit->m_classID - 1)))) {
                 continue;
             }
         } else if (!tab->m_categoryEnumID || petTalentType < 0 || !(tab->m_categoryEnumID & (1 << petTalentType))) {
@@ -418,14 +418,14 @@ static void BuildTabInfo(CGPlayer_C* player, TSFixedArray<TalentTabInfo*>* tabs,
 
         if (player) {
             if (tab->m_raceMask) {
-                if (!(tab->m_raceMask & (1 << (player->m_unit->m_unitFieldBytes0[0] - 1)))) {
+                if (!(tab->m_raceMask & (1 << (player->m_unit->m_raceID - 1)))) {
                     continue;
                 }
 
-                if (tab->m_classMask && !(tab->m_classMask & (1 << (player->m_unit->m_unitFieldBytes0[1] - 1)))) {
+                if (tab->m_classMask && !(tab->m_classMask & (1 << (player->m_unit->m_classID - 1)))) {
                     continue;
                 }
-            } else if (!tab->m_classMask || !(tab->m_classMask & (1 << (player->m_unit->m_unitFieldBytes0[1] - 1)))) {
+            } else if (!tab->m_classMask || !(tab->m_classMask & (1 << (player->m_unit->m_classID - 1)))) {
                 continue;
             }
         } else if (!tab->m_categoryEnumID || petTalentType < 0 || !(tab->m_categoryEnumID & (1 << petTalentType))) {
@@ -740,6 +740,10 @@ TalentGroupItem_C* TalentInfoGetTalentItem(uint32_t group, int32_t talentId, int
     }
 
     return talentGroup->GetTalentItem(talentId);
+}
+
+// INLINED
+TalentGroupItem_C::TalentGroupItem_C() : m_talentId(0), m_rank(-1), m_previewRank(-1) {
 }
 
 // VERIFY: ebac1df8 auto
@@ -1196,7 +1200,7 @@ void CGTalentInfo_Inspect::ShutdownGame() {
 // OFFSET: 0x005C9F70
 void CGTalentInfo_Inspect::SetInspectTarget(const WOWGUID& guid) {
     CGTalentInfo_Inspect::ResetTabInfo();
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(guid, TYPE_PLAYER, __FILE__, __LINE__));
 
     if (player) {
         BuildTabInfo(player, &CGTalentInfo_Inspect::m_tabs, 0);

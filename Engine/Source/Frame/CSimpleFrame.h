@@ -22,6 +22,7 @@ class CMouseEvent;
 class CSimpleFrame;
 class CStatus;
 class CSimpleTop;
+class CSimpleTitleRegion;
 struct SIMPLEFRAMENODE;
 struct lua_State;
 
@@ -41,6 +42,31 @@ class FrameScriptFunctionRef : public XMLNodeData {
 
 class CSimpleFrame : public CScriptRegion {
     public:
+    enum FrameFlags : uint32_t {
+        // Current client roles; original enum names are unavailable.
+        FRAME_TOPLEVEL = 0x1,
+        FRAME_OCCLUDED = 0x10,
+        FRAME_MOVABLE = 0x100,
+        FRAME_RESIZABLE = 0x200,
+        FRAME_DISABLED = 0x400,
+        FRAME_DEFER_PROTECTION_QUERY = 0x800,
+        FRAME_USER_PLACED = 0x1000,
+        FRAME_BEING_SCROLLED = 0x2000,
+        FRAME_SCROLL_CHILD = 0x4000,
+        FRAME_ALLOW_ATTRIBUTE_CHANGES = 0x8000,
+        // Set by button construction; no broader purpose is claimed.
+        FRAME_BUTTON_CONSTRUCTION_TAG = 0x10000,
+        FRAME_HIDE_SCRIPT_DEPTH = 0x40000,
+        FRAME_DONT_SAVE_POSITION = 0x80000,
+        FRAME_MOVABLE_OR_RESIZABLE_MASK = 0x300,
+    };
+
+    enum INITIALIZED_STATE : uint32_t {
+        // STATE_UNKNOWN = 0,
+        STATE_INITIALIZED = 1,
+        STATE_DELETED = 3,
+    };
+
     static CDataAllocator s_allocator;
     static int32_t s_frameCount;
     static int32_t s_metatable;
@@ -55,8 +81,8 @@ class CSimpleFrame : public CScriptRegion {
 
     /* 00A0 */ CSimpleTop* m_simpleTop;
     /* 00A4 */ CSimpleFrame* m_hoverFrame;
-    /* 00A8 */ CScriptRegion* m_titleRegion;
-    /* 00AC */ uint32_t unk_00AC;
+    /* 00A8 */ CSimpleTitleRegion* m_titleRegion;
+    /* 00AC */ INITIALIZED_STATE m_initialized_state;
     /* 00B0 */ int32_t m_id;
     /* 00B4 */ uint32_t m_frameFlags;
     /* 00B8 */ float m_frameScale;
@@ -65,7 +91,7 @@ class CSimpleFrame : public CScriptRegion {
     /* 00BE */ uint8_t m_animSavedAlpha;
     /* 00BF */ uint8_t m_animating : 1;
     /* 00BF */ uint8_t m_animAlpha : 1;
-    /* 00C0 */ uint32_t unk_00C0;
+    /* 00C0 */ uint32_t unused_00C0;
     /* 00C4 */ float m_depth;
     /* 00C8 */ float m_parentDepth;
     /* 00CC */ uint32_t m_ignoreDepth;
@@ -104,12 +130,12 @@ class CSimpleFrame : public CScriptRegion {
     /* 01BC */ FrameScript_Object::ScriptIx m_onEnable;
     /* 01C4 */ FrameScript_Object::ScriptIx m_onDisable;
     /* 01CC */ TSHashTable<FRAMEATTR, HASHKEY_STRI> m_attributes;
-    /* 01F4 */ uint32_t m_drawLayerEnabled [5];
+    /* 01F4 */ uint32_t m_drawLayerEnabled [NUM_SIMPLEFRAME_DRAWLAYERS];
     /* 0208 */ CBackdropGenerator* m_backdropGenerator;
     /* 020C */ TSExplicitList<CSimpleRegion, offsetof(CSimpleRegion, m_regionLink)> m_regions;
-    /* 0218 */ TSExplicitList<CSimpleRegion, offsetof(CSimpleRegion, m_layerLink)> m_drawLayers [5];
+    /* 0218 */ TSExplicitList<CSimpleRegion, offsetof(CSimpleRegion, m_layerLink)> m_drawLayers [NUM_SIMPLEFRAME_DRAWLAYERS];
     /* 0254 */ uint32_t m_batchDirty;
-    /* 0258 */ CRenderBatch* m_renderBatch [5];
+    /* 0258 */ CRenderBatch* m_renderBatch [NUM_SIMPLEFRAME_DRAWLAYERS];
     /* 026C */ TSExplicitList<CRenderBatch, offsetof(CRenderBatch, m_renderLink)> m_renderList;
     /* 0278 */ TSList<SIMPLEFRAMENODE> m_children;
     /* 0284 */ TSLink<CSimpleFrame> m_framesLink;
@@ -147,8 +173,8 @@ class CSimpleFrame : public CScriptRegion {
     virtual void OnFrameRender();
     virtual void OnScreenSizeChanged();
     virtual void OnFrameSizeChanged(float width, float height);
-    virtual void OnLayerCursorEnter(int32_t a2);
-    virtual void OnLayerCursorExit(int32_t a2, int32_t a3);
+    virtual void OnLayerCursorEnter(int32_t motion);
+    virtual void OnLayerCursorExit(int32_t motion, int32_t a3);
     virtual int32_t OnLayerIme(const CImeEvent& evt);
     virtual int32_t OnLayerKeyDownRepeat(const CKeyEvent& evt);
     virtual int32_t OnLayerChar(const CCharEvent& evt);

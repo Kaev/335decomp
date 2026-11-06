@@ -78,7 +78,7 @@ static TSFixedArray<TSGrowableArray<TaxiPathRec*>> s_paths;
 static TSGrowableArray<TAXILINE> s_taxiLines;
 
 // STATIC: 0x00C0DC70
-static TSGrowableArray<uint8_t> s_unkC0DC70;
+static TSGrowableArray<uint8_t> s_unused_C0DC70;
 
 // VERIFY: cc1d814f auto
 // OFFSET: 0x00590690
@@ -188,13 +188,13 @@ const char* CGTaxiMap::TaxiNodeType(uint32_t index) {
 // VERIFY: dec4ac64 manual
 // OFFSET: 0x00591350
 int32_t TaxiNodeCost(uint32_t index) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return 0;
     }
 
-    CGUnit_C* taxiUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGTaxiMap::m_unit, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* taxiUnit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(CGTaxiMap::m_unit, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!taxiUnit) {
         return 0;
@@ -211,14 +211,14 @@ int32_t TaxiNodeCost(uint32_t index) {
         return 0;
     }
 
-    int32_t reaction = taxiUnit->UnitReaction(player);
+    UNIT_REACTION reaction = taxiUnit->UnitReaction(player);
     FactionTemplateRec* factionTemplate = g_factionTemplateDB.GetRecord(taxiUnit->m_unit->m_unitFieldFactiontemplate);
 
     if (factionTemplate && !CGUnit_C::FactionHasReputation(factionTemplate->m_faction)) {
-        reaction = 3;
+        reaction = UNIT_REACTION_NEUTRAL;
     }
 
-    if (reaction > 3) {
+    if (reaction > UNIT_REACTION_NEUTRAL) {
         return node.m_costs[reaction - 3];
     }
 
@@ -232,9 +232,9 @@ void CGTaxiMap::TakeTaxiNode(uint32_t index) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
-    if (player->m_mountDisplayId > 0 && !(player->m_clientFlags & 0x10000000)) {
+    if (player->m_mountDisplayId > 0 && !(player->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING)) {
         CGGameUI::DisplayError(ERR_TAXIPLAYERALREADYMOUNTED);
         return;
     }
@@ -374,7 +374,7 @@ float CGTaxiMap::CalculateAccurateDistance(uint32_t index, uint32_t parent) {
 // VERIFY: 48c16c0c manual
 // OFFSET: 0x005926C0
 void CGTaxiMap::RecursePath(uint32_t index, uint32_t parent, int32_t cost) {
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
     TaxiNodesRec* node = CGTaxiMap::m_nodes.m_data[index].m_rec;
 
     if (node && player) {
@@ -595,23 +595,23 @@ void CGTaxiMap::SetupMap(const WOWGUID& unit, int32_t currentNode, const uint64_
     }
 
     FrameScript_SignalEvent(SCRIPT_EVENT_TAXIMAP_OPENED, nullptr);
-    CGTutorial::TriggerTutorial(34);
+    CGTutorial::TriggerTutorial(TUTORIAL::TUTORIAL_TRAVEL);
 
     if (CGTaxiMap::m_numNodes <= 1) {
         return;
     }
 
-    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__));
+    CGPlayer_C* player = static_cast<CGPlayer_C*>(ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__));
 
     if (!player) {
         return;
     }
 
-    if (player->GetClientStandState()) {
-        player->ChangeStandState(0);
+    if ((player->GetClientStandState() != UNIT_STANDING)) {
+        player->ChangeStandState(UNIT_STANDING);
     }
 
-    if (player->m_mountDisplayId > 0 && !(player->m_clientFlags & 0x10000000)) {
+    if (player->m_mountDisplayId > 0 && !(player->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_DISMOUNT_PENDING)) {
         player->Dismount();
     }
 
@@ -643,7 +643,7 @@ void CGTaxiMap::InitializeGame() {
         }
     }
 
-    s_unkC0DC70.SetCount(CGTaxiMap::m_maxNodeID);
+    s_unused_C0DC70.SetCount(CGTaxiMap::m_maxNodeID);
     CGTaxiMap::m_routeLines.SetCount(CGTaxiMap::m_maxNodeID);
 
     for (int32_t i = g_taxiPathDB.m_numRecords - 1; i >= 0; i--) {

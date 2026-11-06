@@ -6,6 +6,7 @@
 #include "WoW/Source/WorldClient/DayNight.h"
 #include "Engine/Source/Tempest/C2Vector.h"
 #include "Engine/Source/Tempest/C3Vector.h"
+#include "Engine/Source/Tempest/C4Vector.h"
 #include "Engine/Source/Tempest/CImVector.h"
 #include "Engine/Source/Storm/H/stpl.h"
 
@@ -20,18 +21,15 @@ struct DNFogInfo {
     /* 000C */ float m_density;
 };
 
-struct DNLightState {
+struct DNLightInfo {
     /* 0000 */ C3Vector m_dir;
     /* 000C */ CImVector m_diffuse;
     /* 0010 */ CImVector m_ambient;
-    /* 0014 */ CImVector m_mid0;
-    /* 0018 */ CImVector m_mid1;
-    /* 001C */ float m_desatR;
-    /* 0020 */ float m_desatG;
-    /* 0024 */ float m_desatB;
-    /* 0028 */ float m_desatA;
+    /* 0014 */ CImVector m_mid0; // Alternate diffuse color for the WMO DAY_NIGHT_MID lighting mode.
+    /* 0018 */ CImVector m_mid1; // Alternate ambient color for the same lighting mode.
+    /* 001C */ C4Vector m_desaturatedAmbient; // Ambient R/G/B after HSV adjustment; w is 1 when computed, 0 on construction.
 
-    DNLightState();
+    DNLightInfo();
 };
 
 namespace DayNight {
@@ -50,7 +48,7 @@ struct DNInfo {
     /* 004C */ float m_weatherIntensity;
     /* 0050 */ uint8_t m_flashBlend;
     /* 0051 */ CImVector m_flashColor;
-    /* 0055 */ uint8_t unk_0055 [3];
+    /* 0055 */ uint8_t unused_0055 [3];
     /* 0058 */ uint32_t m_overrideLightParamsId;
     /* 005C */ DNOverrideSky* m_skybox;
     /* 0060 */ float m_skyboxWeight;
@@ -65,8 +63,8 @@ struct DNInfo {
     /* 00C0 */ CMapObjDef* m_interiorMapObjDef;
     /* 00C4 */ TSGrowableArray<uint32_t> m_interiorGroups;
     /* 00D4 */ CurrentLight m_bands;
-    /* 0170 */ DNLightState m_light0;
-    /* 019C */ DNLightState m_light1;
+    /* 0170 */ DNLightInfo m_light0;
+    /* 019C */ DNLightInfo m_light1;
     /* 01C8 */ CImVector m_shadowColor;
     /* 01CC */ uint32_t m_showSky;
     /* 01D0 */ C2Vector m_cloudSun;
@@ -74,7 +72,7 @@ struct DNInfo {
     /* 01DC */ float m_curve0;
     /* 01E0 */ float m_curve1;
     /* 01E4 */ uint32_t m_nearLightCount;
-    /* 01E8 */ uint32_t unk_01E8;
+    /* 01E8 */ uint32_t unused_01E8;
     /* 01EC */ LightRec* m_nearLight [5];
     /* 0200 */ float m_nearLightBlend [5];
 
@@ -91,11 +89,11 @@ void SetFlashColor(CImVector color, float blend);
 }
 
 // INLINED
-inline DNLightState::DNLightState() {
-    this->m_desatR = 0.0f;
-    this->m_desatG = 0.0f;
-    this->m_desatB = 0.0f;
-    this->m_desatA = 0.0f;
+inline DNLightInfo::DNLightInfo() {
+    this->m_desaturatedAmbient.x = 0.0f;
+    this->m_desaturatedAmbient.y = 0.0f;
+    this->m_desaturatedAmbient.z = 0.0f;
+    this->m_desaturatedAmbient.w = 0.0f;
 }
 
 #endif

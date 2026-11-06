@@ -1,4 +1,5 @@
 #include "MapWeather.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include <cfloat>
 #include <new>
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
@@ -33,8 +34,8 @@ int32_t Weather::TimeToFixed(float seconds) {
 
 // INLINED
 WeatherGridCell::WeatherGridCell() {
-    this->m_cellX = -9999;
-    this->m_cellY = -9999;
+    this->m_cellIndex.x = -9999;
+    this->m_cellIndex.y = -9999;
 
     for (uint32_t i = 0; i < sizeof(this->m_heights) / sizeof(this->m_heights[0]); i++) {
         this->m_heights[i] = FLT_MAX;
@@ -56,8 +57,8 @@ static float __stdcall GetHeightOrDefault(const C3Vector* position) {
 // VERIFY: 4e33c407 manual
 // OFFSET: 0x00783C10
 float WeatherGridCell::GetHeight(const C3Vector* position) {
-    float x = position->x - this->m_cellX * 33.333332f;
-    float y = position->y - this->m_cellY * 33.333332f;
+    float x = position->x - this->m_cellIndex.x * 33.333332f;
+    float y = position->y - this->m_cellIndex.y * 33.333332f;
 
     if (x < 0.0f || y < 0.0f) {
         return FLT_MAX;
@@ -86,7 +87,7 @@ float WeatherGridCell::GetHeight(const C3Vector* position) {
 float WeatherGrid::GetSubCellHeight(const C2iVector* cell, float z) {
     WeatherGridCell* gridCell = this->m_cells[cell->y >> 5][cell->x >> 5];
     float* height = &gridCell->m_heights[(cell->y & 0x1F) * 32 + (cell->x & 0x1F)];
-    C3Vector position(cell->x * 1.0416666f + this->m_minCellX * 33.333332f + 0.52083331f, cell->y * 1.0416666f + this->m_minCellY * 33.333332f + 0.52083331f, z);
+    C3Vector position(cell->x * 1.0416666f + this->m_minCell.x * 33.333332f + 0.52083331f, cell->y * 1.0416666f + this->m_minCell.y * 33.333332f + 0.52083331f, z);
 
     if (*height != FLT_MAX) {
         return *height;
@@ -119,20 +120,20 @@ CiRect* WeatherGrid::GetCellBounds(CiRect* bounds) {
                 continue;
             }
 
-            if (cell->m_cellX < bounds->minX) {
-                bounds->minX = cell->m_cellX;
+            if (cell->m_cellIndex.x < bounds->minX) {
+                bounds->minX = cell->m_cellIndex.x;
             }
 
-            if (cell->m_cellX > bounds->maxX) {
-                bounds->maxX = cell->m_cellX;
+            if (cell->m_cellIndex.x > bounds->maxX) {
+                bounds->maxX = cell->m_cellIndex.x;
             }
 
-            if (cell->m_cellY < bounds->minY) {
-                bounds->minY = cell->m_cellY;
+            if (cell->m_cellIndex.y < bounds->minY) {
+                bounds->minY = cell->m_cellIndex.y;
             }
 
-            if (cell->m_cellY > bounds->maxY) {
-                bounds->maxY = cell->m_cellY;
+            if (cell->m_cellIndex.y > bounds->maxY) {
+                bounds->maxY = cell->m_cellIndex.y;
             }
         }
     }
@@ -148,15 +149,15 @@ WeatherGridBase::~WeatherGridBase() {
 // VERIFY: d6faa539 manual
 // OFFSET: 0x00784AB0
 WeatherGrid::WeatherGrid() {
-    this->unk_0004 = 0.0f;
-    this->unk_0008 = 0.0f;
-    this->unk_000C = 0.0f;
-    this->m_originX = 0;
-    this->m_originY = 0;
-    this->m_minCellX = 0;
-    this->m_minCellY = 0;
-    this->m_minX = 0;
-    this->m_minY = 0;
+    this->unused_0004 = 0.0f;
+    this->unused_0008 = 0.0f;
+    this->unused_000C = 0.0f;
+    this->m_originCell.x = 0;
+    this->m_originCell.y = 0;
+    this->m_minCell.x = 0;
+    this->m_minCell.y = 0;
+    this->m_minSample.x = 0;
+    this->m_minSample.y = 0;
 
     for (uint32_t y = 0; y < 5; y++) {
         for (uint32_t x = 0; x < 5; x++) {
@@ -187,8 +188,8 @@ void WeatherGrid::GetCellSpacing(float* cellSize, float* cellsPerYard) {
 // VERIFY: 8e6d2779 auto
 // OFFSET: 0x00784BE0
 float WeatherGrid::GetHeight(const C3Vector* position) {
-    uint32_t x = static_cast<int32_t>(floor(position->x * 0.03f)) - this->m_minCellX;
-    uint32_t y = static_cast<int32_t>(floor(position->y * 0.03f)) - this->m_minCellY;
+    uint32_t x = static_cast<int32_t>(floor(position->x * OO_COORD_TO_CHUNK)) - this->m_minCell.x;
+    uint32_t y = static_cast<int32_t>(floor(position->y * OO_COORD_TO_CHUNK)) - this->m_minCell.y;
 
     if (x > 4 || y > 4) {
         return FLT_MAX;
@@ -201,10 +202,10 @@ float WeatherGrid::GetHeight(const C3Vector* position) {
 // OFFSET: 0x00784C60
 bool WeatherGrid::Raycast(const C3Vector* start, const C3Vector* end, C3Vector* hit) {
     *hit = *start;
-    int32_t startX = static_cast<int32_t>(floor(start->x * 0.96f)) - this->m_minX;
-    int32_t startY = static_cast<int32_t>(floor(start->y * 0.96f)) - this->m_minY;
-    int32_t endX = static_cast<int32_t>(floor(end->x * 0.96f)) - this->m_minX;
-    int32_t endY = static_cast<int32_t>(floor(end->y * 0.96f)) - this->m_minY;
+    int32_t startX = static_cast<int32_t>(floor(start->x * 0.96f)) - this->m_minSample.x;
+    int32_t startY = static_cast<int32_t>(floor(start->y * 0.96f)) - this->m_minSample.y;
+    int32_t endX = static_cast<int32_t>(floor(end->x * 0.96f)) - this->m_minSample.x;
+    int32_t endY = static_cast<int32_t>(floor(end->y * 0.96f)) - this->m_minSample.y;
     C3Vector delta(end->x - start->x, end->y - start->y, end->z - start->z);
     C2iVector distance;
     distance.x = abs(endX - startX);
@@ -293,19 +294,19 @@ bool WeatherGrid::Raycast(const C3Vector* start, const C3Vector* end, C3Vector* 
 // VERIFY: 32392fc5 auto
 // OFFSET: 0x00784F20
 void WeatherGrid::UpdateOriginCell(const C3Vector* position) {
-    int32_t x = static_cast<int32_t>(floor(position->x * 0.03f));
-    int32_t y = static_cast<int32_t>(floor(position->y * 0.03f));
+    int32_t x = static_cast<int32_t>(floor(position->x * OO_COORD_TO_CHUNK));
+    int32_t y = static_cast<int32_t>(floor(position->y * OO_COORD_TO_CHUNK));
 
-    if (x == this->m_originX && y == this->m_originY) {
+    if (x == this->m_originCell.x && y == this->m_originCell.y) {
         return;
     }
 
-    this->m_originY = y;
-    this->m_minCellY = y - 2;
-    this->m_minCellX = x - 2;
-    this->m_originX = x;
-    this->m_minX = 32 * this->m_minCellX;
-    this->m_minY = 32 * this->m_minCellY;
+    this->m_originCell.y = y;
+    this->m_minCell.y = y - 2;
+    this->m_minCell.x = x - 2;
+    this->m_originCell.x = x;
+    this->m_minSample.x = 32 * this->m_minCell.x;
+    this->m_minSample.y = 32 * this->m_minCell.y;
     WeatherGridCell* cells[25];
 
     for (uint32_t row = 0; row < 5; row++) {
@@ -318,7 +319,7 @@ void WeatherGrid::UpdateOriginCell(const C3Vector* position) {
     for (int32_t row = 0; row < 5; row++) {
         for (int32_t col = 0; col < 5; col++) {
             for (uint32_t i = 0; i < 25; i++) {
-                if (cells[i] && cells[i]->m_cellX == col + this->m_minCellX && cells[i]->m_cellY == row + this->m_minCellY) {
+                if (cells[i] && cells[i]->m_cellIndex.x == col + this->m_minCell.x && cells[i]->m_cellIndex.y == row + this->m_minCell.y) {
                     this->m_cells[row][col] = cells[i];
                     cells[i] = nullptr;
                     break;
@@ -341,8 +342,8 @@ void WeatherGrid::UpdateOriginCell(const C3Vector* position) {
                 WeatherGridCell* cell = cells[i];
                 this->m_cells[row][col] = cell;
                 cells[i] = nullptr;
-                cell->m_cellX = col + this->m_minCellX;
-                cell->m_cellY = row + this->m_minCellY;
+                cell->m_cellIndex.x = col + this->m_minCell.x;
+                cell->m_cellIndex.y = row + this->m_minCell.y;
 
                 for (uint32_t j = 0; j < sizeof(cell->m_heights) / sizeof(cell->m_heights[0]); j++) {
                     cell->m_heights[j] = FLT_MAX;
@@ -586,12 +587,12 @@ void Weather::Update() {
     WOWGUID activePlayer = ClntObjMgrGetActivePlayer();
 
     if (activePlayer) {
-        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player) {
             C3Vector delta(this->m_playerVelocityX, this->m_playerVelocityY, 0.0f);
 
-            if (sqrtf(delta.y * delta.y + delta.x * delta.x) < 1.0f || (player->m_unit->m_unitFieldFlags & 0x100000)) {
+            if (sqrtf(delta.y * delta.y + delta.x * delta.x) < 1.0f || (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI)) {
                 this->m_facing = player->GetFacing();
             } else {
                 delta.Normalize();
@@ -599,11 +600,11 @@ void Weather::Update() {
                 this->m_facing = angle;
 
                 if (angle < 0.0f) {
-                    this->m_facing = angle + 6.2831855f;
+                    this->m_facing = angle + TWO_PI;
                 }
             }
 
-            this->m_onTaxi = (player->m_unit->m_unitFieldFlags >> 20) & 1;
+            this->m_onTaxi = (player->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_ON_TAXI) != 0;
             C3Vector position = player->GetPosition();
             this->m_positionX = position.x;
             this->m_positionY = position.y;
@@ -819,14 +820,14 @@ void Weather::UpdatePosDeltas() {
     WOWGUID activePlayer = ClntObjMgrGetActivePlayer();
 
     if (activePlayer) {
-        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(activePlayer, TYPEMASK_PLAYER, __FILE__, __LINE__));
+        CGUnit_C* player = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(activePlayer, TYPE_PLAYER, __FILE__, __LINE__));
 
         if (player) {
             playerPos = player->GetPosition();
             playerVelocity = player->m_movement->m_moveDir * player->m_movement->m_currentSpeed;
 
             if (player->GetTransportGUID()) {
-                CGObject_C* transport = ClntObjMgrObjectPtr(WOWGUID{ player->GetTransportGUID() }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+                CGObject_C* transport = ClntObjMgrObjectPtr(WOWGUID{ player->GetTransportGUID() }, TYPE_OBJECT, __FILE__, __LINE__);
 
                 if (transport) {
                     transportPos = transport->GetPosition();
@@ -841,7 +842,7 @@ void Weather::UpdatePosDeltas() {
 
     if (now != s_lastTime) {
         C3Vector delta = transportPos - s_lastTransportPos;
-        PosDelta* node = this->m_transportDeltas.NewNode(2, 0, 0);
+        PosDelta* node = this->m_transportDeltas.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         node->m_delta = delta;
         node->m_time = now - s_lastTime;
     }
@@ -850,7 +851,7 @@ void Weather::UpdatePosDeltas() {
 
     if (now - s_lastTime) {
         C3Vector delta = playerPos - C3Vector(this->m_positionX, this->m_positionY, this->m_positionZ);
-        PosDelta* node = this->m_playerDeltas.NewNode(2, 0, 0);
+        PosDelta* node = this->m_playerDeltas.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         node->m_delta = delta;
         node->m_time = now - s_lastTime;
     }

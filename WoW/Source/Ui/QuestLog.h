@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "Engine/Source/Storm/H/stpl.h"
+#include "Engine/Source/Tempest/C2iVector.h"
 #include "WoW/Source/Object/WGUID.h"
 #include "WoW/Source/Net/Types.h"
 
@@ -22,34 +23,33 @@ struct QuestLogEntry {
 };
 
 struct QuestPOIPoint {
-    /* 0000 */ int32_t m_x;
-    /* 0004 */ int32_t m_y;
+    /* 0000 */ C2iVector m_position; // Signed POI XY used for map projection.
 };
 
 struct QuestPOIBlob {
     /* 0000 */ TSGrowableArray<QuestPOIPoint> m_points;
     /* 0010 */ int32_t m_centerX;
     /* 0014 */ int32_t m_centerY;
-    /* 0018 */ int32_t unk_0018;
-    /* 001C */ int32_t unk_001C;
-    /* 0020 */ int32_t unk_0020;
-    /* 0024 */ int32_t unk_0024;
-    /* 0028 */ int32_t unk_0028;
-    /* 002C */ int32_t unk_002C;
-    /* 0030 */ int32_t unk_0030;
+    /* 0018 */ int32_t m_blobId;
+    /* 001C */ int32_t m_objectiveIndex;
+    /* 0020 */ int32_t m_mapId;
+    /* 0024 */ int32_t m_worldMapAreaId;
+    /* 0028 */ int32_t m_floor;
+    /* 002C */ int32_t m_flags;
+    /* 0030 */ int32_t m_priority;
 };
 
 struct QuestPOIInfo {
     /* 0000 */ int32_t m_questId;
     /* 0004 */ TSGrowableArray<QuestPOIBlob> m_blobs;
     /* 0014 */ int32_t m_iconMapId;
-    /* 0018 */ int32_t m_iconFloor;
-    /* 001C */ uint32_t unk_001C;
+    /* 0018 */ int32_t m_iconObjectiveIndex;
+    /* 001C */ uint32_t m_iconMapFloor;
     /* 0020 */ int32_t m_iconX;
     /* 0024 */ int32_t m_iconY;
-    /* 0028 */ uint8_t unk_0028;
-    /* 0029 */ uint8_t unk_0029;
-    /* 002C */ uint32_t unk_002C;
+    /* 0028 */ uint8_t m_visible;
+    /* 0029 */ uint8_t unused_0029;
+    /* 002C */ uint32_t m_objectiveMask;
 };
 
 struct QuestWatch {
@@ -75,6 +75,13 @@ int32_t CountQuestItemDropsNeeded(int32_t questId, void (*callback)(int32_t id, 
 
 class CGQuestLog {
     public:
+    enum TRACKER_SORT_MODE : int32_t {
+        DISABLED = 0,
+        DISTANCE = 1,
+        LEVEL_DESCENDING = 2,
+        LEVEL_ASCENDING = 3,
+    };
+
     static void LeaveWorld();
     static void SaveTrackedQuests();
     static int32_t UpdateAllQuestPOI();
@@ -136,7 +143,7 @@ class CGQuestLog {
     static void ShutdownGame();
     static int32_t GetQuestAt(int32_t index);
     static int32_t GetQuestLeaderBoardForItem(int32_t questId, int32_t itemId, QuestLogLeaderBoardParams* params);
-    static bool GetQuestPOIIcon(int32_t questId, bool* complete, int32_t* mapId, uint32_t* a4, int32_t* x, int32_t* y, int32_t* floor);
+    static bool GetQuestPOIIcon(int32_t questId, bool* complete, int32_t* mapId, uint32_t* mapFloor, int32_t* x, int32_t* y, int32_t* objective);
     static int32_t GetQuestLogItemDropByID(int32_t questId, QuestLogLeaderBoardParams* params);
     static int32_t GetQuestPOILeaderBoardByID(int32_t questId, QuestLogLeaderBoardParams* params);
     static int32_t IsQuestCompleteEx(uint32_t index, int32_t a2);

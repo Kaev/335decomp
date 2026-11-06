@@ -1,4 +1,6 @@
 #include "MapChunk.h"
+#include "Engine/Source/Tempest/Color.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include "WoW/Source/WorldClient/DetailDoodad.h"
 #include "WoW/Source/WorldClient/CDetailDoodadData.h"
 #include "Engine/Source/Tempest/CRandom.h"
@@ -46,10 +48,10 @@
 #include "Engine/Source/Model2/M2Light.h"
 
 // STATIC: 0x00A3FBB8
-static const uint16_t unk_A3FBB8[8] = { 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80 };
+static const uint16_t s_bitMask[8] = { 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80 };
 
 // STATIC: 0x00A3FBC8
-static const uint32_t unk_A3FBC8[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+static const uint32_t s_bitShift[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 // STATIC: 0x00D25488
 float CMapChunk::s_geoToTex;
@@ -246,18 +248,18 @@ void CMapChunk::InitializeVertexGrid() {
     C3Vector* vertex = CMapChunk::vertexList;
 
     for (int32_t row = 0; row < 9; row++) {
-        float x = row * -4.1666665f;
+        float x = row * -SMOLTILE_SIZE;
 
         for (int32_t col = 0; col < 9; col++) {
             vertex->x = x;
-            vertex->y = 0.0f - col * 4.1666665f;
+            vertex->y = 0.0f - col * SMOLTILE_SIZE;
             vertex++;
         }
 
         if (row < 8) {
             for (int32_t col = 0; col < 8; col++) {
-                vertex->x = x - 2.0833333f;
-                vertex->y = 0.0f - col * 4.1666665f - 2.0833333f;
+                vertex->x = x - HALF_SMOLTILE_SIZE;
+                vertex->y = 0.0f - col * SMOLTILE_SIZE - HALF_SMOLTILE_SIZE;
                 vertex++;
             }
         }
@@ -283,7 +285,7 @@ void CMapChunk::Destroy() {
 // OFFSET: 0x007C3B40
 void CMapChunk::AllocRenderChunkAndBatch() {
     this->m_renderChunk = CMap::AllocRenderChunk();
-    this->m_renderChunk->AddBatch(this, nullptr, &this->m_topLeftCoords, 0);
+    this->m_renderChunk->AddBatch(this, nullptr, &this->m_topLeftCoords, CMapRenderChunk::BATCH_FLAGS::BATCH_NONE);
 }
 
 // VERIFY: b0c09ba2 manual
@@ -357,14 +359,14 @@ void CMapChunk::CreateVerticesWorld(CGxVertexPN* v, const C3Vector& offset) {
     float top = 17066.666f - this->m_cOffset.y * 33.333332f;
     rows[0] = top;
     cols[0] = left;
-    rows[1] = top - 4.1666665f;
+    rows[1] = top - SMOLTILE_SIZE;
     rows[2] = top - 8.333333f;
     rows[3] = top - 12.5f;
     rows[4] = top - 16.666666f;
     rows[5] = top - 20.833332f;
     rows[6] = top - 25.0f;
     rows[7] = top - 29.166666f;
-    cols[1] = left - 4.1666665f;
+    cols[1] = left - SMOLTILE_SIZE;
     cols[2] = left - 8.333333f;
     cols[3] = left - 12.5f;
     cols[4] = left - 16.666666f;
@@ -393,8 +395,8 @@ void CMapChunk::CreateVerticesWorld(CGxVertexPN* v, const C3Vector& offset) {
 
         if (row < 8) {
             for (int32_t col = 0; col < 8; col++) {
-                v->m_position.x = rows[row] - 2.0833333f;
-                v->m_position.y = cols[col] - 2.0833333f;
+                v->m_position.x = rows[row] - HALF_SMOLTILE_SIZE;
+                v->m_position.y = cols[col] - HALF_SMOLTILE_SIZE;
                 v->m_position.z = this->m_topLeftCoords.z + height[col];
                 v->m_normal.x = normals[3 * col + 0] * 0.0078740157f;
                 v->m_normal.y = normals[3 * col + 1] * 0.0078740157f;
@@ -418,14 +420,14 @@ void CMapChunk::CreateVerticesWorld(CGxVertexPNC* v, const C3Vector& offset) {
     float top = 17066.666f - this->m_cOffset.y * 33.333332f;
     rows[0] = top;
     cols[0] = left;
-    rows[1] = top - 4.1666665f;
+    rows[1] = top - SMOLTILE_SIZE;
     rows[2] = top - 8.333333f;
     rows[3] = top - 12.5f;
     rows[4] = top - 16.666666f;
     rows[5] = top - 20.833332f;
     rows[6] = top - 25.0f;
     rows[7] = top - 29.166666f;
-    cols[1] = left - 4.1666665f;
+    cols[1] = left - SMOLTILE_SIZE;
     cols[2] = left - 8.333333f;
     cols[3] = left - 12.5f;
     cols[4] = left - 16.666666f;
@@ -468,8 +470,8 @@ void CMapChunk::CreateVerticesWorld(CGxVertexPNC* v, const C3Vector& offset) {
 
         if (row < 8) {
             for (int32_t col = 0; col < 8; col++) {
-                v->m_position.x = rows[row] - 2.0833333f;
-                v->m_position.y = cols[col] - 2.0833333f;
+                v->m_position.x = rows[row] - HALF_SMOLTILE_SIZE;
+                v->m_position.y = cols[col] - HALF_SMOLTILE_SIZE;
                 v->m_position.z = this->m_topLeftCoords.z + *height;
                 v->m_normal.x = normals[0] * 0.0078740157f;
                 v->m_normal.y = normals[1] * 0.0078740157f;
@@ -578,7 +580,7 @@ void CMapChunk::CreateVerticesLocal(CGxVertexPNC* v) {
                     v->m_color = color;
                 }
             } else {
-                *reinterpret_cast<uint32_t*>(&v->m_color) = 0xFF7F7F7F;
+                *reinterpret_cast<uint32_t*>(&v->m_color) = COLOR_GRAY_127_ARGB;
             }
 
             height++;
@@ -612,7 +614,7 @@ void CMapChunk::CreateVerticesLocal(CGxVertexPNC* v) {
                         v->m_color = color;
                     }
                 } else {
-                    *reinterpret_cast<uint32_t*>(&v->m_color) = 0xFF7F7F7F;
+                    *reinterpret_cast<uint32_t*>(&v->m_color) = COLOR_GRAY_127_ARGB;
                 }
 
                 height++;
@@ -705,7 +707,7 @@ void CMapChunk::Batch() {
         area->BatchChunks(pos);
     } else {
         this->m_renderChunk = CMap::AllocRenderChunk();
-        this->m_renderChunk->AddBatch(this, nullptr, &this->m_topLeftCoords, 0);
+        this->m_renderChunk->AddBatch(this, nullptr, &this->m_topLeftCoords, CMapRenderChunk::BATCH_FLAGS::BATCH_NONE);
         this->m_bLoaded = 1;
     }
 }
@@ -735,12 +737,12 @@ void CMapChunk::GetLiquidBounds(CAaBox& box) const {
     CChunkLiquid* liquid = const_cast<CMapChunk*>(this)->m_liquidChunkLinkList.Head();
 
     if (liquid) {
-        box.t.z = liquid->m_height.y;
-        box.b.z = liquid->m_height.x;
+        box.t.z = liquid->m_height.m_h;
+        box.b.z = liquid->m_height.m_l;
 
         do {
-            box.t.z = liquid->m_height.y >= box.t.z ? liquid->m_height.y : box.t.z;
-            box.b.z = liquid->m_height.x <= box.b.z ? liquid->m_height.x : box.b.z;
+            box.t.z = liquid->m_height.m_h >= box.t.z ? liquid->m_height.m_h : box.t.z;
+            box.b.z = liquid->m_height.m_l <= box.b.z ? liquid->m_height.m_l : box.b.z;
             liquid = const_cast<CMapChunk*>(this)->m_liquidChunkLinkList.Next(liquid);
         } while (liquid);
     }
@@ -799,9 +801,9 @@ void CMapChunk::CreateLiquids(bool a3) {
                 this->m_liquidChunkLinkList.LinkToTail(chunkLiquid);
                 chunkLiquid->m_type = type;
                 chunkLiquid->m_owner = this;
-                chunkLiquid->unk_0008 = materialRec->m_lvf;
+                chunkLiquid->m_vertexFormat = materialRec->m_lvf;
                 chunkLiquid->m_topLeftCoords = this->m_topLeftCoords;
-                chunkLiquid->m_height = *reinterpret_cast<C2Vector*>(&mclq->m_minHeight);
+                chunkLiquid->m_height = mclq->m_height;
 
                 uint8_t* verts = reinterpret_cast<uint8_t*>(mclq->m_verts);
                 chunkLiquid->m_tileBegin.x = 0;
@@ -810,7 +812,7 @@ void CMapChunk::CreateLiquids(bool a3) {
                 chunkLiquid->m_tileEnd.y = 8;
 
                 void* mem = SMemAlloc(sizeof(Liquid::CChunkVertexData), __FILE__, __LINE__, 0);
-                Liquid::CChunkVertexData* vertexData = mem ? new (mem) Liquid::CChunkVertexData(verts, chunkLiquid->unk_0008) : nullptr;
+                Liquid::CChunkVertexData* vertexData = mem ? new (mem) Liquid::CChunkVertexData(verts, chunkLiquid->m_vertexFormat) : nullptr;
                 chunkLiquid->m_tiles = reinterpret_cast<uint8_t*>(&mclq->m_tiles);
                 chunkLiquid->m_vertexData = vertexData;
                 mclq++;
@@ -836,9 +838,9 @@ void CMapChunk::CreateLiquids(bool a3) {
             this->m_liquidChunkLinkList.LinkToTail(chunkLiquid);
             chunkLiquid->m_owner = this;
             chunkLiquid->m_type = instance->m_liquidType;
-            chunkLiquid->unk_0008 = instance->m_vertexFormat;
+            chunkLiquid->m_vertexFormat = instance->m_vertexFormat;
             chunkLiquid->m_topLeftCoords = this->m_topLeftCoords;
-            chunkLiquid->m_height = *reinterpret_cast<const C2Vector*>(&instance->m_minHeight);
+            chunkLiquid->m_height = instance->m_heightRange;
 
             uint8_t yOffset = instance->m_yOffset;
             uint8_t xOffset = instance->m_xOffset;
@@ -880,7 +882,7 @@ void CMapChunk::CullAndBucketChunk() {
         liquid->GetAaBox(box);
 
         if (!CWorldScene::FrustumCull(&box)) {
-            corner.z = (camZ <= liquid->m_height.y ? camZ : liquid->m_height.y) < liquid->m_height.x ? liquid->m_height.x : (camZ > liquid->m_height.y ? liquid->m_height.y : camZ);
+            corner.z = (camZ <= liquid->m_height.m_h ? camZ : liquid->m_height.m_h) < liquid->m_height.m_l ? liquid->m_height.m_l : (camZ > liquid->m_height.m_h ? liquid->m_height.m_h : camZ);
             CWorldScene::AddToDistanceBucket(liquid, corner);
         }
     }
@@ -913,8 +915,8 @@ CMapChunk::CMapChunk() {
     this->m_renderChunk = nullptr;
     this->m_chunkInfoBeginPtr = nullptr;
     this->m_header = nullptr;
-    this->m_lowQualityTexMap = nullptr;
-    this->m_predTexture = nullptr;
+    this->m_predTex = nullptr;
+    this->m_noEffectDoodad = nullptr;
     this->m_height = nullptr;
     this->m_vertexShading = nullptr;
     this->m_normals = nullptr;
@@ -986,7 +988,7 @@ void CMapChunk::CreateRefs(CMapArea* area, uint32_t* mcrfPtr, uint32_t doodadRef
 
             if (proxy.m_sphere.r < 0.001f) {
                 proxy.m_sphere.r = 50.0f;
-                SysMsgPrintf(STATUS_ERROR, 2, "Destructible building WMO(%s) has invalid geobox", &area->m_wmoFileNames[area->m_wmoFilenamesOffsets[def->m_nameId]]);
+                SysMsgPrintf(SYSMSG_ERROR, 2, "Destructible building WMO(%s) has invalid geobox", &area->m_wmoFileNames[area->m_wmoFilenamesOffsets[def->m_nameId]]);
             }
 
             World::FindOrCreateDestructibleProxy(&proxy);
@@ -1024,8 +1026,8 @@ void CMapChunk::Create(SIffChunk* headerChunk, bool a3) {
     this->m_topLeftCoords.y = 17066.666f - this->m_cOffset.x * 33.333332f;
     this->m_topLeftCoords.z = 0.0f;
     this->m_topLeftCoords.z = this->m_header->m_position.z;
-    this->m_lowQualityTexMap = this->m_header->m_lowQualityTextureMap;
-    this->m_predTexture = reinterpret_cast<uint8_t*>(&this->m_header->m_predTex);
+    this->m_predTex = this->m_header->m_predTex;
+    this->m_noEffectDoodad = this->m_header->m_noEffectDoodad;
 
     this->CreateBounds();
     this->CreateLiquids(a3);
@@ -1091,7 +1093,7 @@ int32_t CMapChunk::LoadDetailDoodadModels() {
     int32_t loaded = 1;
 
     for (uint32_t i = 0; i < this->m_header->m_nLayers; i++) {
-        int32_t effectId = this->m_layers[i].m_offectId;
+        int32_t effectId = this->m_layers[i].m_effectId;
 
         if (!effectId) {
             continue;
@@ -1163,8 +1165,8 @@ void CMapChunk::CreateDetailDoodads() {
             shadeCenter = shadeCorner + 9 * sizeof(uint32_t);
         }
 
-        float offsetX = y * -4.1666665f;
-        float offsetY = x * -4.1666665f;
+        float offsetX = y * -SMOLTILE_SIZE;
+        float offsetY = x * -SMOLTILE_SIZE;
 
         verts[0] = C3Vector(CMap::s_subchunkCoords[4].x + offsetX, CMap::s_subchunkCoords[4].y + offsetY, CMap::s_subchunkCoords[4].z);
         verts[0].z = height[9];
@@ -1205,7 +1207,7 @@ void CMapChunk::CreateDetailDoodads() {
         int32_t x = s_cells[i].x;
         int32_t y = s_cells[i].y;
 
-        if ((this->m_predTexture[y] & unk_A3FBB8[x]) >> unk_A3FBC8[x]) {
+        if ((this->m_noEffectDoodad[y] & s_bitMask[x]) >> s_bitShift[x]) {
             continue;
         }
 
@@ -1213,8 +1215,8 @@ void CMapChunk::CreateDetailDoodads() {
             continue;
         }
 
-        uint32_t layer = (reinterpret_cast<uint16_t*>(this->m_lowQualityTexMap)[y] & CMap::s_2bitSplatMask[x]) >> CMap::s_2bitSplatShft[x];
-        GroundEffectTextureRec* record = g_groundEffectTextureDB.GetRecord(this->m_layers[layer].m_offectId);
+        uint32_t layer = (this->m_predTex[y] & CMap::s_2bitSplatMask[x]) >> CMap::s_2bitSplatShft[x];
+        GroundEffectTextureRec* record = g_groundEffectTextureDB.GetRecord(this->m_layers[layer].m_effectId);
 
         if (!record) {
             continue;
@@ -1250,15 +1252,15 @@ void CMapChunk::CreateDetailDoodads() {
         }
 
         uint32_t cellBase = 4 * (x + 8 * y);
-        float cellX = x * 4.1666665f;
-        float cellY = y * 4.1666665f;
+        float cellX = x * SMOLTILE_SIZE;
+        float cellY = y * SMOLTILE_SIZE;
 
         for (uint32_t j = 0; j < count; j++) {
             float u = CRandom::sfloat_(seed);
             float v = CRandom::sfloat_(seed);
             uint32_t id = doodads[(i + j) & 15];
-            float px = u * 2.0833333f + 2.0833333f;
-            float py = v * 2.0833333f + 2.0833333f;
+            float px = u * HALF_SMOLTILE_SIZE + HALF_SMOLTILE_SIZE;
+            float py = v * HALF_SMOLTILE_SIZE + HALF_SMOLTILE_SIZE;
 
             if (!id) {
                 continue;
@@ -1275,7 +1277,7 @@ void CMapChunk::CreateDetailDoodads() {
                 tri = 1;
             }
 
-            if (px - 4.1666665f - -py > 0.0f) {
+            if (px - SMOLTILE_SIZE - -py > 0.0f) {
                 tri += 2;
             }
 
@@ -1329,9 +1331,9 @@ void CMapChunk::CreateDetailDoodads() {
             color.a = 0xFF;
 
             if (this->m_shadowMap) {
-                float shadowX = (px + cellX) * 1.92f;
+                float shadowX = (px + cellX) * OO_COORD_TO_SHADOW;
                 int32_t sx = CMath::fint_(shadowX - 0.5f);
-                float shadowY = (py + cellY) * 1.92f;
+                float shadowY = (py + cellY) * OO_COORD_TO_SHADOW;
                 int32_t sy = CMath::fint_(shadowY - 0.5f);
 
                 if (this->m_shadowMap[8 * sy + (sx >> 3)] & (1 << (sx & 7))) {
@@ -1360,7 +1362,7 @@ void CMapChunk::RenderPrep() {
         float dx = CWorldScene::s_activeWorldView.x - this->m_sphere.c.x;
 
         if (CWorld::shadowMipLevel || dx * dx + dz * dz + dy * dy > 603729.0f) {
-            this->m_renderChunk->unk_000A |= 0x10;
+            this->m_renderChunk->m_renderFlags |= CMapRenderChunk::RENDER_FLAGS::FLAG_REQUEST_BLEND_MIP1;
         }
 
         this->m_renderChunk->RenderPrep();

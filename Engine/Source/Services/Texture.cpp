@@ -1,4 +1,5 @@
 #include <cstddef>
+#include "Engine/Source/Tempest/Color.h"
 #include <cstdint>
 #include <cstring>
 #include "Engine/Source/BlizzardCore/SFile2-Core.h"
@@ -53,7 +54,7 @@ static int32_t s_createBlpAsync = 1;
 static TSExplicitList<CTexture, offsetof(CTexture, m_link)> s_textureList;
 
 // STATIC: 0x00AC3354
-static uint32_t s_defaultColor = 0xFF00FF00;
+static CImVector s_defaultColor = { COLOR_GREEN_BGRA };
 
 // STATIC: 0x00AC3358
 static TSExplicitList<CGxTexCache, offsetof(CGxTexCache, m_link)> s_gxTexCacheFree;
@@ -115,6 +116,20 @@ HASHKEY_TEXTUREFILE::HASHKEY_TEXTUREFILE() {
 // INLINED
 bool HASHKEY_TEXTUREFILE::operator==(const HASHKEY_TEXTUREFILE& key) const {
     return !SStrCmpI(this->m_filename, key.m_filename, 260) && (this->m_anyTexFlags || key.m_anyTexFlags || this->m_texFlags == key.m_texFlags);
+}
+
+// INLINED
+CGxTexCache::CGxTexCache() {
+    this->m_gxTex = nullptr;
+    this->m_time = 0;
+    this->m_size = 0;
+}
+
+// INLINED
+CGxTexCache::~CGxTexCache() {
+    if (this->m_gxTex) {
+        GxTexDestroy(this->m_gxTex);
+    }
 }
 
 // INLINED
@@ -396,14 +411,14 @@ TEXFILETYPE TextureDiscoverFileType(const char* fileName) {
     const char* extension = SStrChrR(const_cast<char*>(fileName), '.');
 
     if (!extension || SStrLen(extension) != 4) {
-        return TEXFILE_UNKNOWN;
+        return TEXFILETYPE_UNKNOWN;
     }
 
     if (!SStrCmpI(extension, ".TGA", STORM_MAX_STR)) {
-        return TEXFILE_TGA;
+        return TEXFILETYPE_TGA;
     }
 
-    return SStrCmpI(extension, ".BLP", STORM_MAX_STR) ? TEXFILE_UNKNOWN : TEXFILE_BLP;
+    return SStrCmpI(extension, ".BLP", STORM_MAX_STR) ? TEXFILETYPE_UNKNOWN : TEXFILETYPE_BLP;
 }
 
 // VERIFY: 813fa654 manual
@@ -414,7 +429,7 @@ TEXFILETYPE TexturePickAlternateFilename(const char* fileName, TEXFILETYPE type,
     }
 
     if (!type) {
-        return TEXFILE_UNKNOWN;
+        return TEXFILETYPE_UNKNOWN;
     }
 
     char* extension = SStrChrR(buffer, '.');
@@ -423,14 +438,14 @@ TEXFILETYPE TexturePickAlternateFilename(const char* fileName, TEXFILETYPE type,
         *extension = '\0';
     }
 
-    if (type == TEXFILE_TGA) {
+    if (type == TEXFILETYPE_TGA) {
         SStrPack(buffer, ".BLP", size);
-        return TEXFILE_BLP;
+        return TEXFILETYPE_BLP;
     }
 
-    if (type == TEXFILE_BLP) {
+    if (type == TEXFILETYPE_BLP) {
         SStrPack(buffer, ".TGA", size);
-        return TEXFILE_TGA;
+        return TEXFILETYPE_TGA;
     }
 
     return type;
@@ -516,7 +531,7 @@ void ResolveMipLevel(EGxTexCommand command, uint32_t width, uint32_t height, uin
     // STATIC: 0x00B4A1E8
     static uint32_t s_emptyTexel;
 
-    if (command == GxTex_3) {
+    if (command == GxTex_Recreate) {
         return;
     }
 
@@ -654,7 +669,7 @@ int32_t TextureLoadBlpMips(char* fileName, char* extension, int32_t flags, MipBi
     EGxTexFormat format = GxTex_Argb8888;
     PIXEL_FORMAT pixels = PIXEL_ARGB8888;
 
-    if (image.m_header.m_colorEncoding == 2) {
+    if (image.m_header.m_colorEncoding == COLOR_DXT) {
         pixels = static_cast<PIXEL_FORMAT>(image.m_header.m_preferredFormat);
 
         if (pixels == PIXEL_DXT1) {
@@ -1445,7 +1460,7 @@ void TextureFreeGxTex(CGxTex* gxTex, const char* name) {
         CGxTexCache* entry = s_gxTexCacheFree.Head();
 
         if (!entry) {
-            entry = s_gxTexCacheFree.NewNode(1, 0, 0);
+            entry = s_gxTexCacheFree.NewNode(TSLIST_LINK_AFTER, 0, 0);
         }
 
         entry->m_link.Unlink();
@@ -1547,7 +1562,7 @@ void TextureFreeMippedImg(MipBits* bits, PIXEL_FORMAT format, uint32_t width, ui
     CMipBitsCache* entry = s_mipBitsCacheFree.Head();
 
     if (!entry) {
-        entry = s_mipBitsCacheFree.NewNode(2, 0, 0);
+        entry = s_mipBitsCacheFree.NewNode(TSLIST_LINK_BEFORE, 0, 0);
         entry->m_link.Unlink();
     }
 
@@ -1860,7 +1875,7 @@ void AsyncTextureSuccessCallback(CTexture* texture) {
             SysMsgAdd(&texture->m_status);
         }
 
-        FillInSolidTexture(*reinterpret_cast<const CImVector*>(&s_defaultColor), texture);
+        FillInSolidTexture(s_defaultColor, texture);
     }
 
     SFileCloseFile(texture->m_asyncObject->m_file);
@@ -1896,7 +1911,7 @@ void TextureInitialize() {
     s_currentTime = OsGetAsyncTimeMs();
     s_gxTexCacheSize = 0;
     s_gxTexCacheMaxSize = 0;
-    EventRegisterEx(EVENT_ID_POLL, TextureUpdate, nullptr, 0.0f);
+    EventRegisterEx(EVENT_ID_POLL, TextureUpdate, nullptr, EVENT_PRIORITY_NORMAL);
 }
 
 // VERIFY: 7711ba71 manual
@@ -2167,7 +2182,7 @@ CTexture* CreateBlpSync(const char* fileName, char* extension, uint32_t flags, C
     }
 
     if (!PumpBlpTextureAsync(texture, data)) {
-        FillInSolidTexture(*reinterpret_cast<const CImVector*>(&s_defaultColor), texture);
+        FillInSolidTexture(s_defaultColor, texture);
     }
 
     SFileCloseFile(file);
@@ -2243,7 +2258,7 @@ CTexture* CreateBlpAsync(char* extension, const char* fileName, uint32_t flags, 
     CAsyncObject* object = texture->m_asyncObject;
 
     if (0x400000 - s_asyncLoadBufferUsed < object->m_size) {
-        s_asyncTextureList.LinkNode(object, 2, nullptr);
+        s_asyncTextureList.LinkNode(object, TSLIST_LINK_BEFORE, nullptr);
     } else {
         AsyncTextureProcess(object, 0);
     }
@@ -2432,7 +2447,7 @@ CTexture* CreateTgaTexture(const char* fileName, char* extension, int32_t flags,
 
     if (width < 8 || height < 8) {
         status->Add(STATUS_FATAL, "Error loading file \"%s\": Texture size must be at least %dx%d\n", fileName, 8, 8);
-        return TextureCreateSolid(*reinterpret_cast<const CImVector*>(&s_defaultColor));
+        return TextureCreateSolid(s_defaultColor);
     }
 
     CTexture* texture = new ("HTEXTURE", SLOG_OBJECT) CTexture;
@@ -2538,5 +2553,5 @@ CTexture* TextureCreate(const char* fileName, CGxTexFlags texFlags, CStatus* sta
 
     TextureReportLoadError("texture", fileName, status);
 
-    return TextureCreateSolid(*reinterpret_cast<const CImVector*>(&s_defaultColor));
+    return TextureCreateSolid(s_defaultColor);
 }

@@ -173,7 +173,7 @@ bool System_SFile::BlockEntryTable::UnpackEntry(uint32_t index, BLOCKENTRY* entr
         entry->m_flags = this->m_flagTable[entry->m_flags];
     }
 
-    if (this->m_tableFlags & 0x200) {
+    if (this->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_PACKED_MD5_CHECK) {
         uint8_t md5Check = 0;
         this->m_entries->ReadBits(base + this->m_md5Bit, this->m_md5Bits, &md5Check, 1);
         entry->m_md5Check = md5Check != 0;
@@ -289,7 +289,7 @@ void System_SFile::BlockEntryTable::InitializeHashCheckTable(int32_t bits) {
 // VERIFY: db7caa48 manual
 // OFFSET: 0x00431780
 System_SFile::HashEntryTable::HashEntryTable(uint32_t count, int32_t hashBits) {
-    this->unk_0004 = 0;
+    this->unused_0004 = 0;
     this->m_indexBits = 0;
     this->unk_0000 = 0;
     this->m_tags = nullptr;
@@ -305,7 +305,7 @@ System_SFile::HashEntryTable::HashEntryTable(uint32_t count, int32_t hashBits) {
     this->m_indexBits = bits;
     this->unk_0000 = this->m_indexBits;
     this->m_entryBits = this->unk_0000;
-    this->unk_0004 = 0;
+    this->unused_0004 = 0;
     this->m_tags = static_cast<uint8_t*>(SMemAlloc(this->m_slotCount, __FILE__, __LINE__, SMEM_FLAG_ZEROMEMORY));
     this->SetHashBits(hashBits);
 }
@@ -386,9 +386,9 @@ System_SFile::BlockEntryTable::~BlockEntryTable() {
 // VERIFY: 8c7d6610 manual
 // OFFSET: 0x00437590
 System_SFile::ArchiveBuffers::~ArchiveBuffers() {
-    memset(this->unk_0000.m_data, 0, this->unk_0000.m_count);
-    memset(this->unk_000C.m_data, 0, this->unk_000C.m_count);
-    memset(this->unk_0114.m_data, 0, this->unk_0114.m_count);
+    memset(this->unused_0000.m_data, 0, this->unused_0000.m_count);
+    memset(this->unused_000C.m_data, 0, this->unused_000C.m_count);
+    memset(this->unused_0114.m_data, 0, this->unused_0114.m_count);
 }
 
 // VERIFY: e3eae1bf manual
@@ -707,7 +707,7 @@ bool System_SFile::s_OpenArchive(ARCHIVEREC* archive, uint32_t flags, ARCHIVEREC
                     break;
                 }
 
-                if (!(flags & 0x20) || !haveCandidate) {
+                if (!(flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_RETRY_HEADER_CANDIDATE) || !haveCandidate) {
                     error = "OpenArchive - SFILE_ERROR_NOT_ARCHIVE - %s";
                     goto fail;
                 }
@@ -770,14 +770,14 @@ bool System_SFile::s_OpenArchive(ARCHIVEREC* archive, uint32_t flags, ARCHIVEREC
                 haveCandidate = true;
                 candidate = archive->m_archiveOffset;
 
-                if (retried || !(flags & 0x20)) {
+                if (retried || !(flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_RETRY_HEADER_CANDIDATE)) {
                     break;
                 }
             }
         }
 
     next:
-        if (flags & 8) {
+        if (flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_NO_HEADER_SCAN) {
             error = "OpenArchive - SFILE_ERROR_NOT_ARCHIVE - %s";
             goto fail;
         }
@@ -800,7 +800,7 @@ bool System_SFile::s_OpenArchive(ARCHIVEREC* archive, uint32_t flags, ARCHIVEREC
         System_MPQGlobals::GetArchiveList()->insert(archive);
     }
 
-    if (flags & 0x800) {
+    if (flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_INITIALIZE_TABLES_ON_OPEN) {
         archive->InitializeTables();
     }
 
@@ -858,7 +858,7 @@ bool Blizzard::Mopaq::SFileOpenArchive(const char* path, int32_t priority, uint3
     }
 
     if (exists == 1) {
-        int32_t mode = ((flags & 0x10) | 0x8028) >> 3;
+        int32_t mode = ((flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_UNKNOWN_10) | 0x8028) >> 3;
         IOUnit* file;
 
         if (mode & 0x40) {
@@ -955,7 +955,7 @@ void System_SFile::BlockEntryTable::SetLayout(BLOCKENTRY& maxima) {
         this->UpdateLayout();
     }
 
-    if (this->m_tableFlags & 0x200) {
+    if (this->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_PACKED_MD5_CHECK) {
         this->m_md5Bits = 1;
         this->UpdateLayout();
     }
@@ -996,7 +996,7 @@ bool System_SFile::BlockEntryTable::PackEntry(uint32_t index, const BLOCKENTRY* 
         return false;
     }
 
-    if (this->m_tableFlags & 0x200) {
+    if (this->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_PACKED_MD5_CHECK) {
         uint8_t md5Check = entry->m_md5Check != 0;
         return this->m_entries->WriteBits(base + this->m_md5Bit, this->m_md5Bits, &md5Check, 1);
     }
@@ -1036,15 +1036,15 @@ System_SFile::BlockEntryTable::BlockEntryTable(uint32_t count, uint32_t flags) {
     this->m_count = count;
     this->m_tableFlags = flags;
 
-    if (flags & 0x80) {
+    if (flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_CRC) {
         this->m_crcs.resize(this->m_count, 0);
     }
 
-    if (this->m_tableFlags & 0x40) {
+    if (this->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_MD5) {
         this->m_md5s.resize(this->m_count);
     }
 
-    if (this->m_tableFlags & 0x100) {
+    if (this->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_FILETIME) {
         this->m_fileTimes.resize(this->m_count, 0);
     }
 }
@@ -1219,7 +1219,7 @@ void System_SFile::ARCHIVEREC::InitializeTables() {
     }
 
     for (int32_t i = 0; i < static_cast<int32_t>(this->m_header.m_hashTableSize); i++) {
-        this->m_hashTable[i].unk_000B = 0;
+        this->m_hashTable[i].m_reserved = 0;
     }
 
     this->m_blockTable.resize(this->m_header.m_blockTableSize);
@@ -1301,7 +1301,7 @@ void System_SFile::ARCHIVEREC::InitializeTables() {
         }
     }
 
-    if (!(this->m_flags & 0x10) && (this->m_flags & 0x400)) {
+    if (!(this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_UNKNOWN_10) && (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_CONVERT_LEGACY_TABLES)) {
         this->BuildBlockTable();
         this->ConvertToNewHashTableFormat();
     }
@@ -1338,15 +1338,15 @@ System_SFile::BLOCKENTRY System_SFile::ARCHIVEREC::GetBlockEntry(uint32_t index)
     BLOCKENTRY entry;
     blocks->UnpackEntry(index, &entry);
 
-    if (this->m_flags & 0x80) {
+    if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_CRC) {
         entry.m_crc = this->m_blockEntryTable->m_crcs[index];
     }
 
-    if (this->m_flags & 0x40) {
+    if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_MD5) {
         entry.m_md5 = this->m_blockEntryTable->m_md5s[index];
     }
 
-    if (this->m_flags & 0x100) {
+    if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_FILETIME) {
         entry.m_fileTime = this->m_blockEntryTable->m_fileTimes[index];
     }
 
@@ -1486,7 +1486,7 @@ bool System_SFile::CreateArchiveView(IOUnit* file, const char* name, int32_t pri
     ARCHIVEREC* archive = NewZerofill<ARCHIVEREC>();
     archive->m_priority = priority;
     archive->m_id = s_nextArchiveId.Increment() - 1;
-    archive->m_flags = 16;
+    archive->m_flags = System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_UNKNOWN_10;
     archive->m_externalRefs.Increment();
     archive->m_internalRefs.Increment();
 
@@ -1850,7 +1850,7 @@ void System_SFile::ARCHIVEREC::SetMD5Check(uint32_t index, bool enabled) {
     BlockEntryTable* blocks = this->m_blockEntryTable;
 
     if (blocks) {
-        if ((this->m_flags & 0x200) && (blocks->m_tableFlags & 0x200)) {
+        if ((this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_PACKED_MD5_CHECK) && (blocks->m_tableFlags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_PACKED_MD5_CHECK)) {
             uint8_t bit = enabled;
             blocks->m_entries->WriteBits(blocks->m_md5Bit + index * blocks->m_entryBits, blocks->m_md5Bits, &bit, 1);
         }
@@ -1871,7 +1871,7 @@ void System_SFile::ARCHIVEREC::SetBlockFileTime(uint32_t index, uint64_t fileTim
     BlockEntryTable* blocks = this->m_blockEntryTable;
 
     if (blocks) {
-        if (this->m_flags & 0x100) {
+        if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_FILETIME) {
             blocks->m_fileTimes[index] = fileTime;
         }
     } else {
@@ -1885,7 +1885,7 @@ void System_SFile::ARCHIVEREC::SetBlockMd5(uint32_t index, const Blizzard::Util:
     BlockEntryTable* blocks = this->m_blockEntryTable;
 
     if (blocks) {
-        if (this->m_flags & 0x40) {
+        if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_MD5) {
             blocks->m_md5s[index] = md5;
         }
     } else {
@@ -1899,7 +1899,7 @@ void System_SFile::ARCHIVEREC::SetBlockCrc(uint32_t index, uint32_t crc) {
     BlockEntryTable* blocks = this->m_blockEntryTable;
 
     if (blocks) {
-        if (this->m_flags & 0x80) {
+        if (this->m_flags & System_SFile::ARCHIVE_FLAGS::ARCHIVE_FLAG_BLOCK_CRC) {
             blocks->m_crcs[index] = crc;
         }
     } else {
@@ -2167,7 +2167,7 @@ bool Blizzard::Mopaq::SetFileSignature(const char* name, const Blizzard::Util::D
 struct BlockHash {
     /* 0000 */ uint64_t m_hash;
     /* 0008 */ bool m_listed;
-    /* 0009 */ uint8_t unk_0009[7];
+    /* 0009 */ uint8_t unused_0009[7];
 
     bool operator<(const BlockHash& other) const {
         return this->m_hash < other.m_hash;
@@ -2177,7 +2177,7 @@ struct BlockHash {
 struct NameHash {
     /* 0000 */ uint64_t m_hash;
     /* 0008 */ const char* m_name;
-    /* 000C */ uint8_t unk_000C[4];
+    /* 000C */ uint8_t unused_000C[4];
 
     bool operator<(const NameHash& other) const {
         return this->m_hash < other.m_hash;
@@ -2476,7 +2476,7 @@ bool System_SFile::RebuildHashTable(ARCHIVEREC* archive, uint32_t hashSize) {
     empty.m_hashB = 0xFFFFFFFF;
     empty.m_locale = 0xFFFF;
     empty.m_platform = 0xFF;
-    empty.unk_000B = 0xFF;
+    empty.m_reserved = 0xFF;
     empty.m_blockIndex = 0xFFFFFFFF;
 
     std::vector<HASHENTRY> table(hashSize, empty);
@@ -2667,7 +2667,7 @@ bool System_SFile::ARCHIVEREC::WriteArchiveChanges(ARCHIVEREC* archive) {
         zero.m_hashB = 0;
         zero.m_locale = 0;
         zero.m_platform = 0;
-        zero.unk_000B = 0;
+        zero.m_reserved = 0;
         zero.m_blockIndex = 0;
 
         std::vector<HASHENTRY> hashes(hashCount, zero);
@@ -2677,7 +2677,7 @@ bool System_SFile::ARCHIVEREC::WriteArchiveChanges(ARCHIVEREC* archive) {
             hashes[i].m_hashB = archive->m_hashTable[i].m_hashB;
             hashes[i].m_locale = archive->m_hashTable[i].m_locale;
             hashes[i].m_platform = archive->m_hashTable[i].m_platform;
-            hashes[i].unk_000B = archive->m_hashTable[i].unk_000B;
+            hashes[i].m_reserved = archive->m_hashTable[i].m_reserved;
             hashes[i].m_blockIndex = archive->m_hashTable[i].m_blockIndex;
         }
 
@@ -3057,7 +3057,7 @@ bool Blizzard::Mopaq::SFileCreateFile(System_SFile::ARCHIVEREC* handle, const ch
     slot->m_locale = locale;
     slot->m_hashA = hashA;
     slot->m_platform = platform;
-    slot->unk_000B = 0;
+    slot->m_reserved = 0;
     slot->m_blockIndex = blockIndex;
 
     record->m_blockTable.push_back(entry);

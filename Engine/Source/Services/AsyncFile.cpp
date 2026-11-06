@@ -333,7 +333,7 @@ CAsyncObject* AsyncFileReadAllocObject() {
     CAsyncObject* object = AsyncFileRead::s_asyncFileReadFreeList.Head();
 
     if (!object) {
-        object = AsyncFileRead::s_asyncFileReadFreeList.NewNode(1, 0, 0);
+        object = AsyncFileRead::s_asyncFileReadFreeList.NewNode(TSLIST_LINK_AFTER, 0, 0);
     }
 
     object->m_link.Unlink();
@@ -351,7 +351,7 @@ CAsyncObject* AsyncFileReadAllocObject() {
     object->m_isCurrent = 0;
     object->m_char24 = 0;
     object->m_char25 = 0;
-    object->unk_001C = 0;
+    object->m_queuedFrame = 0;
     object->m_priority = 126;
 
     return object;
@@ -373,7 +373,7 @@ void AsyncFileReadLinkObject(CAsyncObject* object, int32_t urgent) {
 
     for (CAsyncObject* other = object->m_queue->m_readList.Head(); !object->m_queue->m_readList.IsEnd(other); other = object->m_queue->m_readList.RawNext(other)) {
         if (object->m_priority <= other->m_priority && (urgent || object->m_priority != other->m_priority)) {
-            object->m_queue->m_readList.LinkNode(object, 2, other);
+            object->m_queue->m_readList.LinkNode(object, TSLIST_LINK_BEFORE, other);
             object->m_char25 = 0;
             return;
         }
@@ -390,7 +390,7 @@ void AsyncFileReadLinkStaleObject(CAsyncObject* object, int32_t urgent) {
 
     for (CAsyncObject* other = object->m_queue->m_staleList.Head(); !object->m_queue->m_staleList.IsEnd(other); other = object->m_queue->m_staleList.RawNext(other)) {
         if (object->m_priority <= other->m_priority && (urgent || object->m_priority != other->m_priority)) {
-            object->m_queue->m_staleList.LinkNode(object, 2, other);
+            object->m_queue->m_staleList.LinkNode(object, TSLIST_LINK_BEFORE, other);
             object->m_char25 = 1;
             return;
         }
@@ -416,7 +416,7 @@ uint32_t STORMAPI AsyncFileReadThread(void* param) {
             CAsyncObject* object = queue->m_readList.Head();
 
             if (object) {
-                if (queue->m_frameLimited && g_theGxDevicePtr->m_frameCount - object->unk_001C > 3) {
+                if (queue->m_frameLimited && g_theGxDevicePtr->m_frameCount - object->m_queuedFrame > 3) {
                     AsyncFileReadLinkStaleObject(object, 1);
                     g_queueLock.Leave();
                     continue;
@@ -476,13 +476,13 @@ uint32_t STORMAPI AsyncFileReadThread(void* param) {
 // VERIFY: 1d3b9267 manual
 // OFFSET: 0x004BA8E0
 CAsyncQueue* AsyncFileReadCreateQueue() {
-    return s_asyncQueueList.NewNode(2, 0, 0);
+    return s_asyncQueueList.NewNode(TSLIST_LINK_BEFORE, 0, 0);
 }
 
 // VERIFY: 3de6d82d auto
 // OFFSET: 0x004BA980
 void AsyncFileReadCreateThread(CAsyncQueue* queue, const char* name) {
-    CAsyncThread* thread = s_asyncThreadList.NewNode(2, 0, 0);
+    CAsyncThread* thread = s_asyncThreadList.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     thread->m_queue = queue;
     thread->m_currentObject = nullptr;
     SThread::Create(AsyncFileReadThread, thread, thread->m_thread, const_cast<char*>(name), 0);
@@ -502,10 +502,10 @@ void AsyncFileReadInitialize(uint32_t threadSleep, uint32_t handlerTimeout) {
         s_handlerTimeout = 20;
     }
 
-    EventRegisterEx(EVENT_ID_POLL, AsyncFileReadPollHandler, nullptr, 0.0f);
+    EventRegisterEx(EVENT_ID_POLL, AsyncFileReadPollHandler, nullptr, EVENT_PRIORITY_NORMAL);
 
     if (SFile::IsStreamingMode()) {
-        EventRegisterEx(EVENT_ID_IDLE, NetQueuePromoteLocalFiles, nullptr, -1.0f);
+        EventRegisterEx(EVENT_ID_IDLE, NetQueuePromoteLocalFiles, nullptr, EVENT_PRIORITY_BELOW_NORMAL);
     }
 
     s_asyncWaitObject = nullptr;
@@ -549,7 +549,7 @@ void AsyncFileReadObject(CAsyncObject* object, int32_t urgent) {
 
     if (object == s_asyncWaitObject) {
         object->m_priority = object->m_priority > 127 ? 128 : 0;
-        object->unk_001C = g_theGxDevicePtr->m_frameCount;
+        object->m_queuedFrame = g_theGxDevicePtr->m_frameCount;
         queue->m_readList.LinkToHead(object);
         object->m_char25 = 0;
     } else if (queue->m_frameLimited) {
@@ -568,7 +568,7 @@ void AsyncFileReadObject(CAsyncObject* object, int32_t urgent) {
 // VERIFY: 2f496060 auto
 // OFFSET: 0x004BAC20
 void AsyncFileReadIncreasePriority(CAsyncObject* object) {
-    object->unk_001C = g_theGxDevicePtr->m_frameCount;
+    object->m_queuedFrame = g_theGxDevicePtr->m_frameCount;
 
     if (object->m_char25) {
         AsyncFileReadLinkObject(object, 1);

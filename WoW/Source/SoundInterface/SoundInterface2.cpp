@@ -1,4 +1,6 @@
 #include <cstddef>
+#include "WoW/Common/Types.h"
+#include "WoW/Source/WorldClient/WorldConstants.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -33,7 +35,20 @@
 #include "WoW/Source/WorldClient/World.h"
 
 // STATIC: 0x00B24180
-static const char* s_raceFileNames[] = { nullptr, "Human", "Orc", "Dwarf", "NightElf", "Scourge", "Tauren", "Gnome", "Troll", "Goblin", "BloodElf", "Draenei" };
+static const char* s_raceFileNames[NUM_PLAYABLE_RACES] = {
+    nullptr,
+    "Human",    // RACE_HUMAN
+    "Orc",      // RACE_ORC
+    "Dwarf",    // RACE_DWARF
+    "NightElf", // RACE_NIGHT_ELF
+    "Scourge",  // RACE_UNDEAD
+    "Tauren",   // RACE_TAUREN
+    "Gnome",    // RACE_GNOME
+    "Troll",    // RACE_TROLL
+    "Goblin",   // RACE_GOBLIN
+    "BloodElf", // RACE_BLOOD_ELF
+    "Draenei",  // RACE_DRAENEI
+};
 
 // STATIC: 0x009F2010
 const char SI2::s_channelGroupNames[18][32] = {
@@ -92,7 +107,7 @@ TSGrowableArray<uint32_t> SI2::s_suppressors;
 static const char* s_savedVoiceSession;
 
 // STATIC: 0x00AC3860
-static int32_t s_savedVoiceSessionType = 4;
+static int32_t s_savedVoiceSessionType = COMSATDATA::SESSION_TYPE::NONE;
 
 // STATIC: 0x00B4A3E4
 static float s_chaosRestartTimer;
@@ -140,9 +155,9 @@ void SE2SoundKitProperties::ResetToDefaults() {
     this->m_group = 0;
     this->m_selectMode = 2;
     this->m_maxDistance = -1.0f;
-    this->m_loopMode = 0;
+    this->m_loopMode = SE2_LOOP_MODE_DEFAULT;
     this->m_muteFadeSpeed = 0.5f;
-    this->m_suppressorMode = 0;
+    this->m_suppressorMode = SE2_SUPPRESSOR_MODE_DEFAULT;
     this->m_decodeBufferSize = 0;
     this->m_maxAudibleBehavior = 1;
     this->m_coneInsideAngle = 360.0f;
@@ -371,7 +386,7 @@ int32_t SI2::OnFocusChanged(const void* data, void* param) {
         if (CGGameUI::m_initialized && enableVoiceChat && enableVoiceChat->m_intValue && s_savedVoiceSession) {
             CGChat::SetActiveVoiceSession(s_savedVoiceSession, s_savedVoiceSessionType, -1);
             s_savedVoiceSession = nullptr;
-            s_savedVoiceSessionType = 4;
+            s_savedVoiceSessionType = COMSATDATA::SESSION_TYPE::NONE;
         }
     } else if (s_enableSoundWhenGameIsInBG->m_intValue) {
         SE2::MuteAllSound(false);
@@ -382,7 +397,7 @@ int32_t SI2::OnFocusChanged(const void* data, void* param) {
 
         if (CGGameUI::m_initialized && !s_savedVoiceSession) {
             s_savedVoiceSession = CGChat::GetChannelStringForDisplay(CGChat::GetActiveVoiceSession(), &s_savedVoiceSessionType);
-            CGChat::SetActiveVoiceSession(nullptr, 4, -1);
+            CGChat::SetActiveVoiceSession(nullptr, COMSATDATA::SESSION_TYPE::NONE, -1);
         }
     }
 
@@ -592,11 +607,11 @@ int32_t SI2ZoneSoundPair::GetPlayingSoundKitId() {
 // OFFSET: 0x004C6450
 void SI2ZoneSoundPair::Stop(int32_t immediate) {
     SI2::StopSound(&this->m_sounds[this->m_current].m_object, immediate, -1.0f, 1);
-    this->m_sounds[this->m_current].m_type = 13;
+    this->m_sounds[this->m_current].m_type = SI2::ZONE_SOUND_TYPE::SOURCE_NONE;
     this->m_sounds[this->m_current].m_soundKitId = 0;
 
     SI2::StopSound(&this->m_sounds[this->m_next].m_object, immediate, -1.0f, 1);
-    this->m_sounds[this->m_next].m_type = 13;
+    this->m_sounds[this->m_next].m_type = SI2::ZONE_SOUND_TYPE::SOURCE_NONE;
     this->m_sounds[this->m_next].m_soundKitId = 0;
 }
 
@@ -607,7 +622,7 @@ SI2SoundUserData::SI2SoundUserData() {
     this->m_soundKitId = 0;
     this->m_def = nullptr;
     this->m_group = 0;
-    this->unk_0014 = 0;
+    this->unused_0014 = 0;
     this->m_advancedId = 0;
 }
 
@@ -618,7 +633,7 @@ SI2SoundUserData::~SI2SoundUserData() {
     this->m_soundKitId = 0;
     this->m_def = nullptr;
     this->m_group = 0;
-    this->unk_0014 = 0;
+    this->unused_0014 = 0;
     this->m_advancedId = 0;
 }
 
@@ -732,11 +747,11 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
         return 9;
     }
 
-    if (properties->m_suppressorMode == 2) {
+    if (properties->m_suppressorMode == SE2_SUPPRESSOR_MODE_HONOR) {
         def->m_flags |= 0x20;
     }
 
-    if (properties->m_suppressorMode == 1) {
+    if (properties->m_suppressorMode == SE2_SUPPRESSOR_MODE_IGNORE) {
         def->m_flags &= ~0x20u;
     }
 
@@ -759,7 +774,7 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
         }
     } else {
         sound = &localSound;
-        properties->m_loopMode = 2;
+        properties->m_loopMode = SE2_LOOP_MODE_NONLOOPING;
     }
 
     const char* file = def->SelectFile(properties->m_selectMode, nullptr, properties->m_fileIndex, GetDownloadPriority(properties->m_group));
@@ -795,9 +810,9 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
 
     int32_t looping = 0;
 
-    if (properties->m_loopMode == 0) {
+    if (properties->m_loopMode == SE2_LOOP_MODE_DEFAULT) {
         looping = def->m_flags & 0x200;
-    } else if (properties->m_loopMode == 1) {
+    } else if (properties->m_loopMode == SE2_LOOP_MODE_LOOPING) {
         looping = 1;
     }
 
@@ -816,7 +831,7 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
     SE2::SetSoundGroupMaxAudibleBehavior(def->m_soundGroup, properties->m_maxAudibleBehavior, properties->m_muteFadeSpeed);
 
     if (def->m_advanced && !advancedId) {
-        SI2::AddAdvancedSound(def->m_advanced, soundKitId, position, properties->m_coneOrientation, object, 0, 0, checkDistance, properties->m_loopMode == 1);
+        SI2::AddAdvancedSound(def->m_advanced, soundKitId, position, properties->m_coneOrientation, object, 0, 0, checkDistance, properties->m_loopMode == SE2_LOOP_MODE_LOOPING);
         return 0;
     }
 
@@ -910,7 +925,7 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
 // VERIFY: 4ec0a358 manual
 // OFFSET: 0x004C7140
 int32_t SI2ZoneSoundPair::Transition(int32_t soundKitId, int32_t type, SE2SoundKitProperties* properties, int32_t immediate, float fadeOutTime) {
-    if (type >= 11) {
+    if (type >= SI2::ZONE_SOUND_TYPE::NUM_SOURCE_SLOTS) {
         SI2::StopSound(&this->m_sounds[this->m_current].m_object, 0, -1.0f, 1);
         this->m_sounds[this->m_current].m_type = type;
         this->m_sounds[this->m_current].m_soundKitId = 0;
@@ -982,7 +997,7 @@ int32_t SI2ZoneSoundPair::Transition(int32_t soundKitId, int32_t type, SE2SoundK
 // OFFSET: 0x004C7410
 SE2SoundKitObject::SE2SoundKitObject() {
     this->m_advancedId = 0;
-    this->unk_0010 = 0;
+    this->unused_0010 = 0;
 }
 
 // VERIFY: 19a1e756 auto
@@ -1014,7 +1029,7 @@ int32_t SI2::PlaySoundKit(const char* name, const C3Vector* position, SE2SoundKi
 int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
     static CVar* s_chaosMode = CVar::Lookup("Sound_ChaosMode");
 
-    int32_t mode = 0;
+    int32_t mode = CHAOS_MODE::MODE_IDLE;
 
     if (s_chaosMode) {
         mode = s_chaosMode->m_intValue;
@@ -1041,19 +1056,19 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
     SE2SoundKitProperties properties;
     properties.ResetToDefaults();
     properties.m_volumeScale = 0.3f;
-    properties.m_loopMode = 2;
+    properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
     properties.m_streaming = false;
     properties.m_blockMusicFiles = 1;
 
     SE2SoundKitProperties loopProperties;
     loopProperties.ResetToDefaults();
     loopProperties.m_volumeScale = 0.3f;
-    loopProperties.m_loopMode = 1;
+    loopProperties.m_loopMode = SE2_LOOP_MODE_LOOPING;
     loopProperties.m_streaming = false;
     loopProperties.m_blockMusicFiles = 1;
 
     switch (mode) {
-        case 2:
+        case CHAOS_MODE::MODE_STREAMED_AND_NORMAL_3D:
             if (s_chaosElapsedMs < 100) {
                 break;
             }
@@ -1062,7 +1077,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             position = RandomListenerOffset();
             SI2::PlaySoundKit(static_cast<int32_t>((static_cast<uint64_t>(CRandom::uint32_(g_rndSeed)) * s_maxSoundKitId) >> 32), &position, nullptr, &properties, 0, nullptr, 1, 0);
 
-        case 1:
+        case CHAOS_MODE::MODE_RANDOM_3D:
             if (s_chaosElapsedMs >= 100) {
                 properties.m_streaming = false;
                 position = RandomListenerOffset();
@@ -1072,7 +1087,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
 
             break;
 
-        case 13:
+        case CHAOS_MODE::MODE_STREAMED_AND_NORMAL_2D_3D:
             if (s_chaosElapsedMs < 100) {
                 break;
             }
@@ -1084,7 +1099,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             position = RandomListenerOffset();
             SI2::PlaySoundKit(static_cast<int32_t>((static_cast<uint64_t>(CRandom::uint32_(g_rndSeed)) * s_maxSoundKitId) >> 32), &position, nullptr, &properties, 0, nullptr, 1, 0);
 
-        case 12:
+        case CHAOS_MODE::MODE_STREAMED_AND_NORMAL_2D:
             if (s_chaosElapsedMs < 100) {
                 break;
             }
@@ -1092,7 +1107,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             properties.m_streaming = true;
             SI2::PlaySoundKit(static_cast<int32_t>((static_cast<uint64_t>(CRandom::uint32_(g_rndSeed)) * s_maxSoundKitId) >> 32), nullptr, nullptr, &properties, 0, nullptr, 1, 0);
 
-        case 11:
+        case CHAOS_MODE::MODE_RANDOM_2D:
             if (s_chaosElapsedMs >= 100) {
                 properties.m_streaming = false;
                 SI2::PlaySoundKit(static_cast<int32_t>((static_cast<uint64_t>(CRandom::uint32_(g_rndSeed)) * s_maxSoundKitId) >> 32), nullptr, nullptr, &properties, 0, nullptr, 1, 0);
@@ -1101,13 +1116,13 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
 
             break;
 
-        case 4:
+        case CHAOS_MODE::MODE_EXTRA_NULL_POSITION_PLAY_STOP:
             SI2::PlaySoundKit(soundKitId, nullptr, &s_object2D, &properties, 0, nullptr, 1, 0);
             SI2::StopSound(&s_object2D, 1, -1.0f, 1);
             SI2::PlaySoundKit(soundKitId, nullptr, &s_object3D, &properties, 0, nullptr, 1, 0);
             SI2::StopSound(&s_object3D, 1, -1.0f, 1);
 
-        case 3:
+        case CHAOS_MODE::MODE_PLAY_STOP_2D_3D:
             SI2::PlaySoundKit(soundKitId, nullptr, &s_object2D, &properties, 0, nullptr, 1, 0);
             SI2::StopSound(&s_object2D, 1, -1.0f, 1);
             position = RandomListenerOffset();
@@ -1115,7 +1130,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             SI2::StopSound(&s_object3D, 1, -1.0f, 1);
             break;
 
-        case 5:
+        case CHAOS_MODE::MODE_BURST_80_2D:
             s_chaosTimer += elapsed;
 
             if (s_chaosTimer <= 1.0f) {
@@ -1129,7 +1144,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             s_chaosTimer = 0.0f;
             break;
 
-        case 6:
+        case CHAOS_MODE::MODE_BURST_80_3D:
             s_chaosTimer += elapsed;
 
             if (s_chaosTimer <= 1.0f) {
@@ -1144,7 +1159,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             s_chaosTimer = 0.0f;
             break;
 
-        case 7:
+        case CHAOS_MODE::MODE_FILL_80_LOOPS_3D:
             s_chaosTimer += elapsed;
 
             if (s_chaosTimer <= 1.0f) {
@@ -1161,7 +1176,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             s_chaosTimer = 0.0f;
             break;
 
-        case 8:
+        case CHAOS_MODE::MODE_ALERT_FILE:
             s_chaosTimer += elapsed;
 
             if (s_chaosTimer <= 0.05f) {
@@ -1173,7 +1188,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             s_chaosTimer = 0.0f;
             break;
 
-        case 9:
+        case CHAOS_MODE::MODE_RESTART:
             s_chaosRestartTimer += elapsed;
 
             if (s_chaosRestartTimer <= 10.0f) {
@@ -1192,7 +1207,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
 
             break;
 
-        case 10:
+        case CHAOS_MODE::MODE_RANDOM_PAIR_3D_AND_RESTART:
             s_chaosRestartTimer += elapsed;
 
             if (s_chaosElapsedMs < 100) {
@@ -1221,7 +1236,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
 
             break;
 
-        case 14: {
+        case CHAOS_MODE::MODE_REPEATED_KIT_3D_AND_RESTART: {
             s_chaosRestartTimer += elapsed;
 
             if (s_chaosElapsedMs < 100) {
@@ -1253,7 +1268,7 @@ int32_t SI2::ChaosModeUpdate(const void* data, void* param) {
             break;
         }
 
-        case 15: {
+        case CHAOS_MODE::MODE_SHARED_OBJECT_SELECTED_KITS: {
             int32_t ids[3] = { 13061, 15969, 12173 };
 
             position = RandomListenerOffset();
@@ -1412,10 +1427,10 @@ void SI2::PlaySpellFizzleSound(uint32_t spellId, const void* object) {
 // VERIFY: d94cc51b manual
 // OFFSET: 0x004C6710
 void SI2::ForceUpdateZoneSounds() {
-    CGObject_C* unit = ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPEMASK_UNIT, __FILE__, __LINE__);
+    CGObject_C* unit = ClntObjMgrObjectPtr(CGUnit_C::s_activeMover, TYPE_UNIT, __FILE__, __LINE__);
 
     if (!unit) {
-        unit = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__);
+        unit = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__);
 
         if (!unit) {
             return;
@@ -1456,7 +1471,7 @@ void SI2::ForceUpdateZoneSounds() {
 // VERIFY: 34fea195 manual
 // OFFSET: 0x004C5D60
 bool SI2::GetObjectPosition(uint64_t guid, C3Vector* position) {
-    CGObject_C* object = ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    CGObject_C* object = ClntObjMgrObjectPtr(WOWGUID{ guid }, TYPE_OBJECT, __FILE__, __LINE__);
 
     if (object) {
         *position = object->GetPosition();
@@ -1469,7 +1484,7 @@ bool SI2::GetObjectPosition(uint64_t guid, C3Vector* position) {
 // OFFSET: 0x004C6810
 int32_t SI2::GetChunkLocation(int32_t* mapId, int32_t* chunkX, int32_t* chunkY, int32_t* subchunkX, int32_t* subchunkY) {
     *mapId = World::QueryMapId();
-    CGObject_C* player = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPEMASK_PLAYER, __FILE__, __LINE__);
+    CGObject_C* player = ClntObjMgrObjectPtr(ClntObjMgrGetActivePlayer(), TYPE_PLAYER, __FILE__, __LINE__);
 
     if (!player) {
         return 0;
@@ -1477,9 +1492,9 @@ int32_t SI2::GetChunkLocation(int32_t* mapId, int32_t* chunkX, int32_t* chunkY, 
 
     C3Vector position = player->GetPosition();
     float x = -(position.x - 17066.666f);
-    float y = -(position.y - 17066.666f) * 0.029999999f;
+    float y = -(position.y - 17066.666f) * OO_COORD_TO_CHUNK;
     *subchunkX = CMath::fint_(y - s_subchunkRound);
-    x *= 0.029999999f;
+    x *= OO_COORD_TO_CHUNK;
     *subchunkY = CMath::fint_(x - s_subchunkRound);
     *chunkX = (*subchunkX >> 4) & 0x3F;
     *chunkY = (*subchunkY >> 4) & 0x3F;
@@ -1491,8 +1506,8 @@ int32_t SI2::GetChunkLocation(int32_t* mapId, int32_t* chunkX, int32_t* chunkY, 
 // VERIFY: a83589e1 manual
 // OFFSET: 0x004CDA20
 void SI2::DK_GetPlayerFilterName(CGUnit_C* unit, char* name, uint32_t size) {
-    uint8_t race = unit->m_unit->m_unitFieldBytes0[0];
-    SStrPrintf(name, size, "Death Knight %s %s", s_raceFileNames[race], unit->m_unit->m_unitFieldBytes0[2] ? "Female" : "Male");
+    uint8_t race = unit->m_unit->m_raceID;
+    SStrPrintf(name, size, "Death Knight %s %s", s_raceFileNames[race], unit->m_unit->m_sex ? "Female" : "Male");
 }
 
 // VERIFY: 8858e33e auto

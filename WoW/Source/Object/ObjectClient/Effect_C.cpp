@@ -1,4 +1,6 @@
+#include "Engine/Source/Os/TimeManager.h"
 #include "Effect_C.h"
+#include "WoW/Source/Object/Types.h"
 #include <cstring>
 #include <cmath>
 #include "Engine/Source/Storm/H/storm.h"
@@ -15,6 +17,7 @@
 #include "WoW/Source/ObjectMgrClient/ObjectMgrClient.h"
 #include "Engine/Source/ConsoleBase/ConsoleVar.h"
 #include "WoW/Source/DB/Rec/SpellVisualKitRec.h"
+#include "WoW/Source/Magic/MagicClient/SpellEnums.h"
 #include "WoW/Source/Magic/MagicClient/SpellVisuals.h"
 #include "WoW/Source/Ui/GameUI.h"
 #include "WoW/Source/DB/DBClient/DBCacheInstances.h"
@@ -139,7 +142,7 @@ void CEffect::SetEmissionRateIgnoresDistance(int32_t ignore) {
     for (uint32_t i = 0; ; i++) {
         CM2Model* model = this->m_model;
 
-        if (!(model->m_fFlags & 0x1)) {
+        if (!(model->m_runtimeFlags & 0x1)) {
             model->WaitForLoad(nullptr);
         }
 
@@ -149,16 +152,16 @@ void CEffect::SetEmissionRateIgnoresDistance(int32_t ignore) {
 
         model = this->m_model;
 
-        if (!(model->m_fFlags & 0x1)) {
+        if (!(model->m_runtimeFlags & 0x1)) {
             model->WaitForLoad(nullptr);
         }
 
         CParticleEmitter2* emitter = model->m_particleEmitters[i];
 
         if (ignore) {
-            emitter->m_flags |= 0x400000;
+            emitter->m_flags |= CParticleEmitter2::RUNTIME_FLAGS::IGNORE_DISTANCE;
         } else {
-            emitter->m_flags &= ~0x400000;
+            emitter->m_flags &= ~CParticleEmitter2::RUNTIME_FLAGS::IGNORE_DISTANCE;
         }
     }
 }
@@ -245,13 +248,13 @@ void CEffect::AddFishingLine(CGObject_C* object, const WOWGUID& target) {
 
     CM2Model* line = model->m_attachList;
 
-    while (line && line->m_attachmentId != 1) {
+    while (line && line->m_attachmentId != MODEL_ATTACHMENT_ID::ATTACH_HANDR) {
         line = line->m_attachNext;
     }
 
     this->m_lineModel = line;
     line->m_refCount++;
-    this->m_lineModel->m_fFlags |= 0x20;
+    this->m_lineModel->m_runtimeFlags |= 0x20;
     this->m_lineModel->m_drawCallback = &CEffect::DrawFishingString;
     this->m_lineModel->m_drawArg = this;
     this->m_sourceGuid = object->m_obj->m_guid;
@@ -261,7 +264,7 @@ void CEffect::AddFishingLine(CGObject_C* object, const WOWGUID& target) {
 // VERIFY: 9ce5579d manual
 // OFFSET: 0x006F9D70
 CEffect::CEffect() {
-    this->m_attachmentId = -1;
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
     this->m_model = nullptr;
     this->m_lineModel = nullptr;
     this->m_sourceGuid = WOWGUID();
@@ -269,7 +272,7 @@ CEffect::CEffect() {
     this->m_spellId = 0;
     this->m_kitRec = nullptr;
     this->m_effectNameRec = nullptr;
-    this->m_flags = 0;
+    this->m_flags = EFFECT_FLAGS::EFFECT_NONE;
     this->m_lightning[0] = nullptr;
     this->m_lightning[1] = nullptr;
     this->m_lightning[2] = nullptr;
@@ -282,25 +285,25 @@ CEffect::CEffect() {
     this->m_lightning[9] = nullptr;
     this->m_lightning[10] = nullptr;
     this->m_lightning[11] = nullptr;
-    this->unk_0080 = 0;
-    this->unk_0084 = 0;
+    this->unknown_0080 = 0;
+    this->unknown_0084 = 0;
     this->m_facing = 0.0f;
-    this->unk_008C = -1;
+    this->m_lightningAttachment = -1;
     this->m_mountTransition = nullptr;
     this->m_pendingCacheId = 0;
     this->m_displayId = 0;
     this->m_itemSlot = 12;
-    this->unk_00A0 = 0;
+    this->m_fadeTime = 0;
     this->m_transportGuid = WOWGUID();
-    this->unk_00C8 = 0;
+    this->m_startTime = 0;
     this->m_expireTime = 0;
     this->unk_00D0 = 0;
     this->m_attachToModel = 0;
     this->m_attachToMount = 0;
-    this->unk_00DC = 0;
-    this->unk_00E0 = 0.0f;
-    this->unk_00E4 = 0.0f;
-    this->unk_00E8 = 0.0f;
+    this->unknown_00DC = 0;
+    this->unknown_00E0 = 0.0f;
+    this->unknown_00E4 = 0.0f;
+    this->m_alpha = 0.0f;
     this->m_mapEntity = nullptr;
     this->m_refCount = 1;
     this->m_lightningRefCount = 0;
@@ -327,7 +330,7 @@ void CEffect::Release() {
 // VERIFY: 07c58fd0 manual
 // OFFSET: 0x006F7C40
 void CEffect::InitFromUnit(C3Vector position, uint32_t time, int32_t spellId, const SpellVisualKitRec* kit, const SpellVisualEffectNameRec* effectName, const WOWGUID* guid, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), uint32_t a9, const SpellVisualKitModelAttachRec* attach, WOWGUID transport) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -336,12 +339,12 @@ void CEffect::InitFromUnit(C3Vector position, uint32_t time, int32_t spellId, co
     this->m_effectNameRec = effectName;
     this->m_sourceGuid = *guid;
     this->m_position = position;
-    this->m_flags = flags | 0x8002;
+    this->m_flags = flags | (EFFECT_FLAGS::EFFECT_WORLD_SPACE | EFFECT_FLAGS::EFFECT_FIXED_FACING);
     this->m_transportGuid = transport;
     this->m_kitRec = kit;
     this->m_spellId = spellId;
-    this->unk_00C8 = time;
-    this->unk_00A0 = a9;
+    this->m_startTime = time;
+    this->m_fadeTime = a9;
     this->m_facing = unit->GetSmoothFacing();
     this->m_attachRec = attach;
     this->m_model = World::s_m2Scene->CreateModel(this->m_effectNameRec->m_fileName, 0);
@@ -349,10 +352,10 @@ void CEffect::InitFromUnit(C3Vector position, uint32_t time, int32_t spellId, co
     if (this->m_model) {
         this->m_refCount++;
         this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-        this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
 
-        if (this->m_flags & 0x400000) {
+        if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
             this->SetEmissionRateIgnoresDistance(1);
         }
     }
@@ -365,25 +368,25 @@ void CEffect::InitFromUnit(C3Vector position, uint32_t time, int32_t spellId, co
 void CEffect::CreateModelFromEffect(CM2Model* model, void* arg) {
     CEffect* effect = static_cast<CEffect*>(arg);
 
-    if (effect->m_flags & 0x400000) {
+    if (effect->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
         effect->SetEmissionRateIgnoresDistance(1);
     }
 
-    model->SetBoneSequence(0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 1.0f, 1, 1);
+    model->SetBoneSequence(0xFFFFFFFF, ANIM_EFFECT_STAND, 0xFFFFFFFF, 0, 1.0f, 1, 1);
 }
 
 // VERIFY: 392d7fa2 manual
 // OFFSET: 0x006F7B00
 void CEffect::EffectEvent(CM2Model* model, uint32_t boneId, uint32_t eventId, uint32_t data, const C3Vector* position, uint32_t time, uint64_t param) {
     CEffect* effect = reinterpret_cast<CEffect*>(static_cast<uintptr_t>(param));
-    CGUnit_C* object = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(effect->m_targetGuid, TYPEMASK_OBJECT, __FILE__, __LINE__));
+    CGUnit_C* object = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(effect->m_targetGuid, TYPE_OBJECT, __FILE__, __LINE__));
 
     if (!object) {
         return;
     }
 
-    if (eventId == 0x444E5324) {
-        if ((object->m_obj->m_type & 0x8) && object->IsActiveMover()) {
+    if (eventId == M2_EVENT_ID::PlaySoundKit_SND) {
+        if ((object->m_obj->m_type & TYPE_UNIT) && object->IsActiveMover()) {
             SE2SoundKitProperties properties;
             properties.ResetToDefaults();
 
@@ -401,10 +404,10 @@ void CEffect::EffectEvent(CM2Model* model, uint32_t boneId, uint32_t eventId, ui
             SI2::PlaySoundKit(data, position, &effect->m_soundKitObject, nullptr, 0, nullptr, 1, 0);
         }
 
-        if (!(effect->m_flags & 0x200000)) {
+        if (!(effect->m_flags & EFFECT_FLAGS::EFFECT_DETACHED_SOUND)) {
             SI2::AttachToObject(&effect->m_soundKitObject, object->m_obj->m_guid);
         }
-    } else if (eventId == 0x54494824 && (object->m_obj->m_type & 0x8)) {
+    } else if (eventId == M2_EVENT_ID::PlayWoundAnimKit_HIT && (object->m_obj->m_type & TYPE_UNIT)) {
         object->PlayWoundAnimKit(0);
     }
 }
@@ -412,7 +415,7 @@ void CEffect::EffectEvent(CM2Model* model, uint32_t boneId, uint32_t eventId, ui
 // VERIFY: ac84d6f6 manual
 // OFFSET: 0x006F94C0
 void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKitRec* kit, const SpellVisualEffectNameRec* effectName, const WOWGUID* target, const WOWGUID* source, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), const C3Vector* position, uint32_t a10, const SpellVisualKitModelAttachRec* attach) {
-    CGObject_C* object = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(*source, TYPEMASK_OBJECT, __FILE__, __LINE__));
+    CGObject_C* object = static_cast<CGObject_C*>(ClntObjMgrObjectPtr(*source, TYPE_OBJECT, __FILE__, __LINE__));
 
     if (!object) {
         return;
@@ -421,7 +424,7 @@ void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKi
     this->m_effectNameRec = effectName;
     CEffect::DestroyMatchingEffects(object, effectName, attachType, spellId, kit ? kit->m_id : 0, attach);
 
-    if (attachType == -1) {
+    if (attachType == MODEL_ATTACHMENT_ID::ATTACH_NONE) {
         DebugLog("**** CEffect::AddEffect called with ATTACH_NONE\n");
     }
 
@@ -429,7 +432,7 @@ void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKi
     this->m_sourceGuid = *target;
     this->m_targetGuid = *source;
     this->m_kitRec = kit;
-    this->unk_00A0 = a10;
+    this->m_fadeTime = a10;
     this->m_attachRec = attach;
     this->m_spellId = spellId;
     this->m_effectNameRec = effectName;
@@ -437,7 +440,7 @@ void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKi
 
     if (position) {
         this->m_offset = *position;
-        this->m_flags = flags | 0x10000;
+        this->m_flags = flags | EFFECT_FLAGS::EFFECT_ATTACHMENT_OFFSET;
     }
 
     this->m_model = World::s_m2Scene->CreateModel(effectName->m_fileName, 0);
@@ -445,10 +448,10 @@ void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKi
     if (this->m_model) {
         this->m_refCount++;
         this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-        this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
 
-        if (this->m_flags & 0x400000) {
+        if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
             this->SetEmissionRateIgnoresDistance(1);
         }
     }
@@ -459,7 +462,7 @@ void CEffect::AddEffect(int32_t attachType, int32_t spellId, const SpellVisualKi
 // VERIFY: 2eb5c934 auto
 // OFFSET: 0x006F8A60
 void __stdcall CEffect::DestroyMatchingEffects(CGObject_C* object, const SpellVisualEffectNameRec* effectName, int32_t attachType, int32_t spellId, int32_t kitId, const SpellVisualKitModelAttachRec* attach) {
-    if (attachType == -1) {
+    if (attachType == MODEL_ATTACHMENT_ID::ATTACH_NONE) {
         return;
     }
 
@@ -478,17 +481,17 @@ void __stdcall CEffect::DestroyMatchingEffects(CGObject_C* object, const SpellVi
 
 // VERIFY: 25c89a39 manual
 // OFFSET: 0x006F7E40
-void CEffect::AddSoundEffect(int32_t soundId, int32_t a2, int32_t spellId, const C3Vector* position, CGObject_C* object, uint32_t a6) {
+void CEffect::AddSoundEffect(int32_t soundId, int32_t expireTime, int32_t spellId, const C3Vector* position, CGObject_C* object, uint32_t fadeTime) {
     if (!object) {
         return;
     }
 
     this->LinkTo(&object->m_effectList);
     this->m_refCount++;
-    this->m_expireTime = a2;
+    this->m_expireTime = expireTime;
     this->m_spellId = spellId;
     this->m_sourceGuid = object->m_obj->m_guid;
-    this->unk_00A0 = a6;
+    this->m_fadeTime = fadeTime;
 
     const C3Vector* soundPosition = position;
 
@@ -502,12 +505,12 @@ void CEffect::AddSoundEffect(int32_t soundId, int32_t a2, int32_t spellId, const
     SE2SoundKitProperties properties;
     properties.ResetToDefaults();
 
-    if (this->m_flags & 0x1) {
-        properties.m_loopMode = 1;
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_SOUND_LOOPING) {
+        properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
         properties.m_noRandomStart = 1;
     } else {
         properties.m_maxAudibleBehavior = 0;
-        properties.m_loopMode = 2;
+        properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
 
         if (CGUnit_C::s_activeMover == this->m_sourceGuid) {
             properties.m_priority = 110;
@@ -516,17 +519,17 @@ void CEffect::AddSoundEffect(int32_t soundId, int32_t a2, int32_t spellId, const
 
     SI2::PlaySoundKit(soundId, soundPosition, &this->m_soundKitObject, &properties, 0, nullptr, 1, 0);
 
-    if (!(this->m_flags & 0x200000)) {
+    if (!(this->m_flags & EFFECT_FLAGS::EFFECT_DETACHED_SOUND)) {
         SI2::AttachToObject(&this->m_soundKitObject, object->m_obj->m_guid);
     }
 
-    this->m_flags |= 0x100800;
+    this->m_flags |= (EFFECT_FLAGS::EFFECT_POST_INITIALIZED | EFFECT_FLAGS::EFFECT_SOUND_ONLY);
 }
 
 // VERIFY: 561572d5 manual
 // OFFSET: 0x006F7FD0
-void CEffect::AddAnimKitEffect(int32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags, uint32_t a5) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+void CEffect::AddAnimKitEffect(int32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags, uint32_t fadeTime) {
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -536,13 +539,13 @@ void CEffect::AddAnimKitEffect(int32_t spellId, const SpellVisualKitRec* kit, co
     this->m_refCount++;
     this->m_spellId = spellId;
     this->m_sourceGuid = *guid;
-    this->m_flags |= flags | 0x800;
+    this->m_flags |= flags | EFFECT_FLAGS::EFFECT_POST_INITIALIZED;
     this->m_kitRec = kit;
-    this->unk_00A0 = a5;
+    this->m_fadeTime = fadeTime;
 }
 
 // STATIC: 0x00A32AF4
-static const int32_t s_specialUnitEffectAttachments[] = { 50, 50, 17, 17, 19, 19, 19, 17, 19, 19, 34, 19 };
+static const int32_t s_specialUnitEffectAttachments[] = { MODEL_ATTACHMENT_ID::NUM_ATTACH_SLOTS, MODEL_ATTACHMENT_ID::NUM_ATTACH_SLOTS, MODEL_ATTACHMENT_ID::ATTACH_BREATH, MODEL_ATTACHMENT_ID::ATTACH_BREATH, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, MODEL_ATTACHMENT_ID::ATTACH_BREATH, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, MODEL_ATTACHMENT_ID::ATTACH_TORSOSPELL, MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE };
 
 // VERIFY: f48d6796 auto
 // OFFSET: 0x006F8F40
@@ -555,25 +558,25 @@ void CEffect::ReleaseLightningRef() {
 // VERIFY: e6c5c900 manual
 // OFFSET: 0x006F9260
 void CEffect::AddSpecialEffect(int32_t type, const WOWGUID& target, void (*callback)(CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint64_t param)) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(target, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (!unit || static_cast<uint32_t>(type) >= 12) {
+    if (!unit || static_cast<uint32_t>(type) >= NUM_UNITEFFECTSPECIALS) {
         return;
     }
 
     int32_t attachment = s_specialUnitEffectAttachments[type];
 
-    if (attachment == 50 || !unit->m_worldModel) {
+    if (attachment == MODEL_ATTACHMENT_ID::NUM_ATTACH_SLOTS || !unit->m_worldModel) {
         return;
     }
 
     this->m_sourceGuid = target;
     this->m_targetGuid = target;
-    this->m_flags = 0;
+    this->m_flags = EFFECT_FLAGS::EFFECT_NONE;
     this->m_attachmentId = attachment;
 
     if (unit->m_worldModel->IsLoaded(0, 0) && !unit->m_worldModel->HasAttachment(this->m_attachmentId)) {
-        this->m_attachmentId = 19;
+        this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE;
     }
 
     this->m_effectNameRec = g_spellVisualEffectNameDB.GetRecord(s_specialUnitEffectIDs[type]);
@@ -583,8 +586,8 @@ void CEffect::AddSpecialEffect(int32_t type, const WOWGUID& target, void (*callb
     if (this->m_model) {
         this->m_refCount++;
         this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-        this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
     }
 
     this->LinkTo(&unit->m_effectList);
@@ -593,7 +596,7 @@ void CEffect::AddSpecialEffect(int32_t type, const WOWGUID& target, void (*callb
 // VERIFY: 3f5d1803 manual
 // OFFSET: 0x006F93A0
 void CEffect::AddSpecialByPosition(int32_t type, C3Vector position, const WOWGUID* guid, uint32_t flags, void (*callback)(CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint64_t param)) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -601,7 +604,7 @@ void CEffect::AddSpecialByPosition(int32_t type, C3Vector position, const WOWGUI
 
     this->m_sourceGuid = *guid;
     this->m_position.x = position.x;
-    this->m_flags = flags | 2;
+    this->m_flags = flags | EFFECT_FLAGS::EFFECT_WORLD_SPACE;
     this->m_position.y = position.y;
     this->m_position.z = position.z;
     this->m_transportGuid = WOWGUID();
@@ -611,10 +614,10 @@ void CEffect::AddSpecialByPosition(int32_t type, C3Vector position, const WOWGUI
     if (this->m_model) {
         this->m_refCount++;
         this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-        this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
 
-        if (this->m_flags & 0x400000) {
+        if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
             this->SetEmissionRateIgnoresDistance(1);
         }
     }
@@ -652,12 +655,12 @@ void CEffect::ApplyItemVisualByItemId(int32_t id, const WOWGUID& guid, void* par
 // VERIFY: 57136c38 manual
 // OFFSET: 0x006F8700
 void CEffect::ClearItemVisualEffect() {
-    if (!(this->m_flags & 0x80000)) {
+    if (!(this->m_flags & EFFECT_FLAGS::EFFECT_ITEM_VISUAL)) {
         return;
     }
 
     if (this->m_itemSlot < 12) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             if (unit->m_characterComponent) {
@@ -675,7 +678,7 @@ void CEffect::ClearItemVisualEffect() {
         this->m_pendingCacheId = 0;
     }
 
-    this->m_flags &= 0x80000;
+    this->m_flags &= EFFECT_FLAGS::EFFECT_ITEM_VISUAL;
     this->m_itemSlot = 12;
 }
 
@@ -683,10 +686,10 @@ void CEffect::ClearItemVisualEffect() {
 // OFFSET: 0x006F87C0
 void CEffect::MoveToDestroyList() {
     this->LinkTo(&s_destroyedEffects);
-    this->m_flags |= 0x900;
+    this->m_flags |= (EFFECT_FLAGS::EFFECT_DESTROY_PENDING | EFFECT_FLAGS::EFFECT_POST_INITIALIZED);
 
-    if (this->m_flags & 0x4) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_FREEZE_ANIMATION) {
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             if (this->m_attachToMount && unit->m_mountModel) {
@@ -710,7 +713,7 @@ void CEffect::MoveToDestroyList() {
     }
 
     if (this->m_mountTransition) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             if (SpellVisualsIsMountTransitionFinished(this->m_mountTransition)) {
@@ -733,21 +736,21 @@ void CEffect::MoveToDestroyList() {
         CM2Model* model = this->m_model;
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x80u;
+            model->m_runtimeFlags &= ~0x80u;
         } else {
-            model->m_fFlags &= ~0x8u;
+            model->m_runtimeFlags &= ~0x8u;
         }
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x20000u;
+            model->m_runtimeFlags &= ~0x20000u;
         } else {
-            model->m_fFlags &= ~0x10000u;
+            model->m_runtimeFlags &= ~0x10000u;
         }
 
         if (this->m_model->m_attachParent) {
-            this->m_model->m_fFlags |= 0x20000;
+            this->m_model->m_runtimeFlags |= 0x20000;
         } else {
-            this->m_model->m_fFlags |= 0x10000;
+            this->m_model->m_runtimeFlags |= 0x10000;
         }
 
         this->m_model->SetEmittersEnabled(0);
@@ -775,15 +778,15 @@ CEffect::~CEffect() {
         CM2Model* model = this->m_model;
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x80u;
+            model->m_runtimeFlags &= ~0x80u;
         } else {
-            model->m_fFlags &= ~0x8u;
+            model->m_runtimeFlags &= ~0x8u;
         }
 
         if (model->m_attachParent) {
-            model->m_fFlags &= ~0x20000u;
+            model->m_runtimeFlags &= ~0x20000u;
         } else {
-            model->m_fFlags &= ~0x10000u;
+            model->m_runtimeFlags &= ~0x10000u;
         }
 
         this->m_model->Release();
@@ -791,7 +794,7 @@ CEffect::~CEffect() {
     }
 
     if (this->m_lineModel) {
-        this->m_lineModel->m_fFlags |= 0x20;
+        this->m_lineModel->m_runtimeFlags |= 0x20;
         this->m_lineModel->m_drawCallback = nullptr;
         this->m_lineModel->m_drawArg = nullptr;
         this->m_lineModel->Release();
@@ -810,7 +813,7 @@ CEffect::~CEffect() {
     }
 
     if (this->m_mountTransition) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit) {
             unit->StopMountTransition();
@@ -839,7 +842,7 @@ void CEffect::CleanUpStaticLists() {
     while (effect) {
         CEffect* next = effect->m_next;
 
-        if (!effect->unk_00C8 || static_cast<int32_t>(now - effect->unk_00C8) > 0) {
+        if (!effect->m_startTime || static_cast<int32_t>(now - effect->m_startTime) > 0) {
             effect->EffectUpdate();
         }
 
@@ -859,7 +862,7 @@ void CEffect::CleanUpStaticLists() {
     while (effect) {
         CEffect* next = effect->m_next;
 
-        if (!effect->m_model || !(effect->m_model->m_fFlags & 0x400)) {
+        if (!effect->m_model || !(effect->m_model->m_runtimeFlags & 0x400)) {
             effect->UnLinkSelf();
 
             if (effect->m_refCount-- == 1) {
@@ -875,9 +878,9 @@ void CEffect::CleanUpStaticLists() {
 // OFFSET: 0x006FA5B0
 void CEffect::AddLootEffect(CGUnit_C* unit, void (*callback)(CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint64_t param)) {
     this->m_sourceGuid = unit->m_obj->m_guid;
-    this->m_flags = 0x8;
-    this->m_attachmentId = 19;
-    const SpellVisualEffectNameRec* effectName = GetSpecialSpellVisualEffectNameRec(4);
+    this->m_flags = EFFECT_FLAGS::EFFECT_LOOT_ART;
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE;
+    const SpellVisualEffectNameRec* effectName = GetSpecialSpellVisualEffectNameRec(SPECIALEFFECT_LOOTART);
     this->m_effectNameRec = effectName;
     this->m_model = World::s_m2Scene->CreateModel(effectName->m_fileName, 0);
 
@@ -886,13 +889,13 @@ void CEffect::AddLootEffect(CGUnit_C* unit, void (*callback)(CM2Model* model, ui
         return;
     }
 
-    if (this->m_flags & 0x400000) {
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
         this->SetEmissionRateIgnoresDistance(1);
     }
 
     this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-    this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-    this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+    this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+    this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
     this->LinkTo(&unit->m_effectList);
     this->m_refCount++;
 }
@@ -927,7 +930,7 @@ float __stdcall CEffect::ComputeModelScaleFromTarget(CGObject_C* object) {
 
     float scale = 1.0f;
 
-    if (object->m_obj->m_type & TYPEMASK_UNIT) {
+    if (object->m_obj->m_type & TYPE_UNIT) {
         CreatureModelDataRec* modelData = static_cast<CGUnit_C*>(object)->GetModelData();
 
         if (modelData) {
@@ -954,8 +957,8 @@ float __stdcall CEffect::ComputeModelScaleFromTarget(CGObject_C* object) {
 
 // VERIFY: cd786896 auto
 // OFFSET: 0x006F8040
-void CEffect::AddLightning(int32_t a2, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+void CEffect::AddLightning(int32_t expireTime, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -964,7 +967,7 @@ void CEffect::AddLightning(int32_t a2, uint32_t spellId, const SpellVisualKitRec
     this->LinkTo(&unit->m_effectList);
     this->m_refCount++;
     this->m_kitRec = kit;
-    this->m_expireTime = a2;
+    this->m_expireTime = expireTime;
     this->m_spellId = spellId;
     this->m_sourceGuid = *guid;
     this->m_flags = flags;
@@ -998,7 +1001,7 @@ void CEffect::ApplyModelAttachRecToMatrix(const SpellVisualKitModelAttachRec* at
     } else {
         float s;
         float c;
-        CMath::sincos_(facing - 1.5707964f, &s, &c);
+        CMath::sincos_(facing - HALF_PI, &s, &c);
         matrix.d0 = c * attach->m_offset[1] + x - attach->m_offset[0] * s;
         matrix.d1 = c * attach->m_offset[0] + s * attach->m_offset[1] + y;
     }
@@ -1017,14 +1020,14 @@ C44Matrix* CEffect::TransformPosition(C44Matrix* matrix, CGObject_C* object) {
     float facing = 0.0f;
 
     if (object) {
-        if (object->m_obj->m_type & TYPEMASK_UNIT) {
+        if (object->m_obj->m_type & TYPE_UNIT) {
             facing = static_cast<CGUnit_C*>(object)->GetSmoothFacing();
         } else {
             facing = object->GetFacing();
         }
     }
 
-    if (this->m_flags & 0x8000) {
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_FIXED_FACING) {
         matrix->RotateAroundZ(this->m_facing);
     } else if (object) {
         matrix->RotateAroundZ(facing);
@@ -1032,7 +1035,7 @@ C44Matrix* CEffect::TransformPosition(C44Matrix* matrix, CGObject_C* object) {
 
     float scale = 1.0f;
 
-    if ((this->m_flags & 0x200) && object) {
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_SCALE_TO_TARGET) && object) {
         float targetScale = CEffect::ComputeModelScaleFromTarget(object);
         scale = object->GetTrueScale() * targetScale;
     }
@@ -1056,7 +1059,7 @@ C44Matrix* CEffect::TransformPosition(C44Matrix* matrix, CGObject_C* object) {
     matrix->Scale(scale);
 
     if (this->m_attachRec) {
-        CEffect::ApplyModelAttachRecToMatrix(this->m_attachRec, *matrix, (this->m_flags & 0x8000) ? this->m_facing : facing);
+        CEffect::ApplyModelAttachRecToMatrix(this->m_attachRec, *matrix, (this->m_flags & EFFECT_FLAGS::EFFECT_FIXED_FACING) ? this->m_facing : facing);
     }
 
     return matrix;
@@ -1065,7 +1068,7 @@ C44Matrix* CEffect::TransformPosition(C44Matrix* matrix, CGObject_C* object) {
 // VERIFY: 03a1abb4 manual
 // OFFSET: 0x006F8C50
 int32_t CEffect::UpdateAttachment() {
-    if (this->m_attachmentId == -1) {
+    if (this->m_attachmentId == MODEL_ATTACHMENT_ID::ATTACH_NONE) {
         if (this->m_model && this->m_model->m_attachParent) {
             this->m_model->DetachFromParent();
         }
@@ -1076,9 +1079,9 @@ int32_t CEffect::UpdateAttachment() {
     CGObject_C* object;
 
     if (this->m_targetGuid) {
-        object = ClntObjMgrObjectPtr(this->m_targetGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        object = ClntObjMgrObjectPtr(this->m_targetGuid, TYPE_OBJECT, __FILE__, __LINE__);
     } else if (this->m_sourceGuid) {
-        object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_OBJECT, __FILE__, __LINE__);
     } else {
         object = nullptr;
     }
@@ -1104,9 +1107,9 @@ int32_t CEffect::UpdateAttachment() {
         return 0;
     }
 
-    CreatureModelDataRec* modelData = (object->m_obj->m_type & TYPEMASK_UNIT) ? static_cast<CGUnit_C*>(object)->GetModelData() : nullptr;
+    CreatureModelDataRec* modelData = (object->m_obj->m_type & TYPE_UNIT) ? static_cast<CGUnit_C*>(object)->GetModelData() : nullptr;
 
-    if ((this->m_attachmentId == 2 || this->m_attachmentId == 1) && modelData) {
+    if ((this->m_attachmentId == MODEL_ATTACHMENT_ID::ATTACH_HANDL || this->m_attachmentId == MODEL_ATTACHMENT_ID::ATTACH_HANDR) && modelData) {
         CreatureModelDataRec* data = static_cast<CGUnit_C*>(object)->GetModelData();
 
         if (data && (data->m_flags & 0x10)) {
@@ -1155,7 +1158,7 @@ int32_t CEffect::UpdateAttachment() {
         this->m_model->SetWorldTransform(transform);
     }
 
-    if (this->m_flags & 0x10000) {
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_ATTACHMENT_OFFSET) {
         if (this->m_model && (this->m_model->m_attachParent != parent || this->m_model->m_attachmentId != static_cast<uint32_t>(this->m_attachmentId))) {
             this->DetachFromParent();
             this->m_model->AttachToParent(parent, this->m_attachmentId, &this->m_offset, 0);
@@ -1173,8 +1176,8 @@ int32_t CEffect::UpdateAttachment() {
 
     this->m_transportGuid = WOWGUID();
 
-    if (this->m_flags & 0x2000000) {
-        this->m_model->m_fFlags |= 0x100000;
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_PARENT_EFFECTIVE_ALPHA) {
+        this->m_model->m_runtimeFlags |= 0x100000;
     }
 
     object->SetBoundsDirty();
@@ -1184,24 +1187,24 @@ int32_t CEffect::UpdateAttachment() {
 // VERIFY: a7cc6925 manual
 // OFFSET: 0x006FA050
 void CEffect::EffectUpdate() {
-    if (!(this->m_flags & 0x900)) {
+    if (!(this->m_flags & (EFFECT_FLAGS::EFFECT_DESTROY_PENDING | EFFECT_FLAGS::EFFECT_POST_INITIALIZED))) {
         this->PostInitialize();
     }
 
-    if ((this->m_flags & 0x40000) && this->m_lightningState > 0 && !--this->m_lightningState && this->m_model) {
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_LIGHTNING_CONNECTION) && this->m_lightningState > 0 && !--this->m_lightningState && this->m_model) {
         this->m_model->m_baseAlpha = 0.0f;
         this->m_model->SetEmittersEnabled(0);
         this->m_model->SetRibbonsEnabled(0);
     }
 
-    if ((this->m_flags & 0x4000) || ((this->m_flags & 0x2) && this->m_transportGuid)) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_FOLLOW_SOURCE_POSITION) || ((this->m_flags & EFFECT_FLAGS::EFFECT_WORLD_SPACE) && this->m_transportGuid)) {
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit && this->m_mapEntity && this->m_model) {
-            if (this->m_flags & 0x4000) {
+            if (this->m_flags & EFFECT_FLAGS::EFFECT_FOLLOW_SOURCE_POSITION) {
                 this->m_position = unit->GetRawPosition();
 
-                if (unit->m_movement->m_flags & 0x40000000) {
+                if (unit->m_movement->m_flags & MOVEMENTFLAG_HOVER) {
                     this->m_position.z -= unit->m_unit->m_unitFieldHoverheight;
                 }
 
@@ -1221,15 +1224,15 @@ void CEffect::EffectUpdate() {
             }
 
             light.z = 1.0f;
-            this->m_model->m_fFlags |= 0x8000;
+            this->m_model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
             this->m_model->m_worldTransform = transform;
             C44Matrix world = this->m_model->m_worldTransform;
             CMap::ObjectUpdate(this->m_mapEntity, world, box, sphere, light, false, 0xFFFFFFFF);
         }
     }
 
-    if ((this->m_flags & 0x4) && this->m_expireTime && static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_expireTime) > 0) {
-        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_FREEZE_ANIMATION) && this->m_expireTime && static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_expireTime) > 0) {
+        CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (!unit) {
             return;
@@ -1248,7 +1251,7 @@ void CEffect::EffectUpdate() {
         unit->UpdateBaseAnimation(0, -1);
         this->MoveToDestroyList();
     } else if (this->unk_00D0 && static_cast<int32_t>(FrameTime::s_curTimeMs - this->unk_00D0) > 0) {
-        CGObject_C* object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        CGObject_C* object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_OBJECT, __FILE__, __LINE__);
 
         if (!object) {
             return;
@@ -1257,11 +1260,11 @@ void CEffect::EffectUpdate() {
         object->m_scaleChangeTime = 0;
         object->m_scaleModifier = 1.0f;
         this->MoveToDestroyList();
-    } else if (!(this->m_flags & 0x20) && this->m_expireTime && static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_expireTime) > 0) {
+    } else if (!(this->m_flags & EFFECT_FLAGS::EFFECT_CALLBACK_LIFETIME) && this->m_expireTime && static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_expireTime) > 0) {
         this->MoveToDestroyList();
     }
 
-    if ((this->m_flags & 0x100000) && !SI2::IsPlaying(&this->m_soundKitObject)) {
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_SOUND_ONLY) && !SI2::IsPlaying(&this->m_soundKitObject)) {
         this->MoveToDestroyList();
     }
 }
@@ -1269,27 +1272,27 @@ void CEffect::EffectUpdate() {
 // VERIFY: eb25cf59 manual
 // OFFSET: 0x006F8970
 void CEffect::UpdateWorldObject(float elapsed, uint32_t flags) {
-    if ((!this->unk_00C8 || static_cast<int32_t>(FrameTime::s_curTimeMs - this->unk_00C8) > 0) && this->m_model) {
+    if ((!this->m_startTime || static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_startTime) > 0) && this->m_model) {
         this->m_model->SetAnimating(1);
 
-        if (!(this->m_flags & 0x100) && this->m_model->IsLoaded(0, 0)) {
+        if (!(this->m_flags & EFFECT_FLAGS::EFFECT_DESTROY_PENDING) && this->m_model->IsLoaded(0, 0)) {
             CM2Model* model = this->m_model;
             CM2Model* parent = model->m_attachParent;
             uint32_t visible = flags & 1;
 
             if (parent) {
-                model->m_fFlags = (model->m_fFlags & ~0x80u) | (visible << 7);
+                model->m_runtimeFlags = (model->m_runtimeFlags & ~0x80u) | (visible << 7);
             } else {
-                model->m_fFlags = (model->m_fFlags & ~0x8u) | (visible << 3);
+                model->m_runtimeFlags = (model->m_runtimeFlags & ~0x8u) | (visible << 3);
             }
 
             if (parent) {
-                model->m_fFlags = (model->m_fFlags & ~0x20000u) | (visible << 17);
+                model->m_runtimeFlags = (model->m_runtimeFlags & ~0x20000u) | (visible << 17);
             } else {
-                model->m_fFlags = (model->m_fFlags & ~0x10000u) | (visible << 16);
+                model->m_runtimeFlags = (model->m_runtimeFlags & ~0x10000u) | (visible << 16);
             }
 
-            this->unk_00C8 = 0;
+            this->m_startTime = 0;
         }
     }
 
@@ -1305,14 +1308,14 @@ void CEffect::PostInitialize() {
         return;
     }
 
-    this->m_flags |= 0x800;
-    int32_t hasSound = !(this->m_flags & 0x400) && this->m_kitRec && this->m_kitRec->m_soundID && this->m_kitRec->m_soundID != -1;
+    this->m_flags |= EFFECT_FLAGS::EFFECT_POST_INITIALIZED;
+    int32_t hasSound = !(this->m_flags & EFFECT_FLAGS::EFFECT_SUPPRESS_SOUND) && this->m_kitRec && this->m_kitRec->m_soundID && this->m_kitRec->m_soundID != -1;
 
-    if ((this->m_flags & 0x2) && !this->m_mapEntity && this->m_model) {
-        CGObject_C* source = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_WORLD_SPACE) && !this->m_mapEntity && this->m_model) {
+        CGObject_C* source = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_OBJECT, __FILE__, __LINE__);
         C44Matrix transform;
         C44Matrix* matrix = this->TransformPosition(&transform, source);
-        this->m_model->m_fFlags |= 0x8000;
+        this->m_model->m_runtimeFlags |= M2_MODEL_RUNTIME_FLAG_WORLD_TRANSFORM_VALID;
         this->m_model->m_worldTransform = *matrix;
         C44Matrix world = this->m_model->m_worldTransform;
         this->m_mapEntity = CMap::ObjectCreateStatic(this->m_model, world, &CGWorldFrame::SpellEffectEnumProc, nullptr, reinterpret_cast<uintptr_t>(this));
@@ -1329,36 +1332,36 @@ void CEffect::PostInitialize() {
         light.z = 1.0f;
         world = this->m_model->m_worldTransform;
         CMap::ObjectUpdate(this->m_mapEntity, world, box, sphere, light, false, 0xFFFFFFFF);
-        int32_t animating = !this->unk_00C8 || static_cast<int32_t>(FrameTime::s_curTimeMs - this->unk_00C8) > 0;
+        int32_t animating = !this->m_startTime || static_cast<int32_t>(FrameTime::s_curTimeMs - this->m_startTime) > 0;
         this->m_model->SetAnimating(animating);
         CM2Model* model = this->m_model;
         CM2Model* parent = model->m_attachParent;
         uint32_t visible = animating & 1;
 
         if (parent) {
-            model->m_fFlags = (model->m_fFlags & ~0x80u) | (visible << 7);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x80u) | (visible << 7);
         } else {
-            model->m_fFlags = (model->m_fFlags & ~0x8u) | (visible << 3);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x8u) | (visible << 3);
         }
 
         if (parent) {
-            model->m_fFlags = (model->m_fFlags & ~0x20000u) | (visible << 17);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x20000u) | (visible << 17);
         } else {
-            model->m_fFlags = (model->m_fFlags & ~0x10000u) | (visible << 16);
+            model->m_runtimeFlags = (model->m_runtimeFlags & ~0x10000u) | (visible << 16);
         }
     }
 
     SpellRec spell;
 
-    if (this->m_spellId && g_spellDB.GetRecord(this->m_spellId, &spell) && (spell.m_attributesExE & 0x40000000)) {
-        this->m_model->m_fFlags |= 0x4;
+    if (this->m_spellId && g_spellDB.GetRecord(this->m_spellId, &spell) && (spell.m_attributesExE & SPELL_ATTR5::SPELL_ATTR5_ALWAYS_SHOW_GROUND_TEXTURE)) {
+        this->m_model->m_runtimeFlags |= 0x4;
     }
 
     if (!this->UpdateAttachment()) {
         return;
     }
 
-    if ((this->m_flags & 0x10) && this->m_kitRec && this->m_kitRec->m_shakeID > 0) {
+    if ((this->m_flags & EFFECT_FLAGS::EFFECT_PLAY_CAMERA_SHAKE) && this->m_kitRec && this->m_kitRec->m_shakeID > 0) {
         C3Vector position = this->TransformPositionByTransport();
         SpellVisualsPlayCameraShakeID(this->m_kitRec->m_shakeID, &position);
     }
@@ -1370,9 +1373,9 @@ void CEffect::PostInitialize() {
     CGObject_C* object = nullptr;
 
     if (this->m_targetGuid) {
-        object = ClntObjMgrObjectPtr(this->m_targetGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
-    } else if (this->m_sourceGuid && !(this->m_flags & 0x2000)) {
-        object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_OBJECT, __FILE__, __LINE__);
+        object = ClntObjMgrObjectPtr(this->m_targetGuid, TYPE_OBJECT, __FILE__, __LINE__);
+    } else if (this->m_sourceGuid && !(this->m_flags & EFFECT_FLAGS::EFFECT_USE_SUPPLIED_POSITION)) {
+        object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_OBJECT, __FILE__, __LINE__);
     }
 
     SE2SoundKitProperties properties;
@@ -1381,7 +1384,7 @@ void CEffect::PostInitialize() {
     static CVar* s_listenerAtCharacter = CVar::Lookup("Sound_ListenerAtCharacter");
     int32_t listenerAtCharacter = 0;
 
-    if (focus && s_listenerAtCharacter->m_intValue && !(this->m_flags & 0x200000)) {
+    if (focus && s_listenerAtCharacter->m_intValue && !(this->m_flags & EFFECT_FLAGS::EFFECT_DETACHED_SOUND)) {
         listenerAtCharacter = 1;
     }
 
@@ -1393,7 +1396,7 @@ void CEffect::PostInitialize() {
         return;
     }
 
-    if (this->m_flags & 0x1) {
+    if (this->m_flags & EFFECT_FLAGS::EFFECT_SOUND_LOOPING) {
         if (!object) {
             C3Vector position = this->TransformPositionByTransport();
             SI2::PlaySoundKit(this->m_kitRec->m_soundID, &position, &this->m_soundKitObject, nullptr, 0, nullptr, 1, 0);
@@ -1402,7 +1405,7 @@ void CEffect::PostInitialize() {
 
         C3Vector position = object->GetPosition();
 
-        if (this->m_flags & 0x1000) {
+        if (this->m_flags & EFFECT_FLAGS::EFFECT_AURA_ANIMATION) {
             properties.m_streaming = true;
             properties.m_maxAudibleBehavior = 0;
         }
@@ -1410,7 +1413,7 @@ void CEffect::PostInitialize() {
         properties.m_noRandomStart = 1;
         SI2::PlaySoundKit(this->m_kitRec->m_soundID, &position, &this->m_soundKitObject, &properties, 0, nullptr, 1, 0);
 
-        if (!(this->m_flags & 0x200000)) {
+        if (!(this->m_flags & EFFECT_FLAGS::EFFECT_DETACHED_SOUND)) {
             SI2::AttachToObject(&this->m_soundKitObject, object->m_obj->m_guid);
         }
 
@@ -1419,7 +1422,7 @@ void CEffect::PostInitialize() {
 
     C3Vector position = C3Vector();
     const C3Vector* soundPosition = nullptr;
-    properties.m_loopMode = 2;
+    properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
     properties.m_maxAudibleBehavior = 0;
 
     if (listenerAtCharacter) {
@@ -1431,7 +1434,7 @@ void CEffect::PostInitialize() {
 
     SI2::PlaySoundKit(this->m_kitRec->m_soundID, soundPosition, &this->m_soundKitObject, &properties, 0, nullptr, 1, 0);
 
-    if (!listenerAtCharacter && !(this->m_flags & 0x200000) && object) {
+    if (!listenerAtCharacter && !(this->m_flags & EFFECT_FLAGS::EFFECT_DETACHED_SOUND) && object) {
         SI2::AttachToObject(&this->m_soundKitObject, object->m_obj->m_guid);
     }
 }
@@ -1439,7 +1442,7 @@ void CEffect::PostInitialize() {
 // VERIFY: 5e1b1086 auto
 // OFFSET: 0x006F7480
 static void MountTransitionSequenceCB(CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint64_t param) {
-    if (sequenceId != 127) {
+    if (sequenceId != ANIM_BIRTH) {
         return;
     }
 
@@ -1454,7 +1457,7 @@ static void MountTransitionSequenceCB(CM2Model* model, uint32_t boneId, uint32_t
 // OFFSET: 0x006F7D60
 void CEffect::InitAtPosition(int32_t spellId, const SpellVisualKitRec* kit, const SpellVisualEffectNameRec* effectName, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), const C3Vector* position, uint32_t a8, WOWGUID transport) {
     this->m_effectNameRec = effectName;
-    this->m_attachmentId = -1;
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_NONE;
     this->m_sourceGuid = WOWGUID();
     this->m_targetGuid = WOWGUID();
     this->m_position = *position;
@@ -1462,17 +1465,17 @@ void CEffect::InitAtPosition(int32_t spellId, const SpellVisualKitRec* kit, cons
     this->m_spellId = spellId;
     this->m_kitRec = kit;
     this->m_effectNameRec = effectName;
-    this->m_flags = flags | 0x2;
-    this->unk_00A0 = a8;
+    this->m_flags = flags | EFFECT_FLAGS::EFFECT_WORLD_SPACE;
+    this->m_fadeTime = a8;
     this->m_model = World::s_m2Scene->CreateModel(effectName->m_fileName, 0);
 
     if (this->m_model) {
         this->m_refCount++;
         this->m_model->SetLoadedCallback(&CEffect::CreateModelFromEffect, this);
-        this->m_model->SetSequenceCallback(reinterpret_cast<void*>(callback), reinterpret_cast<uintptr_t>(this));
-        this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetSequenceCallback(callback, reinterpret_cast<uintptr_t>(this));
+        this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
 
-        if (this->m_flags & 0x400000) {
+        if (this->m_flags & EFFECT_FLAGS::EFFECT_IGNORE_EMISSION_DISTANCE) {
             this->SetEmissionRateIgnoresDistance(1);
         }
     }
@@ -1482,8 +1485,8 @@ void CEffect::InitAtPosition(int32_t spellId, const SpellVisualKitRec* kit, cons
 
 // VERIFY: a5956734 auto
 // OFFSET: 0x006F80B0
-void CEffect::CreateProceduralEffectImpl(int32_t a2, float param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+void CEffect::CreateProceduralEffectImpl(int32_t expireTime, float param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -1496,7 +1499,7 @@ void CEffect::CreateProceduralEffectImpl(int32_t a2, float param, uint32_t spell
         this->m_attachToMount = unit->m_mountModel->m_lastAnimTime == 0;
 
         if (param > 0.0f) {
-            uint32_t duration = static_cast<uint32_t>(param * 1000.0f);
+            uint32_t duration = static_cast<uint32_t>(param * TIME_MILLISECONDS_PER_SECOND_FLOAT);
             uint32_t animId = unit->GetCurrentTorsoAnimId();
             M2SequenceInfo info;
             info.Clear();
@@ -1518,7 +1521,7 @@ void CEffect::CreateProceduralEffectImpl(int32_t a2, float param, uint32_t spell
         this->m_attachToModel = unit->m_worldModel->m_lastAnimTime == 0;
 
         if (param > 0.0f) {
-            uint32_t duration = static_cast<uint32_t>(param * 1000.0f);
+            uint32_t duration = static_cast<uint32_t>(param * TIME_MILLISECONDS_PER_SECOND_FLOAT);
             uint32_t animId = unit->GetCurrentTorsoAnimId();
             M2SequenceInfo info;
             info.Clear();
@@ -1537,20 +1540,20 @@ void CEffect::CreateProceduralEffectImpl(int32_t a2, float param, uint32_t spell
     }
 
     this->m_kitRec = kit;
-    this->m_expireTime = a2;
+    this->m_expireTime = expireTime;
     this->m_spellId = spellId;
     this->m_sourceGuid = *guid;
-    this->m_flags |= flags | 0x4;
+    this->m_flags |= flags | EFFECT_FLAGS::EFFECT_FREEZE_ANIMATION;
 }
 
 // VERIFY: fc96753b manual
 // OFFSET: 0x006F82D0
 void CEffect::ApplyItemVisual() {
-    if (!(this->m_flags & 0x80000) || this->m_itemSlot >= 12 || !this->m_displayId) {
+    if (!(this->m_flags & EFFECT_FLAGS::EFFECT_ITEM_VISUAL) || this->m_itemSlot >= 12 || !this->m_displayId) {
         return;
     }
 
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -1558,7 +1561,7 @@ void CEffect::ApplyItemVisual() {
 
     ItemDisplayInfoRec rec;
     bool firstSlot = this->m_itemSlot == 0;
-    bool canEquip = unit->CanEquipItemsInThisForm() && (unit->m_obj->m_type & TYPEMASK_PLAYER);
+    bool canEquip = unit->CanEquipItemsInThisForm() && (unit->m_obj->m_type & TYPE_PLAYER);
 
     if ((firstSlot || canEquip) && g_itemDisplayInfoDB.GetRecord(this->m_displayId, &rec)) {
         CCharacterComponent* component = unit->m_characterComponent;
@@ -1591,22 +1594,22 @@ int32_t CEffect::LoadMountTransitionModel() {
     }
 
     this->m_model = World::s_m2Scene->CreateModel(modelData->m_modelName, 0);
-    this->m_model->SetSequenceCallback(reinterpret_cast<void*>(&MountTransitionSequenceCB), reinterpret_cast<uintptr_t>(this));
-    this->m_model->SetEventCallback(reinterpret_cast<void*>(&CEffect::EffectEvent), reinterpret_cast<uintptr_t>(this));
+    this->m_model->SetSequenceCallback(&MountTransitionSequenceCB, reinterpret_cast<uintptr_t>(this));
+    this->m_model->SetEventCallback(&CEffect::EffectEvent, reinterpret_cast<uintptr_t>(this));
     CCharacterComponent::ReplaceMonsterSkin(this->m_model, display, modelData);
-    this->m_model->SetBoneSequence(0xFFFFFFFF, 127, 0xFFFFFFFF, 0, 1.0f, 1, 1);
+    this->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_BIRTH, 0xFFFFFFFF, 0, 1.0f, 1, 1);
     CM2Model* model = this->m_model;
 
     if (model->m_attachParent) {
-        model->m_fFlags &= ~0x80;
+        model->m_runtimeFlags &= ~0x80;
     } else {
-        model->m_fFlags &= ~0x8;
+        model->m_runtimeFlags &= ~0x8;
     }
 
     if (model->m_attachParent) {
-        model->m_fFlags &= ~0x20000;
+        model->m_runtimeFlags &= ~0x20000;
     } else {
-        model->m_fFlags &= ~0x10000;
+        model->m_runtimeFlags &= ~0x10000;
     }
 
     this->m_model->SetAnimating(1);
@@ -1615,18 +1618,18 @@ int32_t CEffect::LoadMountTransitionModel() {
 
 // VERIFY: b4754e47 auto
 // OFFSET: 0x006F8650
-void CEffect::InitProceduralEffect(int32_t a2, int32_t param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPEMASK_UNIT, __FILE__, __LINE__));
+void CEffect::InitProceduralEffect(int32_t expireTime, int32_t param, uint32_t spellId, const SpellVisualKitRec* kit, const WOWGUID* guid, uint32_t flags) {
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
     }
 
-    this->m_expireTime = a2;
+    this->m_expireTime = expireTime;
     this->m_spellId = spellId;
     this->m_kitRec = kit;
     this->m_sourceGuid = *guid;
-    this->m_flags |= flags | 0x80000;
+    this->m_flags |= flags | EFFECT_FLAGS::EFFECT_ITEM_VISUAL;
     this->m_pendingCacheId = param;
     this->LinkTo(&unit->m_effectList);
     this->m_refCount++;
@@ -1639,18 +1642,18 @@ void CEffect::InitProceduralEffect(int32_t a2, int32_t param, uint32_t spellId, 
 // VERIFY: 78e5d527 manual
 // OFFSET: 0x006F8F50
 void CEffect::DrawFishingString(CM2Model* model, const CM2Lighting* lighting, void* arg) {
-    if (!model->HasEvent('HCC$')) {
+    if (!model->HasEvent(M2_EVENT_ID::FishingPole_CCH)) {
         return;
     }
 
     CEffect* effect = static_cast<CEffect*>(arg);
-    CGObject_C* bobber = ClntObjMgrObjectPtr(effect->m_targetGuid, TYPEMASK_GAMEOBJECT, __FILE__, __LINE__);
+    CGObject_C* bobber = ClntObjMgrObjectPtr(effect->m_targetGuid, TYPE_GAMEOBJECT, __FILE__, __LINE__);
 
     if (!bobber) {
         return;
     }
 
-    C3Vector start = model->GetEventPosition('HCC$');
+    C3Vector start = model->GetEventPosition(M2_EVENT_ID::FishingPole_CCH);
     C3Vector end = bobber->GetPosition();
     end.z = bobber->GetScale() * bobber->m_height * 0.2f + end.z;
     float dx = end.x - start.x;
@@ -1694,7 +1697,7 @@ void CEffect::DrawFishingString(CM2Model* model, const CM2Lighting* lighting, vo
 // OFFSET: 0x006F9610
 void CEffect::MountTransitionCacheCB(int32_t id, const WOWGUID& guid, void* param, bool success) {
     CEffect* effect = static_cast<CEffect*>(param);
-    WOWGUID key = { static_cast<uint64_t>(effect->m_spellId) | 0x1FE0000000000000ull };
+    WOWGUID key = { static_cast<uint64_t>(effect->m_spellId) | WOWGUID_SPELL_QUERY_TAG };
     CreatureStats_C* stats = g_creatureDBCache.GetRecord(id, key, nullptr, nullptr, false);
 
     if (stats) {
@@ -1711,8 +1714,8 @@ void CEffect::AddMountTransition(uint32_t spellId, const SpellVisualKitRec* kit,
     this->m_sourceGuid = *guid;
     this->m_spellId = spellId;
     this->m_kitRec = kit;
-    this->m_attachmentId = 19;
-    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPEMASK_UNIT, __FILE__, __LINE__));
+    this->m_attachmentId = MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE;
+    CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (!unit) {
         return;
@@ -1727,11 +1730,11 @@ void CEffect::AddMountTransition(uint32_t spellId, const SpellVisualKitRec* kit,
     this->m_pendingCacheId = 0;
     this->m_displayId = 0;
 
-    for (uint32_t i = 0; i < 3; i++) {
-        if (spell.m_effect[i] == 6 && spell.m_effectAura[i] == 78) {
+    for (uint32_t i = 0; i < NUM_SPELL_EFFECTS; i++) {
+        if (spell.m_effect[i] == SPELL_EFFECT_APPLY_AURA && spell.m_effectAura[i] == SPELL_AURA_MOUNTED) {
             int32_t creatureId = spell.m_effectMiscValue[i];
             this->m_pendingCacheId = creatureId;
-            WOWGUID key = { static_cast<uint64_t>(spellId) | 0x1FE0000000000000ull };
+            WOWGUID key = { static_cast<uint64_t>(spellId) | WOWGUID_SPELL_QUERY_TAG };
             CreatureStats_C* stats = g_creatureDBCache.GetRecord(creatureId, key, &CEffect::MountTransitionCacheCB, this, false);
 
             if (stats) {

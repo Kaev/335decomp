@@ -100,7 +100,7 @@ void GetRectFramePoints(const CRect& rect, C2Vector* points) {
 // OFFSET: 0x00482AC0
 int32_t CLayoutFrame::HasAnyFramepoints() {
     for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
-        if (this->m_framePoints[i] && !(this->m_framePoints[i]->m_flags & 8)) {
+        if (this->m_framePoints[i] && !(this->m_framePoints[i]->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
             return 1;
         }
     }
@@ -111,7 +111,7 @@ int32_t CLayoutFrame::HasAnyFramepoints() {
 // VERIFY: 831ecd27 auto
 // OFFSET: 0x00488CF0
 uint32_t CLayoutFrame::IsResizePending() {
-    return (this->m_layoutFlags >> 8) & 4;
+    return (this->m_layoutFlags >> 8) & (LayoutFlags::LAYOUT_RESIZE_PENDING >> 8);
 }
 
 // VERIFY: b2f05c63 auto
@@ -140,7 +140,7 @@ void CLayoutFrame::GetClampRectInsets(float& left, float& right, float& top, flo
 CFramePoint* CLayoutFrame::GetFramePoint(FRAMEPOINT point) {
     CFramePoint* framePoint = this->m_framePoints[point];
 
-    if (!framePoint || (framePoint->m_flags & 8)) {
+    if (!framePoint || (framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
         return nullptr;
     }
 
@@ -153,11 +153,11 @@ int32_t CLayoutFrame::GetFramePointX(const FRAMEPOINT* points, int32_t count, fl
     for (int32_t i = 0; i < count; i++) {
         CFramePoint* framePoint = this->m_framePoints[points[i]];
 
-        if (framePoint && !(framePoint->m_flags & 8)) {
+        if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
             float value = framePoint->X(this->m_layoutScale);
             x = value;
 
-            if (framePoint->m_flags & 4) {
+            if (framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_CHANGED_DURING_READ) {
                 x = CFramePoint::UNDEFINED;
                 return 0;
             }
@@ -178,11 +178,11 @@ int32_t CLayoutFrame::GetFramePointY(const FRAMEPOINT* points, int32_t count, fl
     for (int32_t i = 0; i < count; i++) {
         CFramePoint* framePoint = this->m_framePoints[points[i]];
 
-        if (framePoint && !(framePoint->m_flags & 8)) {
+        if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
             float value = framePoint->Y(this->m_layoutScale);
             y = value;
 
-            if (framePoint->m_flags & 4) {
+            if (framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_CHANGED_DURING_READ) {
                 y = CFramePoint::UNDEFINED;
                 return 0;
             }
@@ -220,11 +220,11 @@ void CLayoutFrame::GetVerticalFramePoint(const FRAMEPOINT* points, int32_t count
 // VERIFY: c011784f auto
 // OFFSET: 0x00488F50
 float CLayoutFrame::CenterX() {
-    if (this->m_guard & 0x10) {
+    if (this->m_guard & GUARD_CENTER_X) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 0x10;
+    this->m_guard |= GUARD_CENTER_X;
 
     float x = CFramePoint::UNDEFINED;
     this->GetHorizontalFramePoint(s_centerXPoints, 3, x);
@@ -234,7 +234,7 @@ float CLayoutFrame::CenterX() {
         x = ComputeCenterPosition(this->Left(), this->Right(), size);
     }
 
-    this->m_guard &= ~0x10u;
+    this->m_guard &= ~GUARD_CENTER_X;
 
     return x;
 }
@@ -242,11 +242,11 @@ float CLayoutFrame::CenterX() {
 // VERIFY: f498aaa3 auto
 // OFFSET: 0x00488FE0
 float CLayoutFrame::CenterY() {
-    if (this->m_guard & 0x20) {
+    if (this->m_guard & GUARD_CENTER_Y) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 0x20;
+    this->m_guard |= GUARD_CENTER_Y;
 
     float y = CFramePoint::UNDEFINED;
     this->GetVerticalFramePoint(s_centerYPoints, 3, y);
@@ -256,7 +256,7 @@ float CLayoutFrame::CenterY() {
         y = ComputeCenterPosition(this->Bottom(), this->Top(), size);
     }
 
-    this->m_guard &= ~0x20u;
+    this->m_guard &= ~GUARD_CENTER_Y;
 
     return y;
 }
@@ -264,11 +264,11 @@ float CLayoutFrame::CenterY() {
 // VERIFY: 894aac46 auto
 // OFFSET: 0x00489070
 float CLayoutFrame::Right() {
-    if (this->m_guard & 4) {
+    if (this->m_guard & GUARD_RIGHT) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 4;
+    this->m_guard |= GUARD_RIGHT;
 
     float x = CFramePoint::UNDEFINED;
     this->GetHorizontalFramePoint(s_rightPoints, 3, x);
@@ -278,7 +278,7 @@ float CLayoutFrame::Right() {
         x = ComputeRightBoundary(this->CenterX(), this->Left(), size);
     }
 
-    this->m_guard &= ~4u;
+    this->m_guard &= ~GUARD_RIGHT;
 
     return x;
 }
@@ -286,11 +286,11 @@ float CLayoutFrame::Right() {
 // VERIFY: ff84563d auto
 // OFFSET: 0x00489100
 float CLayoutFrame::Bottom() {
-    if (this->m_guard & 8) {
+    if (this->m_guard & GUARD_BOTTOM) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 8;
+    this->m_guard |= GUARD_BOTTOM;
 
     float y = CFramePoint::UNDEFINED;
     this->GetVerticalFramePoint(s_bottomPoints, 3, y);
@@ -300,7 +300,7 @@ float CLayoutFrame::Bottom() {
         y = ComputeRightBoundary(this->CenterY(), this->Top(), size);
     }
 
-    this->m_guard &= ~8u;
+    this->m_guard &= ~GUARD_BOTTOM;
 
     return y;
 }
@@ -311,7 +311,7 @@ void CLayoutFrame::ProtectFramepoints(uint32_t flag) {
     for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
         CFramePoint* framePoint = this->m_framePoints[i];
 
-        if (framePoint && !(framePoint->m_flags & 8) && framePoint->m_relative) {
+        if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED) && framePoint->m_relative) {
             framePoint->m_relative->SetProtectFlag(flag);
         }
     }
@@ -325,7 +325,7 @@ int32_t CLayoutFrame::IsResizeDependency(CLayoutFrame* frame) {
     for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
         CFramePoint* framePoint = this->m_framePoints[i];
 
-        if (!framePoint || (framePoint->m_flags & 8)) {
+        if (!framePoint || (framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
             continue;
         }
 
@@ -348,7 +348,7 @@ int32_t CLayoutFrame::IsResizeDependency(CLayoutFrame* frame) {
 // VERIFY: 98ff2ba2 auto
 // OFFSET: 0x00489230
 int32_t CLayoutFrame::GetRect(CRect* rect) {
-    if (!(this->m_layoutFlags & 0x100)) {
+    if (!(this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
@@ -360,17 +360,17 @@ int32_t CLayoutFrame::GetRect(CRect* rect) {
 // VERIFY: 9bc456e9 auto
 // OFFSET: 0x00489270
 int32_t CLayoutFrame::PtInFrameRect(const C2Vector& point) {
-    return (this->m_layoutFlags & 0x100) && this->m_rect.IsPointInside(point);
+    return (this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID) && this->m_rect.IsPointInside(point);
 }
 
 // VERIFY: 879cc61f auto
 // OFFSET: 0x004892A0
 float CLayoutFrame::Left() {
-    if (this->m_guard & 1) {
+    if (this->m_guard & GUARD_LEFT) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 1;
+    this->m_guard |= GUARD_LEFT;
 
     float x = CFramePoint::UNDEFINED;
     this->GetHorizontalFramePoint(s_leftPoints, 3, x);
@@ -380,7 +380,7 @@ float CLayoutFrame::Left() {
         x = ComputeRightBoundary(this->CenterX(), this->Right(), size);
     }
 
-    this->m_guard &= ~1u;
+    this->m_guard &= ~GUARD_LEFT;
 
     return x;
 }
@@ -388,11 +388,11 @@ float CLayoutFrame::Left() {
 // VERIFY: 14eff9b6 auto
 // OFFSET: 0x00489330
 float CLayoutFrame::Top() {
-    if (this->m_guard & 2) {
+    if (this->m_guard & GUARD_TOP) {
         return CFramePoint::UNDEFINED;
     }
 
-    this->m_guard |= 2;
+    this->m_guard |= GUARD_TOP;
 
     float y = CFramePoint::UNDEFINED;
     this->GetVerticalFramePoint(s_topPoints, 3, y);
@@ -402,7 +402,7 @@ float CLayoutFrame::Top() {
         y = ComputeRightBoundary(this->CenterY(), this->Bottom(), size);
     }
 
-    this->m_guard &= ~2u;
+    this->m_guard &= ~GUARD_TOP;
 
     return y;
 }
@@ -434,7 +434,7 @@ int32_t CLayoutFrame::CalculateRect(CRect* rect) {
         return 0;
     }
 
-    if (!(this->m_layoutFlags & 0x1000)) {
+    if (!(this->m_layoutFlags & LayoutFlags::LAYOUT_CLAMPED_TO_SCREEN)) {
         return 1;
     }
 
@@ -478,28 +478,28 @@ int32_t CLayoutFrame::OnFrameResize() {
     CRect rect = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     if (!this->CalculateRect(&rect)) {
-        this->m_layoutFlags = (this->m_layoutFlags & ~0x900u) | 0x800;
+        this->m_layoutFlags = (this->m_layoutFlags & ~LayoutFlags::LAYOUT_RECT_STATE_MASK) | LayoutFlags::LAYOUT_RECT_UNRESOLVED;
         return 0;
     }
 
-    this->m_layoutFlags &= ~0xC00u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RESIZE_STATE_MASK;
 
-    if ((this->m_layoutFlags & 0x100) && fabs(rect.minX - this->m_rect.minX) < 0.0000099999997f && fabs(rect.maxX - this->m_rect.maxX) < 0.0000099999997f && fequalz(rect.minY, this->m_rect.minY, 0.0000099999997f) && fequalz(rect.maxY, this->m_rect.maxY, 0.0000099999997f)) {
+    if ((this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID) && fabs(rect.minX - this->m_rect.minX) < 0.0000099999997f && fabs(rect.maxX - this->m_rect.maxX) < 0.0000099999997f && fequalz(rect.minY, this->m_rect.minY, 0.0000099999997f) && fequalz(rect.maxY, this->m_rect.maxY, 0.0000099999997f)) {
         return 1;
     }
 
     CRect oldRect = this->m_rect;
     this->m_rect = rect;
-    this->m_layoutFlags |= 0x100;
+    this->m_layoutFlags |= LayoutFlags::LAYOUT_RECT_VALID;
     this->OnFrameSizeChanged(oldRect);
 
-    return (this->m_layoutFlags >> 8) & 1;
+    return (this->m_layoutFlags >> 8) & (LayoutFlags::LAYOUT_RECT_VALID >> 8);
 }
 
 // VERIFY: ebe958b5 auto
 // OFFSET: 0x00489690
 void CLayoutFrame::SetProtected() {
-    this->m_layoutFlags = (this->m_layoutFlags & ~0x70000u) | 0x10000;
+    this->m_layoutFlags = (this->m_layoutFlags & ~LayoutFlags::LAYOUT_PROTECTION_STATE_MASK) | LayoutFlags::LAYOUT_EXPLICITLY_PROTECTED;
     this->PropagateProtectFlagToParent(0x200);
     this->ProtectFramepoints(0x200);
 }
@@ -507,14 +507,14 @@ void CLayoutFrame::SetProtected() {
 // VERIFY: 194662d5 manual
 // OFFSET: 0x004896C0
 void CLayoutFrame::SetProtectFlag(uint32_t flag) {
-    if (this->m_layoutFlags & 0x90000) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_BLOCK_MASK) {
         return;
     }
 
-    this->m_layoutFlags = (this->m_layoutFlags & ~0x20000u) | (((flag & 0xF7FFu) | 0x800) << 8);
+    this->m_layoutFlags = (this->m_layoutFlags & ~LayoutFlags::LAYOUT_DEPENDENCY_PROTECTED) | (((flag & 0xF7FFu) | 0x800) << 8);
     this->PropagateProtectFlagToParent(flag);
     this->ProtectFramepoints(flag);
-    this->m_layoutFlags &= ~0x80000u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_PROTECTION_RECURSION;
 }
 
 // VERIFY: 1461f17f manual
@@ -530,13 +530,13 @@ void CLayoutFrame::AddToResizeList() {
         for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
             CFramePoint* framePoint = frame->m_framePoints[i];
 
-            if (framePoint && !(framePoint->m_flags & 8) && framePoint->m_relative == this) {
+            if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED) && framePoint->m_relative == this) {
                 dependent = frame;
             }
         }
 
         if (dependent) {
-            s_resizePendingList.LinkNode(this, 2, dependent);
+            s_resizePendingList.LinkNode(this, TSLIST_LINK_BEFORE, dependent);
             this->m_layoutFlags = (this->m_layoutFlags & ~0xFFu) | 6;
             return;
         }
@@ -562,7 +562,7 @@ void CLayoutFrame::ResizePending() {
             CLayoutFrame* next = s_resizePendingList.Next(frame);
 
             if (resized || (--reinterpret_cast<uint8_t&>(frame->m_layoutFlags), !static_cast<uint8_t>(frame->m_layoutFlags))) {
-                frame->m_layoutFlags &= ~0x400u;
+                frame->m_layoutFlags &= ~LayoutFlags::LAYOUT_RESIZE_PENDING;
                 s_resizePendingList.UnlinkNode(frame);
             }
 
@@ -586,7 +586,7 @@ CLayoutFrame::CLayoutFrame() {
         this->m_framePoints[i] = nullptr;
     }
 
-    this->m_guard = 0;
+    this->m_guard = GUARD_NONE;
 }
 
 // VERIFY: 1a39cb37 auto
@@ -598,11 +598,11 @@ int32_t CLayoutFrame::AreChildrenProtected(int32_t& deferred) {
 // VERIFY: 57f5064c auto
 // OFFSET: 0x00489A00
 void CLayoutFrame::OnProtectedAttach(CLayoutFrame* frame) {
-    if (this->m_layoutFlags & 0x40000) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_DIRTY) {
         frame->SetProtectFlag(0x400);
     }
 
-    if (this->m_layoutFlags & 0x30000) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTED_MASK) {
         frame->SetProtectFlag(0x200);
     }
 }
@@ -610,7 +610,7 @@ void CLayoutFrame::OnProtectedAttach(CLayoutFrame* frame) {
 // VERIFY: f675f0e3 auto
 // OFFSET: 0x00489A40
 void CLayoutFrame::OnProtectedDetach(CLayoutFrame* frame) {
-    if (this->m_layoutFlags & 0x70000) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_STATE_MASK) {
         frame->SetProtectFlag(0x400);
     }
 }
@@ -619,7 +619,7 @@ void CLayoutFrame::OnProtectedDetach(CLayoutFrame* frame) {
 // OFFSET: 0x00489B50
 int32_t CLayoutFrame::AreDependentsProtected(int32_t& deferred) {
     for (CLayoutFrame::FRAMENODE* node = this->m_resizeList.Head(); node; node = this->m_resizeList.Next(node)) {
-        if (node->m_frame->m_layoutFlags & 0x80000) {
+        if (node->m_frame->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_RECURSION) {
             deferred = 1;
         } else if (node->m_frame->IsProtected()) {
             return 1;
@@ -632,23 +632,23 @@ int32_t CLayoutFrame::AreDependentsProtected(int32_t& deferred) {
 // VERIFY: 6c195430 manual
 // OFFSET: 0x00489BB0
 uint32_t CLayoutFrame::IsProtected() {
-    if (this->m_layoutFlags & 0x40000) {
-        this->m_layoutFlags |= 0x80000;
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_DIRTY) {
+        this->m_layoutFlags |= LayoutFlags::LAYOUT_PROTECTION_RECURSION;
 
         int32_t deferred = 0;
 
         if (this->AreChildrenProtected(deferred) || this->AreDependentsProtected(deferred)) {
-            this->m_layoutFlags |= 0x20000;
+            this->m_layoutFlags |= LayoutFlags::LAYOUT_DEPENDENCY_PROTECTED;
         }
 
-        this->m_layoutFlags &= ~0x80000u;
+        this->m_layoutFlags &= ~LayoutFlags::LAYOUT_PROTECTION_RECURSION;
 
-        if (!deferred || (this->m_layoutFlags & 0x20000)) {
-            this->m_layoutFlags &= ~0x40000u;
+        if (!deferred || (this->m_layoutFlags & LayoutFlags::LAYOUT_DEPENDENCY_PROTECTED)) {
+            this->m_layoutFlags &= ~LayoutFlags::LAYOUT_PROTECTION_DIRTY;
         }
     }
 
-    return (this->m_layoutFlags >> 8) & 0x300;
+    return (this->m_layoutFlags >> 8) & (LayoutFlags::LAYOUT_PROTECTED_MASK >> 8);
 }
 
 // VERIFY: c9d23c46 manual
@@ -661,15 +661,15 @@ void CLayoutFrame::RegisterResize(CLayoutFrame* frame, uint32_t dependency) {
         }
     }
 
-    CLayoutFrame::FRAMENODE* node = this->m_resizeList.NewNode(2, 0, 0);
+    CLayoutFrame::FRAMENODE* node = this->m_resizeList.NewNode(TSLIST_LINK_BEFORE, 0, 0);
     node->m_frame = frame;
     node->m_dependency = dependency;
 
-    if (frame->m_layoutFlags & 0x40000) {
+    if (frame->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_DIRTY) {
         this->SetProtectFlag(0x400);
     }
 
-    if (frame->m_layoutFlags & 0x30000) {
+    if (frame->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTED_MASK) {
         this->SetProtectFlag(0x200);
     }
 }
@@ -691,7 +691,7 @@ void CLayoutFrame::UnregisterResize(CLayoutFrame* frame, uint32_t dependency) {
             return;
         }
 
-        if (frame->m_layoutFlags & 0x70000) {
+        if (frame->m_layoutFlags & LayoutFlags::LAYOUT_PROTECTION_STATE_MASK) {
             this->SetProtectFlag(0x400);
         }
 
@@ -703,7 +703,7 @@ void CLayoutFrame::UnregisterResize(CLayoutFrame* frame, uint32_t dependency) {
 // VERIFY: a6f4615d manual
 // OFFSET: 0x00489DE0
 void CLayoutFrame::Resize(int32_t force) {
-    if (force && !(this->m_layoutFlags & 0x800) && this->OnFrameResize()) {
+    if (force && !(this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_UNRESOLVED) && this->OnFrameResize()) {
         if (s_resizePendingList.IsLinked(this)) {
             s_resizePendingList.UnlinkNode(this);
         }
@@ -711,14 +711,14 @@ void CLayoutFrame::Resize(int32_t force) {
         return;
     }
 
-    if ((this->m_layoutFlags & 0x400) && ((this->m_layoutFlags & 0x200) || this->m_resizeLink.IsLinked())) {
+    if ((this->m_layoutFlags & LayoutFlags::LAYOUT_RESIZE_PENDING) && ((this->m_layoutFlags & LayoutFlags::LAYOUT_DEFERRED_RESIZE) || this->m_resizeLink.IsLinked())) {
         this->m_layoutFlags = (this->m_layoutFlags & ~0xFFu) | 6;
         return;
     }
 
-    this->m_layoutFlags |= 0x400;
+    this->m_layoutFlags |= LayoutFlags::LAYOUT_RESIZE_PENDING;
 
-    if (this->m_layoutFlags & 0x200) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_DEFERRED_RESIZE) {
         for (CLayoutFrame::FRAMENODE* node = this->m_resizeList.Head(); node; node = this->m_resizeList.Next(node)) {
             node->m_frame->Resize(0);
         }
@@ -739,7 +739,7 @@ bool CLayoutFrame::SetLayoutScale(float scale, bool force) {
     if ((force || fabs(scale - this->m_layoutScale) >= 0.00000023841858f) && scale > 0.00000011920929f) {
         this->m_layoutScale = scale;
         this->m_rect = { 0.0f, 0.0f, 0.0f, 0.0f };
-        this->m_layoutFlags &= ~0x100u;
+        this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_VALID;
         this->Resize(0);
         return true;
     }
@@ -758,7 +758,7 @@ bool CLayoutFrame::SetLayoutDepth(float depth, bool force) {
         depth = 0.2f;
     }
 
-    this->m_layoutFlags &= ~0x100u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_VALID;
     this->m_layoutDepth = depth;
     this->Resize(0);
 
@@ -768,7 +768,7 @@ bool CLayoutFrame::SetLayoutDepth(float depth, bool force) {
 // VERIFY: 56b128ef manual
 // OFFSET: 0x00489F80
 void CLayoutFrame::SetWidth(float width) {
-    this->m_layoutFlags &= ~0x800u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     this->m_width = width;
     this->Resize(0);
 }
@@ -776,7 +776,7 @@ void CLayoutFrame::SetWidth(float width) {
 // VERIFY: cd16a710 manual
 // OFFSET: 0x00489FA0
 void CLayoutFrame::SetHeight(float height) {
-    this->m_layoutFlags &= ~0x800u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     this->m_height = height;
     this->Resize(0);
 }
@@ -784,7 +784,7 @@ void CLayoutFrame::SetHeight(float height) {
 // VERIFY: a65146a7 auto
 // OFFSET: 0x00489FC0
 void CLayoutFrame::SetSize(float width, float height) {
-    this->m_layoutFlags &= ~0x800u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     this->m_width = width;
     this->m_height = height;
     this->Resize(0);
@@ -804,7 +804,7 @@ void CLayoutFrame::GetSize(float& width, float& height, int32_t ignoreRect) {
         this->Resize(1);
     }
 
-    if (this->m_layoutFlags & 0x100) {
+    if (this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID) {
         width = (this->m_rect.maxX - this->m_rect.minX) / this->m_layoutScale;
         height = (this->m_rect.maxY - this->m_rect.minY) / this->m_layoutScale;
     }
@@ -814,9 +814,9 @@ void CLayoutFrame::GetSize(float& width, float& height, int32_t ignoreRect) {
 // OFFSET: 0x0048A130
 void CLayoutFrame::SetClampedToScreen(int32_t clamped) {
     if (clamped) {
-        this->m_layoutFlags |= 0x1000;
+        this->m_layoutFlags |= LayoutFlags::LAYOUT_CLAMPED_TO_SCREEN;
     } else {
-        this->m_layoutFlags &= ~0x1000u;
+        this->m_layoutFlags &= ~LayoutFlags::LAYOUT_CLAMPED_TO_SCREEN;
     }
 
     this->Resize(0);
@@ -832,7 +832,7 @@ int32_t CLayoutFrame::CanBeAnchorFor(CLayoutFrame* frame) {
     for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
         CFramePoint* framePoint = this->m_framePoints[i];
 
-        if (framePoint && !(framePoint->m_flags & 8) && framePoint->m_relative && !framePoint->m_relative->CanBeAnchorFor(frame)) {
+        if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED) && framePoint->m_relative && !framePoint->m_relative->CanBeAnchorFor(frame)) {
             return 0;
         }
     }
@@ -854,7 +854,7 @@ void CLayoutFrame::MarkFramePointsUnused() {
     for (int32_t i = 0; i < FRAMEPOINT_NUMPOINTS; i++) {
         CFramePoint* framePoint = this->m_framePoints[i];
 
-        if (framePoint && !(framePoint->m_flags & 8)) {
+        if (framePoint && !(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED)) {
             if (framePoint->m_relative) {
                 framePoint->m_relative->UnregisterResize(this, 1 << i);
             }
@@ -893,7 +893,7 @@ void CLayoutFrame::SetPoint(FRAMEPOINT point, CLayoutFrame* relative, FRAMEPOINT
         }
 
         framePoint->SetRelative(relative, relativePoint, offsetX, offsetY);
-        this->m_layoutFlags &= ~0x800u;
+        this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
 
         if (doResize) {
             this->Resize(0);
@@ -908,7 +908,7 @@ void CLayoutFrame::SetPoint(FRAMEPOINT point, CLayoutFrame* relative, FRAMEPOINT
         framePoint->SetRelative(relative, relativePoint, offsetX, offsetY);
     }
 
-    this->m_layoutFlags &= ~0x800u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     relative->RegisterResize(this, 1 << point);
 
     if (doResize) {
@@ -949,7 +949,7 @@ void CLayoutFrame::SetAllPoints(CLayoutFrame* relative, int32_t doResize) {
         this->m_framePoints[FRAMEPOINT_BOTTOMRIGHT] = new CFramePoint(relative, FRAMEPOINT_BOTTOMRIGHT, 0.0f, 0.0f);
     }
 
-    this->m_layoutFlags &= ~0x800u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     relative->RegisterResize(this, (1 << FRAMEPOINT_TOPLEFT) | (1 << FRAMEPOINT_BOTTOMRIGHT));
 
     if (doResize) {
@@ -961,7 +961,7 @@ void CLayoutFrame::SetAllPoints(CLayoutFrame* relative, int32_t doResize) {
 // OFFSET: 0x0048A520
 void CLayoutFrame::SetDeferredResize(int32_t deferred) {
     if (deferred) {
-        this->m_layoutFlags |= 0x200;
+        this->m_layoutFlags |= LayoutFlags::LAYOUT_DEFERRED_RESIZE;
 
         if (this->m_resizeLink.IsLinked()) {
             s_resizePendingList.UnlinkNode(this);
@@ -970,7 +970,7 @@ void CLayoutFrame::SetDeferredResize(int32_t deferred) {
         return;
     }
 
-    this->m_layoutFlags &= ~0x200u;
+    this->m_layoutFlags &= ~LayoutFlags::LAYOUT_DEFERRED_RESIZE;
 
     if (this->IsResizePending()) {
         this->Resize(1);
@@ -984,13 +984,13 @@ int32_t CLayoutFrame::FlattenFrame(CLayoutFrame* relative, float width, float he
         this->Resize(1);
     }
 
-    if (!(this->m_layoutFlags & 0x100)) {
+    if (!(this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
     CRect rect = this->m_rect;
 
-    if (!(relative->m_layoutFlags & 0x100)) {
+    if (!(relative->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
@@ -1027,13 +1027,13 @@ int32_t CLayoutFrame::UnflattenFrame(CLayoutFrame* relative) {
         this->Resize(1);
     }
 
-    if (!(this->m_layoutFlags & 0x100)) {
+    if (!(this->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
     CRect rect = this->m_rect;
 
-    if (!(relative->m_layoutFlags & 0x100)) {
+    if (!(relative->m_layoutFlags & LayoutFlags::LAYOUT_RECT_VALID)) {
         return 0;
     }
 
@@ -1296,7 +1296,7 @@ void CLayoutFrame::DestroyLayout() {
         CFramePoint* framePoint = this->m_framePoints[i];
 
         if (framePoint) {
-            if (!(framePoint->m_flags & 8) && framePoint->m_relative) {
+            if (!(framePoint->m_flags & CFramePoint::POINT_FLAGS::FLAG_UNUSED) && framePoint->m_relative) {
                 framePoint->m_relative->UnregisterResize(this, 1 << i);
             }
 
@@ -1316,7 +1316,7 @@ void CLayoutFrame::DestroyLayout() {
             }
         }
 
-        frame->m_layoutFlags &= ~0x800u;
+        frame->m_layoutFlags &= ~LayoutFlags::LAYOUT_RECT_UNRESOLVED;
     }
 
     this->m_resizeList.Clear();

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "WoW/Source/Object/GameObjectDef.h"
 #include "Engine/Source/Tempest/C3Vector.h"
 #include "Engine/Source/Tempest/CAaBox.h"
 #include "Engine/Source/Tempest/C44Matrix.h"
@@ -12,9 +13,17 @@
 #include "WoW/Source/Net/Types.h"
 #include "WoW/Source/Object/GameObject.h"
 #include "WoW/Source/Object/ObjectClient/Object_C.h"
+#include "WoW/Source/Object/ObjectClient/Types.h"
 #include "WoW/Source/Object/Passenger.h"
 #include "WoW/Source/SoundInterface/SoundInterface2.h"
 #include "WoW/Source/WorldClient/Map.h"
+
+static const float MAX_SHOP_DISTANCE = 5.5555553f;
+static const float MAX_BIND_DISTANCE = 10.0f;
+static const float MAX_LOOT_DISTANCE = 5.0f;
+static const float MAX_OBJ_INTEREST_RADIUS = 100.0f;
+static const float MAX_SITCHAIRUSE_DISTANCE = 3.0f;
+static const float MAX_SITCHAIR_DISTANCE_SQUARED = 0.16666667f;
 
 class SpellRec;
 class CMapBaseObj;
@@ -49,7 +58,7 @@ class CGGameObject_C_TypeBase {
     virtual void OnUpdateAnimProgress();
     virtual void UpdateState(int32_t oldState, int32_t newState);
     virtual int32_t Animate(float elapsed);
-    virtual void ShouldRender(uint32_t flags, int32_t& render, int32_t& a3);
+    virtual void ShouldRender(uint32_t flags, int32_t& render, int32_t& hidden);
     virtual float GetBaseAlpha() const;
     virtual void HandleAnimEvent(uint32_t eventId, uint32_t data, const C3Vector& position, uint32_t time);
     virtual int32_t HandleAnimInterrupted();
@@ -83,10 +92,36 @@ class CGGameObject_C_TypeBase {
     CGGameObject_C_TypeBase(CGGameObject_C* owner);
 };
 
+// Display state passed to CGGameObject_C::SetDisplayState/UpdateState;
+// distinct from the model animation IDs (ANIMSTATE_*).
+enum GAMEOBJECT_DISPLAY_STATE : int32_t {
+    GAMEOBJECT_DISPLAY_STATE_OPEN = 0,
+    GAMEOBJECT_DISPLAY_STATE_CLOSED = 1,
+    GAMEOBJECT_DISPLAY_STATE_DESTROYED = 2,
+};
+
+enum : int32_t {
+    ANIMSTATE_SPAWN = 0,
+    ANIMSTATE_CLOSED = 1,
+    ANIMSTATE_OPENING = 2,
+    ANIMSTATE_OPEN = 3,
+    ANIMSTATE_CLOSING = 4,
+    ANIMSTATE_DESTROYING = 5,
+    ANIMSTATE_DESTROYED = 6,
+    ANIMSTATE_REBUILDING = 7,
+    ANIMSTATE_FIRSTCUSTOM = 8,
+    ANIMSTATE_CUSTOM0 = 8,
+    ANIMSTATE_CUSTOM1 = 9,
+    ANIMSTATE_CUSTOM2 = 10,
+    ANIMSTATE_CUSTOM3 = 11,
+    ANIMSTATE_DESPAWN = 12,
+    NUM_GAMEOBJ_ANIMSTATES = 13,
+};
+
 class CGGameObject_C_TypeAnimated : public CGGameObject_C_TypeBase {
     public:
-    static uint32_t s_animSequenceIds[13];
-    static const char* s_animStateNames[13];
+    static uint32_t s_animSequenceIds[NUM_GAMEOBJ_ANIMSTATES];
+    static const char* s_animStateNames[NUM_GAMEOBJ_ANIMSTATES];
 
     /* 0010 */ int32_t m_animState;
     /* 0014 */ int32_t m_pendingAnimState;
@@ -151,8 +186,8 @@ class CGGameObject_C_Type_TransportBase : public CGGameObject_C_Type_WorldObj {
     /* 0020 */ C3Vector m_position;
     /* 002C */ float m_speed;
     /* 0030 */ uint32_t m_pathTime;
-    /* 0034 */ uint32_t unk_0034;
-    /* 0038 */ int32_t unk_0038;
+    /* 0034 */ uint32_t m_worldObjectReady;
+    /* 0038 */ int32_t m_currentState;
     /* 003C */ uint32_t m_transportUpdateTime;
 
     virtual ~CGGameObject_C_Type_TransportBase();
@@ -196,7 +231,7 @@ struct DestructibleBuildingState {
     /* 0008 */ CMapEntity* m_object;
     /* 000C */ uint8_t m_loading;
     /* 000D */ uint8_t m_animate;
-    /* 000E */ uint8_t unk_000E[2];
+    /* 000E */ uint8_t unknown_000E[2];
 };
 
 class CGGameObject_C_Type_DestructibleBuilding : public CGGameObject_C_Type_WorldObj {
@@ -287,7 +322,7 @@ class CGGameObject_C : public CGObject_C, public CGGameObject {
     static void SequenceCallback(CM2Model* model, uint32_t boneId, uint32_t sequenceId, int32_t interrupted, uint32_t time, uint64_t param);
 
     /* 00D8 */ CPassenger m_passenger;
-    /* 0108 */ TSList<void> m_gameObjectMirrorLists [12];
+    /* 0108 */ TSList<void> m_gameObjectMirrorLists [CGGameObjectData::NUM_FIELDS];
     /* 0198 */ TSLink<CGGameObject_C> m_transportLink;
     /* 01A0 */ CGGameObject_C_TypeBase* m_typeData;
     /* 01A4 */ GameObjectStats* m_stats;
@@ -312,10 +347,10 @@ class CGGameObject_C : public CGObject_C, public CGGameObject {
     virtual void UpdateInteractIconAttach();
     virtual int32_t Animate(float elapsed);
     virtual int32_t IsSolidSelectable() const;
-    virtual int32_t IsCollidable(int32_t a1) const;
+    virtual int32_t IsCollidable(int32_t flags) const;
     virtual int32_t IsHighlightSuppressed() const;
     virtual int32_t GetModelFileName(const char** name) const;
-    virtual void ShouldRender(uint32_t flags, int32_t& render, int32_t& a3);
+    virtual void ShouldRender(uint32_t flags, int32_t& render, int32_t& hidden);
     virtual C44Matrix GetMatrix() const;
     virtual const char* GetObjectName() const;
     virtual int32_t ShouldFadeIn() const;
@@ -354,7 +389,7 @@ class CGGameObject_C : public CGObject_C, public CGGameObject {
     float GetInteractDistanceSquared() const;
     const char* GetModelFileNameInternal() const;
     const char* GetOpenText() const;
-    uint32_t GetPropertyValue(uint32_t index) const;
+    uint32_t GetPropertyValue(uint32_t propertyIndex) const;
     int32_t GetPageTextMaterial() const;
     int32_t GetPageTextLanguage() const;
     bool IsValidOpenAction(int32_t action) const;
@@ -363,7 +398,7 @@ class CGGameObject_C : public CGObject_C, public CGGameObject {
     void PostInit(uint32_t time, const CClientObjCreate& create, bool reenable);
     void ResetDisplayState();
     void SetDisplayState(int32_t state);
-    int32_t ObjectReaction(const CGUnit_C* unit) const;
+    UNIT_REACTION ObjectReaction(const CGUnit_C* unit) const;
     LockRec* GetLockRec() const;
     bool IsValidTargetForSpell(const WOWGUID& item, int32_t spellId) const;
     int32_t CanChangeCursor() const;
@@ -374,7 +409,7 @@ class CGGameObject_C : public CGObject_C, public CGGameObject {
     void UpdateObjectEffectAnimationStates(uint32_t anim);
     CAaBox GetWorldBounds() const;
     void UpdateDisplay(uint32_t time);
-    uint32_t GetProperty(int32_t prop) const;
+    uint32_t GetProperty(int32_t propertyId) const;
     bool IsLocked(int32_t* spellId, int32_t* skillValue, int32_t* requiredSkill, CGItem_C** key, uint32_t* entry) const;
     bool IsUsableInCombat() const;
     bool IsUsableMounted() const;

@@ -22,7 +22,7 @@ static CDataAllocator s_freeTrails(sizeof(WTOBJECT), 128);
 WTOBJECT::~WTOBJECT() {
     if (this->m_model) {
         CM2Model* model = this->m_model;
-        model->m_fFlags |= 0x20;
+        model->m_runtimeFlags |= 0x20;
         model->m_drawCallback = nullptr;
         model->m_drawArg = nullptr;
         this->m_model->Release();
@@ -155,7 +155,7 @@ bool SWING::BuildVertexBuffer(uint32_t time, const C3Vector& top, const C3Vector
         }
 
         g_theGxDevicePtr->BufUnlock(buf, 0);
-        buf->unk_001C = 1;
+        buf->m_hasData = 1;
         GxPrimVertexPtr(buf, GxVBF_PC);
 
         CGxBatch batch;
@@ -174,19 +174,19 @@ bool SWING::BuildVertexBuffer(uint32_t time, const C3Vector& top, const C3Vector
 // VERIFY: 1e058dc3 auto
 // OFFSET: 0x007E4F50
 static void WeaponTrailCallback(CM2Model* model, const CM2Lighting* lighting, void* arg) {
-    if (!model->HasEvent('BTW$') || !model->HasEvent('TTW$')) {
+    if (!model->HasEvent(M2_EVENT_ID::WeaponTrailBottom_WTB) || !model->HasEvent(M2_EVENT_ID::WeaponTrailTop_WTT)) {
         return;
     }
 
     uint32_t time = FrameTime::s_curTimeMs;
-    C3Vector bottom = model->GetEventPosition('BTW$');
-    C3Vector top = model->GetEventPosition('TTW$');
+    C3Vector bottom = model->GetEventPosition(M2_EVENT_ID::WeaponTrailBottom_WTB);
+    C3Vector top = model->GetEventPosition(M2_EVENT_ID::WeaponTrailTop_WTT);
     WTOBJECT* trail = static_cast<WTOBJECT*>(arg);
 
     if (!trail->m_swing->BuildVertexBuffer(time, top, bottom)) {
         s_freeSwings.PutData(trail->m_swing, nullptr, 0);
         trail->m_swing = nullptr;
-        model->m_fFlags |= 0x20;
+        model->m_runtimeFlags |= 0x20;
         model->m_drawCallback = nullptr;
         model->m_drawArg = nullptr;
     }
@@ -207,7 +207,7 @@ void WTOBJECT::SetDrawTrail(const uint32_t* color, uint32_t duration) {
 
         CM2Model* model = this->m_model;
         this->m_swing = swing;
-        model->m_fFlags |= 0x20;
+        model->m_runtimeFlags |= 0x20;
         model->m_drawCallback = WeaponTrailCallback;
         model->m_drawArg = this;
     }

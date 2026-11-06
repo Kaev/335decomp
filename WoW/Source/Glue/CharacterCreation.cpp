@@ -1,4 +1,5 @@
 #include "CharacterCreation.h"
+#include "WoW/Common/Types.h"
 #include <cstring>
 #include "Engine/Source/Event/Event.h"
 #include "Engine/Source/FrameScript/FrameScript.h"
@@ -29,7 +30,7 @@
 #include "WoW/Source/WowSvcs/WowSvcsClient/Types.h"
 
 // STATIC: 0x00AC4220
-int32_t CCharacterCreation::m_selectedClassID = 1;
+int32_t CCharacterCreation::m_selectedClassID = CLASS_WARRIOR;
 
 // STATIC: 0x00AC4224
 int32_t CCharacterCreation::m_existingCharacterIndex = -1;
@@ -197,7 +198,7 @@ void CCharacterCreation::SetCharCustomizeModel(const char* modelName) {
     }
 
     if (CCharacterCreation::m_charCustomizeFrame->m_model && CCharacterCreation::m_character->m_data.m_model) {
-        CCharacterCreation::m_character->m_data.m_model->AttachToParent(CCharacterCreation::m_charCustomizeFrame->m_model, 0, nullptr, 0);
+        CCharacterCreation::m_character->m_data.m_model->AttachToParent(CCharacterCreation::m_charCustomizeFrame->m_model, MODEL_ATTACHMENT_ID::ATTACH_SHIELD, nullptr, 0);
     }
 }
 
@@ -428,7 +429,7 @@ void CCharacterCreation::Dress() {
                     continue;
                 }
 
-                if (display->m_characterInfo.m_classID == 3) {
+                if (display->m_characterInfo.m_classID == CLASS_HUNTER) {
                     if (slot == INVSLOT_MAINHAND || slot == INVSLOT_OFFHAND) {
                         continue;
                     }
@@ -491,7 +492,7 @@ void CCharacterCreation::Dress() {
                 continue;
             }
 
-            if (CCharacterCreation::m_selectedClassID == 3) {
+            if (CCharacterCreation::m_selectedClassID == CLASS_HUNTER) {
                 switch (type) {
                     case INVTYPE_WEAPON:
                     case INVTYPE_2HWEAPON:
@@ -506,7 +507,7 @@ void CCharacterCreation::Dress() {
                         ItemDisplayInfoRec itemRec;
 
                         if (g_itemDisplayInfoDB.GetRecord(displayID, &itemRec)) {
-                            GEOCOMPONENTLINKS link = CCharacterComponent::AddHandItem(CCharacterCreation::m_character->m_data.m_model, &itemRec, INVSLOT_RANGED, SHEATHE_NONE, false, false, mainHand, 0);
+                            MODEL_ATTACHMENT_ID link = CCharacterComponent::AddHandItem(CCharacterCreation::m_character->m_data.m_model, &itemRec, INVSLOT_RANGED, SHEATHE_NONE, false, false, mainHand, 0);
 
                             if (type == INVTYPE_RANGED) {
                                 for (CM2Model* attached = CCharacterCreation::m_character->m_data.m_model->m_attachList; attached; attached = attached->m_attachNext) {
@@ -571,7 +572,7 @@ void CCharacterCreation::InitCharacterComponents(ComponentData* data, bool rando
     CCharacterCreation::m_charCustomizeFrame->m_lightArray2[0].unk_01BC = 1;
     data->m_model->m_lightingCallback = &CCharacterSelection::GenericLightingCallback;
     data->m_model->m_lightingArg = CCharacterCreation::m_charCustomizeFrame->m_lightArray2;
-    data->m_model->SetBoneSequence(0xFFFFFFFF, 0, 0, 0, 1.0f, 1, 1);
+    data->m_model->SetBoneSequence(0xFFFFFFFF, ANIM_STAND, 0, 0, 1.0f, 1, 1);
     data->m_flags |= 0x2;
 
     CCharacterCreation::m_character->Init(data, nullptr);
@@ -595,7 +596,7 @@ void CCharacterCreation::InitCharacterComponents(ComponentData* data, bool rando
     CCharacterCreation::m_character->RenderPrep(0);
 
     if (CCharacterCreation::m_charCustomizeFrame->m_model) {
-        CCharacterCreation::m_character->m_data.m_model->AttachToParent(CCharacterCreation::m_charCustomizeFrame->m_model, 0, nullptr, 0);
+        CCharacterCreation::m_character->m_data.m_model->AttachToParent(CCharacterCreation::m_charCustomizeFrame->m_model, MODEL_ATTACHMENT_ID::ATTACH_SHIELD, nullptr, 0);
     }
 }
 
@@ -740,7 +741,7 @@ void CCharacterCreation::ResetCharCustomizeInfo() {
     CCharacterCreation::m_existingCharacterIndex = -1;
 
     if (CCharacterCreation::m_charCustomizeFrame->m_model) {
-        CCharacterCreation::m_charCustomizeFrame->m_model->DetachAllChildrenById(0);
+        CCharacterCreation::m_charCustomizeFrame->m_model->DetachAllChildrenById(MODEL_ATTACHMENT_ID::ATTACH_SHIELD);
     }
 
     ComponentData data;

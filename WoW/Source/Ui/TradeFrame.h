@@ -4,6 +4,44 @@
 #include <cstdint>
 #include "WoW/Source/Object/WGUID.h"
 
+// Native slots 0..5 transfer items; slot 6 is retained for services such as enchanting.
+constexpr int32_t NUM_TRADED_ITEM_SLOTS = 6;
+constexpr int32_t NUM_TRADE_SLOTS = 7;
+
+enum TRADE_SLOT : int32_t {
+    TRADE_SLOT_NONTRADED = NUM_TRADED_ITEM_SLOTS,
+};
+
+enum TRADE_STATUS : int32_t {
+    TRADE_STATUS_PLAYER_BUSY = 0,
+    TRADE_STATUS_PROPOSED = 1,
+    TRADE_STATUS_INITIATED = 2,
+    TRADE_STATUS_CANCELLED = 3,
+    TRADE_STATUS_ACCEPTED = 4,
+    TRADE_STATUS_ALREADY_TRADING = 5,
+    TRADE_STATUS_PLAYER_NOT_FOUND = 6,
+    TRADE_STATUS_STATE_CHANGED = 7,
+    TRADE_STATUS_COMPLETE = 8,
+    TRADE_STATUS_UNACCEPTED = 9,
+    TRADE_STATUS_TOO_FAR_AWAY = 10,
+    TRADE_STATUS_WRONG_FACTION = 11,
+    TRADE_STATUS_FAILED = 12,
+    TRADE_STATUS_RESET_ONLY = 13,
+    TRADE_STATUS_PLAYER_IGNORED = 14,
+    TRADE_STATUS_PLAYER_STUNNED = 15,
+    TRADE_STATUS_TARGET_STUNNED = 16,
+    TRADE_STATUS_DEAD = 17,
+    TRADE_STATUS_TARGET_DEAD = 18,
+    TRADE_STATUS_LOGGING_OUT = 19,
+    TRADE_STATUS_TARGET_LOGGING_OUT = 20,
+    TRADE_STATUS_RESTRICTED_ACCOUNT = 21,
+    TRADE_STATUS_WRONG_REALM = 22,
+    TRADE_STATUS_NOT_ON_TAPLIST = 23,
+
+    // Unused 0.5.3 name/value; current 14 means PLAYER_IGNORED.
+    // TRADE_STATUS_PETITION = 14,
+};
+
 class CGItem_C;
 
 struct lua_State;
@@ -20,10 +58,10 @@ struct TRADE_ITEM {
     /* 0008 */ int32_t m_count;
     /* 000C */ int32_t m_enchant;
     /* 0010 */ int32_t m_socketEnchants[3];
-    /* 001C */ uint32_t unk_001C;
+    /* 001C */ uint32_t unused_001C;
     /* 0020 */ WOWGUID m_creator;
     /* 0028 */ int32_t m_wrapped;
-    /* 002C */ uint32_t unk_002C;
+    /* 002C */ uint32_t unused_002C;
     /* 0030 */ WOWGUID m_giftCreator;
     /* 0038 */ int32_t m_spellCharges;
     /* 003C */ int32_t m_suffixFactor;
@@ -35,7 +73,7 @@ struct TRADE_ITEM {
 
 class CGTradeInfo {
     public:
-    static void SetTradePartner(WOWGUID partner, int32_t a2);
+    static void SetTradePartner(WOWGUID partner, int32_t suppressMoneyEvent);
     static void SetEnchantingItem(CGItem_C* item);
     static bool IsItemBeingTraded(WOWGUID item);
     static bool AddPlayerItem(WOWGUID item, WOWGUID container, uint8_t slot);
@@ -52,22 +90,22 @@ class CGTradeInfo {
     static uint32_t GetTargetTradeMoney();
     static WOWGUID m_tradingPlayer;
     static PlayerTradeState m_playerTrade;
-    static int32_t m_targetDurability[7];
-    static int32_t m_targetMaxDurability[7];
-    static int32_t m_targetLockID[7];
-    static int32_t m_targetRandomPropertyID[7];
-    static int32_t m_targetSuffixFactor[7];
-    static int32_t m_targetSpellCharges[7];
-    static WOWGUID m_targetGiftCreator[7];
-    static int32_t m_targetWrapped[7];
-    static int32_t m_targetEnchant[7];
-    static WOWGUID m_targetCreator[7];
-    static int32_t m_targetSocketEnchants[7][3];
-    static int32_t m_targetCount[7];
-    static int32_t m_targetItemID[7];
-    static uint8_t m_playerItemContainerSlot[7];
-    static WOWGUID m_playerItemContainer[7];
-    static WOWGUID m_playerItems[7];
+    static int32_t m_targetDurability[NUM_TRADE_SLOTS];
+    static int32_t m_targetMaxDurability[NUM_TRADE_SLOTS];
+    static int32_t m_targetLockID[NUM_TRADE_SLOTS];
+    static int32_t m_targetRandomPropertyID[NUM_TRADE_SLOTS];
+    static int32_t m_targetSuffixFactor[NUM_TRADE_SLOTS];
+    static int32_t m_targetSpellCharges[NUM_TRADE_SLOTS];
+    static WOWGUID m_targetGiftCreator[NUM_TRADE_SLOTS];
+    static int32_t m_targetWrapped[NUM_TRADE_SLOTS];
+    static int32_t m_targetEnchant[NUM_TRADE_SLOTS];
+    static WOWGUID m_targetCreator[NUM_TRADE_SLOTS];
+    static int32_t m_targetSocketEnchants[NUM_TRADE_SLOTS][3];
+    static int32_t m_targetCount[NUM_TRADE_SLOTS];
+    static int32_t m_targetItemID[NUM_TRADE_SLOTS];
+    static uint8_t m_playerItemContainerSlot[NUM_TRADE_SLOTS];
+    static WOWGUID m_playerItemContainer[NUM_TRADE_SLOTS];
+    static WOWGUID m_playerItems[NUM_TRADE_SLOTS];
     static int32_t m_playerAccepted;
     static int32_t m_targetAccepted;
     static int32_t m_lastPlayerEnchantSpell;
@@ -77,14 +115,14 @@ class CGTradeInfo {
 
     static void UpdatePlayerItem(WOWGUID guid);
     static void AddCursorItem(int32_t bound);
-    static void InitiateTrade(WOWGUID guid, int32_t a2);
+    static void InitiateTrade(WOWGUID guid, int32_t useCursorItem);
     static void UnlockTradeItems();
     static void DenyPlayerItem(int32_t slot);
     static int32_t GetGameError(int32_t error, int32_t target);
     static void PlayerAccept();
     static void RemovePlayerItem(WOWGUID item);
     static void OnTradeUpdated(const TRADE_ITEM* items);
-    static void HandleTradeMessage(int32_t status, int32_t bagResult, int32_t target, int32_t itemId, uint8_t slot);
+    static void HandleTradeMessage(TRADE_STATUS status, int32_t bagResult, int32_t target, int32_t itemId, uint8_t slot);
     static void LeaveWorld();
 };
 

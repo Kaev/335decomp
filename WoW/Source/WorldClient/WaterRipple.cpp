@@ -22,6 +22,11 @@
 #include "Engine/Source/Storm/H/stpl.h"
 #include "WoW/Source/WorldClient/MapObjGroup.h"
 
+enum WaterRippleLimits : uint32_t {
+    NUM_PLAYER_RIPPLES = 32,
+    NUM_RIPPLES = 128,
+};
+
 // STATIC: 0x00ADF7F4
 static const char* s_rippleTextureNames[2] = {
     "XTextures\\splash\\splash.blp",
@@ -113,7 +118,7 @@ void CMap::RenderWaterRipples() {
         ripple = next;
     }
 
-    if (!vertexCounts[0] && !vertexCounts[1]) {
+    if (!vertexCounts[CWaterRipple::SPLASH] && !vertexCounts[CWaterRipple::WAKE]) {
         return;
     }
 
@@ -220,9 +225,9 @@ void CMap::RenderWaterRipples() {
         }
 
         g_theGxDevicePtr->BufUnlock(indexBuf, 0);
-        indexBuf->unk_001C = 1;
+        indexBuf->m_hasData = 1;
         g_theGxDevicePtr->BufUnlock(vertexBuf, 0);
-        vertexBuf->unk_001C = 1;
+        vertexBuf->m_hasData = 1;
 
         if (index) {
             GxPrimVertexPtr(vertexBuf, GxVBF_PCT);
@@ -250,7 +255,7 @@ void CMap::RenderWaterRipples() {
 // OFFSET: 0x0079E1A0
 void WaterRipple::Initialize() {
     WaterRipple::s_nextPlayerRipple = 0;
-    WaterRipple::s_nextUnitRipple = 32;
+    WaterRipple::s_nextUnitRipple = NUM_PLAYER_RIPPLES;
 
     CGxTexFlags flags;
     CStatus status;
@@ -259,7 +264,7 @@ void WaterRipple::Initialize() {
         s_rippleTextures[i] = TextureCreate(s_rippleTextureNames[i], flags, &status, 1);
     }
 
-    s_ripplePool.SetCount(128);
+    s_ripplePool.SetCount(NUM_RIPPLES);
     s_ripplesInitialized = 0;
 
     g_theGxDevicePtr->ShaderCreate(&WaterRipple::s_vsWaterRipples, GxSh_Vertex, "Shaders\\Vertex", "WaterRipples", 1);
@@ -297,7 +302,7 @@ void WaterRipple::Destroy() {
 // VERIFY: 3fca29ac manual
 // OFFSET: 0x0079CF40
 void CWaterRipple::InitRipple(const C3Vector& pos, float rotation, float size, float alpha, float duration, float growth, int32_t type) {
-    int32_t directional = type != 0;
+    TYPE directional = static_cast<TYPE>(type != 0);
     this->m_type = directional;
     this->m_position = pos;
     this->m_rotation = rotation;
@@ -321,7 +326,7 @@ void CWaterRipple::InitRipple(const C3Vector& pos, float rotation, float size, f
     World::TriData::nBatches = 0;
     World::TriData::faceIndexCursor = 0;
     World::TriData::indexCursor = 0;
-    World::TriData::unk_CB7538 = 0;
+    World::TriData::matrixPoolCount = 0;
     World::TriData triData;
 
     if (!World::GetTris(box, &triData, 0x20000)) {
@@ -352,14 +357,14 @@ void WaterRipple::Create(const C3Vector& pos, float facing, float size, float al
     if (player) {
         index = WaterRipple::s_nextPlayerRipple++;
 
-        if (WaterRipple::s_nextPlayerRipple >= 32) {
+        if (WaterRipple::s_nextPlayerRipple >= NUM_PLAYER_RIPPLES) {
             WaterRipple::s_nextPlayerRipple = 0;
         }
     } else {
         index = WaterRipple::s_nextUnitRipple++;
 
-        if (WaterRipple::s_nextUnitRipple >= 128) {
-            WaterRipple::s_nextUnitRipple = 32;
+        if (WaterRipple::s_nextUnitRipple >= NUM_RIPPLES) {
+            WaterRipple::s_nextUnitRipple = NUM_PLAYER_RIPPLES;
         }
     }
 
