@@ -130,10 +130,10 @@ bool CWorldParam::TextureFilteringCallback(CVar* var, const char* oldValue, cons
 bool CWorldParam::LodCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (SStrToInt(value)) {
         ConsoleWrite("Terrain LOD enabled.", DEFAULT_COLOR);
-        CWorld::enables |= Enable_Lod;
+        CWorld::enables |= Enables::Enable_Lod;
     } else {
         ConsoleWrite("Terrain LOD disabled.", DEFAULT_COLOR);
-        CWorld::enables &= ~Enable_Lod;
+        CWorld::enables &= ~Enables::Enable_Lod;
     }
 
     return true;
@@ -144,10 +144,10 @@ bool CWorldParam::LodCallback(CVar* var, const char* oldValue, const char* value
 bool CWorldParam::MapShadowsCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (SStrToInt(value)) {
         ConsoleWrite("Terrain shadows enabled.", DEFAULT_COLOR);
-        CWorld::enables |= Enable_Shadow;
+        CWorld::enables |= Enables::Enable_Shadow;
     } else {
         ConsoleWrite("Terrain shadows disabled.", DEFAULT_COLOR);
-        CWorld::enables &= ~Enable_Shadow;
+        CWorld::enables &= ~Enables::Enable_Shadow;
     }
 
     return true;
@@ -282,10 +282,10 @@ bool CWorldParam::WaterLodCallback(CVar* var, const char* oldValue, const char* 
 bool CWorldParam::ShowFootprintsCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (SStrToInt(value)) {
         ConsoleWrite("Showing foot prints.", DEFAULT_COLOR);
-        CWorld::enables |= CWorld::ENABLE_FLAGS::FOOTPRINTS;
+        CWorld::enables |= Enables::Enable_Footprints;
     } else {
         ConsoleWrite("Hiding foot prints.", DEFAULT_COLOR);
-        CWorld::enables &= ~CWorld::ENABLE_FLAGS::FOOTPRINTS;
+        CWorld::enables &= ~Enables::Enable_Footprints;
     }
 
     return true;
@@ -395,10 +395,10 @@ bool CWorldParam::GroundEffectDistCallback(CVar* var, const char* oldValue, cons
 bool CWorldParam::ObjectFadeCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (SStrToInt(value)) {
         ConsoleWrite("Object distance fade enabled.", DEFAULT_COLOR);
-        CWorld::enables |= 0x4000;
+        CWorld::enables |= Enables::Enable_ObjectFade;
     } else {
         ConsoleWrite("Object distance fade disabled.", DEFAULT_COLOR);
-        CWorld::enables &= ~0x4000;
+        CWorld::enables &= ~Enables::Enable_ObjectFade;
     }
 
     return true;
@@ -409,10 +409,10 @@ bool CWorldParam::ObjectFadeCallback(CVar* var, const char* oldValue, const char
 bool CWorldParam::ObjectFadeZFillCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (SStrToInt(value)) {
         ConsoleWrite("Object distance fade ZFill pass enabled.", DEFAULT_COLOR);
-        CWorld::enables |= 0x8000;
+        CWorld::enables |= Enables::Enable_ObjectFadeZFill;
     } else {
         ConsoleWrite("Object distance fade ZFill pass disabled.", DEFAULT_COLOR);
-        CWorld::enables &= ~0x8000;
+        CWorld::enables &= ~Enables::Enable_ObjectFadeZFill;
     }
 
     return true;
@@ -480,7 +480,7 @@ bool CWorldParam::ProjectedTexturesCallback(CVar* var, const char* oldValue, con
 bool CWorldParam::SpecularCallback(CVar* var, const char* oldValue, const char* value, void* arg) {
     if (!SStrToInt(value)) {
         ConsoleWrite("Specular disabled on restart.", DEFAULT_COLOR);
-        CWorld::enables &= ~Enable_Specular;
+        CWorld::enables &= ~Enables::Enable_Specular;
 
         return true;
     }
@@ -492,7 +492,7 @@ bool CWorldParam::SpecularCallback(CVar* var, const char* oldValue, const char* 
     }
 
     ConsoleWrite("Specular enabled on restart.", DEFAULT_COLOR);
-    CWorld::enables |= Enable_Specular;
+    CWorld::enables |= Enables::Enable_Specular;
 
     return true;
 }

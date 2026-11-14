@@ -222,7 +222,7 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
     Liquid::UpdateProceduralTextures();
     CWorldScene::PrepareLiquidInstances();
 
-    if ((CWorld::enables & 0x1000000) && CWorldScene::s_liquidRenderer) {
+    if ((CWorld::enables & Enables::Enable_Water) && CWorldScene::s_liquidRenderer) {
         CWorldScene::s_liquidRenderer->Flush(CWorldScene::s_activeWorldView, 0);
     }
 
@@ -243,7 +243,7 @@ void CWorldScene::Render(const C3Vector& cameraPos, float time) {
     g_theGxDevicePtr->RsPop();
     CursorReleaseItemMips();
 
-    if (CWorld::enables & 0x200000) {
+    if (CWorld::enables & Enables::Enable_CollisionDebug) {
         CWorldScene::RenderCollisionDebug();
         CMap::debugVertexArray.SetCount(0);
         CMap::debugIndexArray.m_count = 0;

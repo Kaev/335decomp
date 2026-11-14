@@ -787,7 +787,7 @@ void CBarrier::SetViewerPos(const C3Vector& position) {
 // VERIFY: b95e4db0 auto
 // OFFSET: 0x0077F9D0
 void CWorldScene::RenderParticulate() {
-    if ((CWorld::enables & Enable_Particulates) && s_liquidTypeId) {
+    if ((CWorld::enables & Enables::Enable_Particulates) && s_liquidTypeId) {
         CWorld::particulate->Render();
     }
 }
@@ -1376,7 +1376,7 @@ void CWorld::LoadMap(const char* mapName, C3Vector* position, int32_t zoneID, in
 
     int32_t shaders = 1;
 
-    if (!(CWorld::enables2 & Enable_VertexShader) || !(CWorld::enables & Enable_PixelShaders)) {
+    if (!(CWorld::enables2 & Enable_VertexShader) || !(CWorld::enables & Enables::Enable_PixelShaders)) {
         shaders = 0;
     }
 
@@ -1569,7 +1569,7 @@ void CWorld::Update(C3Vector* camPos, C3Vector* camTarget, C3Vector* position) {
 
     CWorld::status.m_prepareAll = 0;
 
-    if ((CWorld::enables & Enable_Particulates) && s_liquidTypeId) {
+    if ((CWorld::enables & Enables::Enable_Particulates) && s_liquidTypeId) {
         CWorld::particulate->Update();
     }
 
@@ -1666,14 +1666,14 @@ void CWorld::Destroy() {
 // VERIFY: 7261c1de manual
 // OFFSET: 0x00780F50
 void CWorld::Initialize() {
-    CWorld::enables |= 0x7104B73;
+    CWorld::enables |= Enables::Enable_InitialMask;
     CWorld::s_elapsedTimeSec = 0.0f;
     CWorld::frameCnt = 0;
     CWorld::chunkCnt = 0;
     CWorld::s_elapsedTicks = 0;
 
     if (g_theGxDevicePtr->Caps().m_shaderTargets[4] > 0) {
-        CWorld::enables |= Enable_PixelShaders;
+        CWorld::enables |= Enables::Enable_PixelShaders;
     }
 
     if (g_theGxDevicePtr->Caps().m_shaderTargets[0] > 0) {
@@ -1906,7 +1906,7 @@ void CWorldScene::UpdateViewerLiquid() {
     int32_t leftLiquid = 0;
 
     if (liquidType) {
-        if (liquidType != static_cast<int32_t>(s_liquidTypeId) && (CWorld::enables & Enable_Particulates)) {
+        if (liquidType != static_cast<int32_t>(s_liquidTypeId) && (CWorld::enables & Enables::Enable_Particulates)) {
             const LiquidTypeRec* rec = g_liquidTypeDB.GetRecord(liquidType);
             bool particles = (rec->m_flags & 8) != 0;
             CWorld::particulate->m_enabled = particles;
@@ -1934,7 +1934,7 @@ void CWorldScene::UpdateViewerLiquid() {
 void CWorldScene::RenderLiquidPass() {
     CWorldScene::ApplyFogState();
 
-    if ((CWorld::enables & Enable_Water) && CWorldScene::s_liquidRenderer) {
+    if ((CWorld::enables & Enables::Enable_Water) && CWorldScene::s_liquidRenderer) {
         CWorldScene::s_liquidRenderer->Flush(CWorldScene::s_activeWorldView, 1);
     }
 
@@ -2107,7 +2107,7 @@ void CWorldScene::FrustumPush() {
 // VERIFY: 11ca4f8e manual
 // OFFSET: 0x00791980
 void CWorldScene::CullHorizon(CRect* rect) {
-    if (!(CWorld::enables & Enable_LowDetail)) {
+    if (!(CWorld::enables & Enables::Enable_LowDetail)) {
         return;
     }
 
@@ -2146,7 +2146,7 @@ void CWorldScene::AddDoodadDefModelToModelScene(CMapDoodadDef* doodadDef) {
 
     uint32_t flags = doodadDef->m_flags;
 
-    if ((flags & 0x20) || !(CWorld::enables & Enable_Doodads)) {
+    if ((flags & 0x20) || !(CWorld::enables & Enables::Enable_Doodads)) {
         return;
     }
 
@@ -2154,7 +2154,7 @@ void CWorldScene::AddDoodadDefModelToModelScene(CMapDoodadDef* doodadDef) {
 
     float alpha = 1.0f;
 
-    if ((CWorld::enables & Enable_NoFullAlpha) && !(flags & 0x800)) {
+    if ((CWorld::enables & Enables::Enable_ObjectFade) && !(flags & 0x800)) {
         float dx = doodadDef->m_sphere.c.x - CWorldScene::s_activeWorldView.x;
         float dy = doodadDef->m_sphere.c.y - CWorldScene::s_activeWorldView.y;
         float dz = doodadDef->m_sphere.c.z - CWorldScene::s_activeWorldView.z;
@@ -2520,7 +2520,7 @@ void CWorldScene::UpdateSortedModels() {
 // VERIFY: b0cc1bd0 auto
 // OFFSET: 0x007935A0
 void CWorldScene::CullLiquid(CSortEntry* entry) {
-    if (!(CWorld::enables & Enable_Water)) {
+    if (!(CWorld::enables & Enables::Enable_Water)) {
         CChunkLiquid* liquid = entry->m_liquidList.Head();
 
         while (liquid) {
@@ -2554,7 +2554,7 @@ void CWorldScene::CullLiquid(CSortEntry* entry) {
 // VERIFY: 672d50fa manual
 // OFFSET: 0x00793760
 void CWorldScene::UpdateOcclusion(CSortEntry* entry) {
-    if (!(CWorld::enables & Enable_Culling)) {
+    if (!(CWorld::enables & Enables::Enable_Culling)) {
         entry->m_holedChunkList.UnlinkAll();
 
         CWorldOccluder* occluder = entry->m_occluderList.Head();
@@ -2599,7 +2599,7 @@ void CWorldScene::UpdateOcclusion(CSortEntry* entry) {
         CWorldOccluder* next = entry->m_occluderList.Next(occluder);
         occluder->ClipBufferUpdate();
 
-        if (CWorld::enables & Enable_PortalVis) {
+        if (CWorld::enables & Enables::Enable_PortalVis) {
             CWorldScene::sortTable.m_visibleOccluderList.LinkToTail(occluder);
         } else {
             occluder->Recycle();
@@ -2625,7 +2625,7 @@ void CWorldScene::RenderChunksSolid() {
         CMapRenderChunk* next = list.RawNext(renderChunk);
         renderChunk->RenderSetup(1);
 
-        if (CWorld::enables & Enable_Chunks) {
+        if (CWorld::enables & Enables::Enable_Chunks) {
             if (CMapRenderChunk::s_currentShaderX[0]) {
                 if (CMap::enableTerrainShaderVertex) {
                     renderChunk->RenderSolidVertexPixelShader();
@@ -2655,7 +2655,7 @@ void CWorldScene::RenderChunksZoneDebug() {
         CMapRenderChunk* next = list.RawNext(renderChunk);
         renderChunk->RenderSetup(0);
 
-        if (CWorld::enables & Enable_Chunks) {
+        if (CWorld::enables & Enables::Enable_Chunks) {
             renderChunk->RenderZoneDebug();
         }
 
@@ -2674,7 +2674,7 @@ void CWorldScene::PrepareLiquidInstances() {
         CMapObjDefGroup* next = CWorldScene::sortTable.m_interiorLiquidGroupList.Next(group);
         group->m_liquidLink.Unlink();
 
-        if ((CWorld::enables & Enable_MapObjs) && CWorldScene::s_liquidRenderer) {
+        if ((CWorld::enables & Enables::Enable_MapObjs) && CWorldScene::s_liquidRenderer) {
             if (!group->m_liquidInstance) {
                 CMapObjDef* def = static_cast<CMapObjDef*>(group->m_parentLinkList.Head()->m_ref);
                 CMapObj* mapObj = def->m_owner;
@@ -2913,7 +2913,7 @@ void CWorldScene::LocateViewer3() {
     s_debugMapName[0] = 0;
     s_debugMapChunk[0] = 0;
 
-    if (!(CWorld::enables & Enable_MapObjs)) {
+    if (!(CWorld::enables & Enables::Enable_MapObjs)) {
         return;
     }
 
@@ -3006,7 +3006,7 @@ void CWorldScene::RenderMapObjDefGroups() {
         CMapObjDef* mapObjDef = static_cast<CMapObjDef*>(group->m_parentLinkList.Head()->m_ref);
         CMapObj* mapObj = mapObjDef->m_owner;
 
-        if (CWorld::enables & Enable_MapObjs) {
+        if (CWorld::enables & Enables::Enable_MapObjs) {
             C44Matrix view;
             C3Vector offset(-CWorldScene::s_activeWorldView.x, -CWorldScene::s_activeWorldView.y, -CWorldScene::s_activeWorldView.z);
             view.Translate(offset);
@@ -3664,7 +3664,7 @@ void CWorldScene::RenderChunksSinglePass() {
                 CMapRenderChunk* next = list.RawNext(renderChunk);
                 renderChunk->RenderSetup(1);
 
-                if (CWorld::enables & Enable_Chunks) {
+                if (CWorld::enables & Enables::Enable_Chunks) {
                     if (CMapRenderChunk::s_currentShaderX[layers - 1]) {
                         if (CMap::enableTerrainShaderVertex) {
                             renderChunk->RenderSinglePassVertexPixelShader();
@@ -3678,7 +3678,7 @@ void CWorldScene::RenderChunksSinglePass() {
 
                 renderChunk->m_renderChunkLink.Unlink();
 
-                if (CWorld::enables & Enable_ShowNormals) {
+                if (CWorld::enables & Enables::Enable_ShowNormals) {
                     singlePassList.LinkToTail(renderChunk);
                 } else {
                     CMap::s_mapRenderChunkUpdateList.LinkToTail(renderChunk);
@@ -3785,7 +3785,7 @@ void CWorldScene::AddMapObjDefGroupToSortTable(uint32_t groupIndex, void* param)
     if (!mapObjDefGroup->m_sortTableLink.m_next) {
         CWorldScene::sortTable.m_mapObjDefGroup.LinkToTail(mapObjDefGroup);
 
-        if (group && (group->m_flags & CMapObjGroup::MOGP_FLAGS::F_HAS_LIQUID) && (CWorld::enables & Enable_Water)) {
+        if (group && (group->m_flags & CMapObjGroup::MOGP_FLAGS::F_HAS_LIQUID) && (CWorld::enables & Enables::Enable_Water)) {
             CWorldScene::sortTable.m_interiorLiquidGroupList.LinkToTail(mapObjDefGroup);
         }
 
@@ -3826,7 +3826,7 @@ CSortEntry::CSortEntry() {
 // VERIFY: 8dcf7c04 manual
 // OFFSET: 0x007998A0
 void CWorldScene::AddDoodadDefs(TSList<CMapBaseObjLink, TSGetExplicitLink<CMapBaseObjLink> >* linkList, uint32_t index) {
-    if (!(CWorld::enables & Enable_Doodads)) {
+    if (!(CWorld::enables & Enables::Enable_Doodads)) {
         return;
     }
 
@@ -3964,7 +3964,7 @@ void CWorldScene::CullDoodadsInterior(TSList<CMapBaseObjLink, TSGetExplicitLink<
 // OFFSET: 0x00799D40
 void CWorldScene::CullChunks(CSortEntry* entry, uint32_t index) {
     C3Vector corner(0.0f, 0.0f, 0.0f);
-    int32_t occlude = (CWorld::enables & Enable_Culling) && index < 63;
+    int32_t occlude = (CWorld::enables & Enables::Enable_Culling) && index < 63;
 
     CMapChunk* chunk = entry->m_mapChunkList.Head();
 
@@ -4697,7 +4697,7 @@ int32_t World::QueryAreaIdAtPosition(const C3Vector* position, int32_t* areaId) 
     CMapObjDef* mapObjDef = nullptr;
     CMapObjDefGroup* mapObjDefGroup = nullptr;
 
-    if ((CWorld::enables & Enable_MapObjs) && CMap::VectorIntersect(&start, &end, 0x10, 1280, &objectDistance, nullptr, nullptr, &mapObjDef, &mapObjDefGroup)) {
+    if ((CWorld::enables & Enables::Enable_MapObjs) && CMap::VectorIntersect(&start, &end, 0x10, 1280, &objectDistance, nullptr, nullptr, &mapObjDef, &mapObjDefGroup)) {
         hitObject = true;
     }
 

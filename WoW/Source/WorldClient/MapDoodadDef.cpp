@@ -105,7 +105,7 @@ void CMapDoodadDef::UpdateBounds() {
 
     this->m_fadeLevel = fadeLevel;
 
-    if (!(CWorld::enables & Enable_NoAnimation) && fadeLevel < 3) {
+    if (!(CWorld::enables & Enables::Enable_ObjectFadeZFill) && fadeLevel < 3) {
         this->m_model->m_runtimeFlags &= ~M2_FLAGS::M2_DEPTH_SORT_ALLOWED;
     }
 }

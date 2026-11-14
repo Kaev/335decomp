@@ -1694,7 +1694,7 @@ void CGWorldFrame::OnWorldRender() {
         GxSceneClear(GxBufferBit_Color | GxBufferBit_Depth, black);
     }
 
-    if (CWorld::enables & 0x20000000) {
+    if (CWorld::enables & Enables::Enable_Wireframe) {
         g_theGxDevicePtr->MasterEnableSet(GxMasterEnable_PolygonFill, Gx_Disable);
     }
 
@@ -1791,7 +1791,7 @@ void CGWorldFrame::OnWorldRender() {
     DayNight::RenderGlares();
     PlayerNameUpdateLate();
 
-    if (CWorld::enables & 0x20000000) {
+    if (CWorld::enables & Enables::Enable_Wireframe) {
         GxMasterEnableSet(GxMasterEnable_PolygonFill, Gx_Enable);
     }
 

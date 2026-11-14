@@ -503,7 +503,7 @@ void CDetailDoodad::Initialize() {
 
     CDetailDoodad::s_bUseShaders = 1;
 
-    if (!(CWorld::enables & Enable_PixelShaders)) {
+    if (!(CWorld::enables & Enables::Enable_PixelShaders)) {
         CDetailDoodad::s_bUseShaders = 0;
     }
 

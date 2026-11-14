@@ -1153,11 +1153,11 @@ void CMapObj::RenderGroup(int32_t groupIndex, C44Matrix& matrix, TSExplicitList<
         index++;
     }
 
-    if (CWorld::enables & Enable_ShowNormals) {
+    if (CWorld::enables & Enables::Enable_ShowNormals) {
         this->RenderNormals(group);
     }
 
-    if (CWorld::enables & Enable_Portals) {
+    if (CWorld::enables & Enables::Enable_Portals) {
         this->RenderPortals(group);
     }
 }
@@ -1651,9 +1651,9 @@ void CMapObj::PrepareUpdate() {
             CMapObj::s_renderGroupExterior = &CMapObj::ExteriorRender;
             CMapObj::s_renderGroupInterior = &CMapObj::InteriorRender;
 
-            if (!(CWorld::enables & Enable_MapObjTex)) {
+            if (!(CWorld::enables & Enables::Enable_MapObjTex)) {
                 CMapObj::s_renderGroupInterior = &CMapObj::RenderGroupLightmapTex;
-            } else if (!(CWorld::enables & Enable_MapObjLight)) {
+            } else if (!(CWorld::enables & Enables::Enable_MapObjLight)) {
                 CMapObj::s_renderGroupInterior = &CMapObj::RenderGroupColorTex;
             }
 

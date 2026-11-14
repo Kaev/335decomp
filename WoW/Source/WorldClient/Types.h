@@ -51,6 +51,7 @@ class CMapObjDefMapObjDefGroupLink {
     /* 0014 */ TSLink<CMapObjDefMapObjDefGroupLink> m_ownerLink;
 };
 
+// CWorld::enables. Labels below are retained unless current consumers establish a correction.
 enum Enables : uint32_t {
     Enable_Doodads = 1,
     Enable_Chunks = 2,
@@ -62,18 +63,18 @@ enum Enables : uint32_t {
     Enable_Collision = 128,
     Enable_MapObjs = 0x100,
     Enable_MapObjLight = 0x200,
-    Enable_VertexLight = 0x400,
+    Enable_Footprints = 0x400,
     Enable_MapObjTex = 0x800,
     Enable_Portals = 0x1000,
     Enable_PortalVis = 0x2000,
-    Enable_NoFullAlpha = 0x4000,
-    Enable_NoAnimation = 0x8000,
+    Enable_ObjectFade = 0x4000,
+    Enable_ObjectFadeZFill = 0x8000,
     Enable_DebugBSP = 0x10000,
     Enable_CrappyBatches = 0x20000,
     Enable_ZoneBounds = 0x40000,
     Enable_MapObjBSP = 0x80000,
     Enable_DetailDoodads = 0x100000,
-    Enable_ShowQuery = 0x200000,
+    Enable_CollisionDebug = 0x200000,
     Enable_AABoxes = 0x400000,
     Enable_Trilinear = 0x800000,
     Enable_Water = 0x1000000,
@@ -81,11 +82,13 @@ enum Enables : uint32_t {
     Enable_LowDetail = 0x4000000,
     Enable_Specular = 0x8000000,
     Enable_PixelShaders = 0x10000000,
-    Enable_ShowTris = 0x20000000,
+    Enable_Wireframe = 0x20000000,
     Enable_ShowNormals = 0x40000000,
     Enable_Anisotropic = 0xFFFFFFFF80000000,
+    Enable_InitialMask = 0x7104B73,
 };
 
+// CWorld::enables2 is a separate feature word.
 enum Enables2 {
     Enable_VertexShader = 1,
     Enable_HwPcf = 2,

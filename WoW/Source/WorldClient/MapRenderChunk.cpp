@@ -1623,7 +1623,7 @@ void CMapRenderChunk::CreateChunkLayerTex(CMapRenderChunkLayer* layer) {
     uint32_t chunkFlags = chunk->m_header->m_flags;
     uint8_t* shadowMap = nullptr;
 
-    if ((chunkFlags & 0x1) && (CWorld::enables & Enable_Shadow)) {
+    if ((chunkFlags & 0x1) && (CWorld::enables & Enables::Enable_Shadow)) {
         shadowMap = chunk->m_shadowMap;
     }
 
@@ -1685,7 +1685,7 @@ void CMapRenderChunk::CreateShaderTexture() {
 
     uint32_t chunkFlags = chunk->m_header->m_flags;
 
-    if ((chunkFlags & 0x1) && (CWorld::enables & Enable_Shadow)) {
+    if ((chunkFlags & 0x1) && (CWorld::enables & Enables::Enable_Shadow)) {
         shadowMap = chunk->m_shadowMap;
     }
 
@@ -1742,7 +1742,7 @@ void CMapRenderChunk::CreateShaderTexture() {
     uint32_t chunk2Flags = header->m_flags;
     uint8_t* shadowMap2 = nullptr;
 
-    if ((chunk2Flags & 0x1) && (CWorld::enables & Enable_Shadow)) {
+    if ((chunk2Flags & 0x1) && (CWorld::enables & Enables::Enable_Shadow)) {
         shadowMap2 = this->m_mapChunks[1]->m_shadowMap;
     }
 
@@ -1862,7 +1862,7 @@ void CMapRenderChunk::AllocShadowTexture() {
 
     this->m_shadowTexture = nullptr;
 
-    if (!(CWorld::enables & Enable_Shadow)) {
+    if (!(CWorld::enables & Enables::Enable_Shadow)) {
         return;
     }
 
@@ -2288,7 +2288,7 @@ void CMapRenderChunk::RenderMultiPassAlpha(CMapRenderChunk* renderChunk) {
         }
     }
 
-    if (renderChunk->m_shadowTexture && (CWorld::enables & Enable_Shadow)) {
+    if (renderChunk->m_shadowTexture && (CWorld::enables & Enables::Enable_Shadow)) {
         GxRsSet(GxRs_BlendingMode, GxBlend_Alpha);
         GxUpdateAlphaRef(GxRs_AlphaRef);
         g_theGxDevicePtr->RsSet(GxRs_Texture0, TextureGetGxTex(CWorld::shadowModTexture, 1, nullptr));

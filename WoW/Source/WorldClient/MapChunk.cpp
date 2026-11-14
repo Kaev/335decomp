@@ -1368,7 +1368,7 @@ void CMapChunk::RenderPrep() {
         this->m_renderChunk->RenderPrep();
     }
 
-    if ((CWorld::enables & Enable_DetailDoodads) && CWorld::detailDoodadDist > this->m_distToCamera) {
+    if ((CWorld::enables & Enables::Enable_DetailDoodads) && CWorld::detailDoodadDist > this->m_distToCamera) {
         if (!this->m_detailDoodadInst) {
             this->CreateDetailDoodads();
         }
@@ -1490,7 +1490,7 @@ void CMapChunk::Intersect(CiRect* rect, CAaBox* box, TSGrowableArray<CFacet>* fa
                 const int32_t* indices = &s_subVertexTriangles[tri];
 
                 if (outcodes[indices[0]] & outcodes[indices[1]] & outcodes[indices[2]]) {
-                    if (!(CWorld::enables & Enable_ShowQuery)) {
+                    if (!(CWorld::enables & Enables::Enable_CollisionDebug)) {
                         continue;
                     }
 
@@ -1525,7 +1525,7 @@ void CMapChunk::Intersect(CiRect* rect, CAaBox* box, TSGrowableArray<CFacet>* fa
                     facet->plane.From3Pos(facet->v[0], facet->v[1], facet->v[2]);
                 }
 
-                if (CWorld::enables & Enable_ShowQuery) {
+                if (CWorld::enables & Enables::Enable_CollisionDebug) {
                     CImVector color;
                     *reinterpret_cast<uint32_t*>(&color) = 0x8000FF00;
                     CMap::TestQueryAdd(*facet, color, nullptr);

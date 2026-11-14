@@ -582,7 +582,7 @@ BspQuery_Segment::BspQuery_Segment(SMOPoly* faces, C3Vector* vertexList, uint16_
 // VERIFY: c85c398d manual
 // OFFSET: 0x007C7AE0
 void CMapObjGroup::GetTrisFromQuery(World::TriData* triData, BspQuery* query, CMapObjDef* mapObjDef, uint32_t statusFlags) {
-    if (CWorld::enables & Enable_ShowQuery) {
+    if (CWorld::enables & Enables::Enable_CollisionDebug) {
         for (uint32_t i = 0; i < BspQuery::testFaceSub; i++) {
             uint32_t base = 3 * BspQuery::testFaces[i];
             C3Vector c = this->m_vertexList[this->m_indices[base + 2]] * mapObjDef->m_mat;

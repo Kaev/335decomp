@@ -2499,15 +2499,15 @@ void CMap::LoadTex() {
 // OFFSET: 0x007BD8A0
 void CMap::ValidateShaders() {
     CMap::enableVertexShaders = CWorld::enables2 & Enable_VertexShader;
-    CMap::enablePixelShaders = (CWorld::enables & Enable_PixelShaders) != 0;
-    CMap::enableSpecular = (CWorld::enables & Enable_Specular) && (CWorld::enables & Enable_PixelShaders);
+    CMap::enablePixelShaders = (CWorld::enables & Enables::Enable_PixelShaders) != 0;
+    CMap::enableSpecular = (CWorld::enables & Enables::Enable_Specular) && (CWorld::enables & Enables::Enable_PixelShaders);
 
     bool valid = false;
     bool bigAlpha = (CMap::header.m_flags & SMMapHeader::MAP_FLAGS::BIG_ALPHA) != 0;
     CMap::gTerrainPixelShadersValid = false;
     CMap::enableSpecularTerrain = false;
 
-    if (CWorld::enables & Enable_PixelShaders) {
+    if (CWorld::enables & Enables::Enable_PixelShaders) {
         CGxShader* specularShader = CMap::GetPixelShader(bigAlpha, true, false);
         CGxShader* shader = CMap::GetPixelShader(bigAlpha, false, false);
         valid = specularShader && specularShader->Valid() && shader && shader->Valid();
@@ -5792,7 +5792,7 @@ bool CMap::QueryHeight(const C3Vector& position, float range, float* height) {
 // VERIFY: 5c4ccdae manual
 // OFFSET: 0x0079FCC0
 void CMap::RenderFootprints() {
-    if (!(CWorld::enables & CWorld::ENABLE_FLAGS::FOOTPRINTS)) {
+    if (!(CWorld::enables & Enables::Enable_Footprints)) {
         return;
     }
 
