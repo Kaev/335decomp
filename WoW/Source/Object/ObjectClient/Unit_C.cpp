@@ -21351,7 +21351,7 @@ void CGUnit_C::DestroyUnitMount(int32_t a2) {
     if (parent) {
         CM2Model* grandParent = parent->m_attachParent;
         uint32_t attachmentId = parent->m_attachmentId;
-        this->m_worldModel->m_runtimeFlags ^= (this->m_worldModel->m_runtimeFlags ^ parent->m_runtimeFlags) & M2_FLAGS::M2_UNKNOWN_80000;
+        this->m_worldModel->m_runtimeFlags ^= (this->m_worldModel->m_runtimeFlags ^ parent->m_runtimeFlags) & M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE;
         this->m_worldModel->DetachFromParent();
 
         if (grandParent) {
@@ -21424,8 +21424,8 @@ void CGUnit_C::CreateUnitMount(int32_t a2, int32_t a3) {
         this->m_mountFootprintLength = modelData->m_footprintTextureWidth * 0.027777778f;
         this->m_mountFootprintWidth = 0.027777778f * modelData->m_footprintTextureLength;
         this->m_soundDataOverride = this->GetMountSoundDataRec();
-        this->m_mountModel->m_runtimeFlags ^= (this->m_mountModel->m_runtimeFlags ^ this->m_worldModel->m_runtimeFlags) & M2_FLAGS::M2_UNKNOWN_80000;
-        this->m_worldModel->m_runtimeFlags &= ~M2_FLAGS::M2_UNKNOWN_80000;
+        this->m_mountModel->m_runtimeFlags ^= (this->m_mountModel->m_runtimeFlags ^ this->m_worldModel->m_runtimeFlags) & M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE;
+        this->m_worldModel->m_runtimeFlags &= ~M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE;
         CM2Model* parent = this->m_worldModel->m_attachParent;
         uint32_t attachmentId = this->m_worldModel->m_attachmentId;
 

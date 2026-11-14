@@ -4720,7 +4720,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
 
         this->m_alpha = this->m_baseAlpha * parentAlpha * this->m_fadeAlpha;
 
-        if (!(current & M2_FLAGS::M2_UNKNOWN_80000)) {
+        if (!(current & M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE)) {
             this->m_emissiveColor.x = this->m_emissiveColor.x + emissive.x;
             this->m_emissiveColor.y = emissive.y + this->m_emissiveColor.y;
             this->m_emissiveColor.z = emissive.z + this->m_emissiveColor.z;
@@ -5075,7 +5075,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
 
         this->m_alpha = this->m_baseAlpha * parentAlpha * this->m_fadeAlpha;
 
-        if (!(current & M2_FLAGS::M2_UNKNOWN_80000)) {
+        if (!(current & M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE)) {
             this->m_emissiveColor.x = emissive.x + this->m_emissiveColor.x;
             this->m_emissiveColor.y = emissive.y + this->m_emissiveColor.y;
             this->m_emissiveColor.z = emissive.z + this->m_emissiveColor.z;

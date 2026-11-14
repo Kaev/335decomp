@@ -1155,8 +1155,8 @@ void CVehiclePassenger_C::SetState(uint32_t state, CGUnit_C* vehicle, uint8_t se
     }
 
     if (model) {
-        uint32_t hidden = !(this->m_unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_UNINTERACTIBLE) && (!seatRec || !(seatRec->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE)) && state;
-        model->m_runtimeFlags ^= (model->m_runtimeFlags ^ (hidden << M2_BITS::M2_BIT_UNKNOWN_80000)) & M2_FLAGS::M2_UNKNOWN_80000;
+        uint32_t ignoreParentEmissive = !(this->m_unit->m_unit->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_UNINTERACTIBLE) && (!seatRec || !(seatRec->m_flags & VEHICLE_SEAT_FLAGS::VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE)) && state;
+        model->m_runtimeFlags ^= (model->m_runtimeFlags ^ (ignoreParentEmissive << M2_BITS::M2_BIT_IGNORE_PARENT_EMISSIVE)) & M2_FLAGS::M2_IGNORE_PARENT_EMISSIVE;
     }
 
     this->m_startTime = time;
