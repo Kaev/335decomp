@@ -1485,19 +1485,24 @@ void CGUnit_C::PreAnimate(CGWorldFrame* frame) {
 
     const VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
     uint32_t pitchBone;
-    int32_t fixedFacing;
+    BOOL fixedFacing;
 
     if (vehicleRec) {
         pitchBone = vehicleRec->m_flags & VehicleRec::FLAGS::USE_PITCH_BONE;
-        fixedFacing = (pitchBone || (vehicleRec->m_flags & VehicleRec::FLAGS::FIXED_FACING)) ? 1 : 0;
+        fixedFacing = (pitchBone || (vehicleRec->m_flags & VehicleRec::FLAGS::FIXED_FACING)) ? TRUE : FALSE;
     } else {
         pitchBone = 0;
-        fixedFacing = 0;
+        fixedFacing = FALSE;
     }
 
     uint32_t moveFlags;
 
-    if (this->m_unit->m_unitFieldHealth <= 0 || (this->m_vehiclePassenger && (this->m_vehiclePassenger->m_state == CVehiclePassenger_C::TRANSITION_STATE::STATE_ENTERING || this->m_vehiclePassenger->m_state == CVehiclePassenger_C::TRANSITION_STATE::STATE_EXITING)) || ((moveFlags = this->m_movement->m_flags) & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) || fixedFacing || !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_TORSO_BONES)) {
+    if (this->m_unit->m_unitFieldHealth <= 0 ||
+      (this->m_vehiclePassenger && (this->m_vehiclePassenger->m_state == CVehiclePassenger_C::TRANSITION_STATE::STATE_ENTERING ||
+        this->m_vehiclePassenger->m_state == CVehiclePassenger_C::TRANSITION_STATE::STATE_EXITING)) ||
+      ((moveFlags = this->m_movement->m_flags) & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) ||
+      fixedFacing ||
+      !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_TORSO_BONES)) {
         this->m_renderFacing = this->m_smoothTarget.m_value;
         this->m_facingVelocity = 0.0f;
         this->m_facingBlend = 0.0f;
@@ -9116,7 +9121,7 @@ void CGUnit_C::SetEmoteQueue(const QUESTGIVEREMOTENODE* nodes, uint32_t count) {
 
 // VERIFY: 088aa6dd auto
 // OFFSET: 0x00728050
-DelayedSpellVisualKit* CGUnit_C::DelaySpellVisualKit(int32_t spellId, int32_t kitId, int32_t kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t lightningAttachment, int32_t activationType, int32_t activationTime) {
+DelayedSpellVisualKit* CGUnit_C::DelaySpellVisualKit(int32_t spellId, int32_t kitId, SPELL_VISUAL_KIT_TYPE kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t lightningAttachment, DelayedSpellVisualKit::ACTIVATION_TYPE activationType, int32_t activationTime) {
     uint32_t index;
 
     for (index = 0; index < this->m_delayedSpellVisualKits.m_count; index++) {
@@ -12172,7 +12177,7 @@ void CGUnit_C::ShowHandItemSpellEffects(BOOL show, BOOL force) {
                 if (kit) {
                     if (!(this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_HAND_ITEM_SPELL_EFFECTS_SHOWN)) {
                         PlaySpellVisuaKitData data(&spell, kit, SPELL_VISUAL_KIT_STATE);
-                        data.m_playAnim = 0;
+                        data.m_playAnim = FALSE;
                         this->PlaySpellVisualKit(data);
                         this->m_clientFlags |= UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_HAND_ITEM_SPELL_EFFECTS_SHOWN;
                     }
@@ -16965,7 +16970,7 @@ BOOL CGUnit_C::PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, c
 
 // VERIFY: 6c474fbc auto
 // OFFSET: 0x0073A6C0
-void CGUnit_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), int32_t* hasEffect) {
+void CGUnit_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), BOOL* hasEffect) {
     int32_t spellId = 0;
 
     if (spell) {
@@ -16980,7 +16985,7 @@ void CGUnit_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const Spe
         }
 
         this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_HANDL, 0, spellId, kit, effectName, &flags, callback, position, guid, a5, nullptr);
-        *hasEffect = 1;
+        *hasEffect = TRUE;
     }
 
     effectName = g_spellVisualEffectNameDB.GetRecord(kit->m_rightWeaponEffect);
@@ -16991,7 +16996,7 @@ void CGUnit_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const Spe
         }
 
         this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_HANDR, 0, spellId, kit, effectName, &flags, callback, position, guid, a5, nullptr);
-        *hasEffect = 1;
+        *hasEffect = TRUE;
     }
 }
 
@@ -17004,7 +17009,7 @@ static BOOL IsWoundAnim(int32_t animId) {
 
 // VERIFY: 810cddf4 manual
 // OFFSET: 0x0073B140
-void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, int32_t a5, int32_t a6, WOWGUID guid, uint32_t a8, const SpellVisualRec* visual, uint32_t a10, int32_t a11) {
+void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, BOOL playAnim, BOOL harmful, WOWGUID guid, uint32_t effectFadeTime, const SpellVisualRec* visual, uint32_t effectFlags, BOOL hasEffect) {
     int32_t spellId = 0;
 
     if (spell) {
@@ -17017,7 +17022,7 @@ void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVi
         this->SetSheatheState(WEAPONMODE_RANGEDMODE, TRUE, FALSE);
     }
 
-    if (a5) {
+    if (playAnim) {
         uint8_t playbackFlags = ANIM_PLAY_FLAGS::PLAY_NONE;
 
         if (kit->m_flags & SpellVisualKitRec::KIT_FLAGS::FORCE_SPECIFIC_ANIMATION) {
@@ -17044,21 +17049,21 @@ void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVi
             playbackFlags |= ANIM_PLAY_FLAGS::PLAY_DO_NOT_SHEATHE_WEAPON;
         }
 
-        if ((a10 & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) && kit->m_startAnimID >= 0) {
+        if ((effectFlags & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) && kit->m_startAnimID >= 0) {
             this->PlayBaseAnimation(kit->m_startAnimID, playbackFlags);
             this->m_animFlags |= UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_PRECAST_START;
         } else if (kit->m_animID >= 0) {
             SpellVisualKitRec* castKit = visual ? g_spellVisualKitDB.GetRecord(visual->m_castKit) : nullptr;
             bool sameAnim = castKit && castKit->m_animID > 0 && castKit->m_animID == this->GetCurrentTorsoAnimId();
             bool noCastTime = this->GetSpellCastingTime(spell) <= 0;
-            BOOL holdCast = (a10 & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) && !noCastTime && sameAnim;
-            BOOL holdChannel = (a10 & CEffect::EFFECT_FLAGS::EFFECT_AURA_ANIMATION) && sameAnim;
+            BOOL holdCast = (effectFlags & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) && !noCastTime && sameAnim;
+            BOOL holdChannel = (effectFlags & CEffect::EFFECT_FLAGS::EFFECT_AURA_ANIMATION) && sameAnim;
 
             if (type == SPELL_VISUAL_KIT_STATE) {
-                if (!holdChannel && !a11) {
+                if (!holdChannel && !hasEffect) {
                     CEffect* effect = new (SMemAlloc(sizeof(CEffect), __FILE__, __LINE__, 0)) CEffect();
                     WOWGUID owner = this->m_obj->m_guid;
-                    effect->AddAnimKitEffect(spellId, kit, &owner, a10, a8);
+                    effect->AddAnimKitEffect(spellId, kit, &owner, effectFlags, effectFadeTime);
                     effect->Release();
                 }
 
@@ -17071,49 +17076,49 @@ void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVi
 
                     this->UpdateBaseAnimation(playbackFlags, ANIM_SELECTION_FLAGS::ALL);
                 }
-            } else if (!(a10 & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) || (!noCastTime && !holdCast)) {
+            } else if (!(effectFlags & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) || (!noCastTime && !holdCast)) {
                 if (IsWoundAnim(kit->m_animID)) {
                     this->PlayWoundAnimKit(kit->m_animID == ANIM_COMBAT_CRITICAL);
                 } else {
                     this->PlayBaseAnimation(kit->m_animID, playbackFlags);
                 }
 
-                if (a10 & CEffect::EFFECT_FLAGS::EFFECT_SET_SPECIAL_IDLE) {
+                if (effectFlags & CEffect::EFFECT_FLAGS::EFFECT_SET_SPECIAL_IDLE) {
                     this->m_specialIdleAnim = kit->m_animID;
                 }
             }
 
-            if (!a11 && (holdCast || holdChannel)) {
+            if (!hasEffect && (holdCast || holdChannel)) {
                 CEffect* effect = new (SMemAlloc(sizeof(CEffect), __FILE__, __LINE__, 0)) CEffect();
                 WOWGUID owner = this->m_obj->m_guid;
-                effect->AddAnimKitEffect(spellId, kit, &owner, a10, a8);
+                effect->AddAnimKitEffect(spellId, kit, &owner, effectFlags, effectFadeTime);
                 effect->Release();
             }
 
             this->m_animFlags &= ~UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_PRECAST_START;
         }
 
-        if (a6) {
+        if (harmful) {
             this->PlayWoundAnimKit(0);
         }
     }
 
-    this->CreateProceduralEffect(spell, visual, kit, 0, a10, guid);
+    this->CreateProceduralEffect(spell, visual, kit, 0, effectFlags, guid);
 
     if (this->m_pendingWeaponTrail[1]) {
         this->UpdateWeaponTrails(&this->m_pendingWeaponTrail[0], this->m_pendingWeaponTrail[1]);
         this->m_pendingWeaponTrail[1] = 0;
     }
 
-    if (!(a10 & CEffect::EFFECT_FLAGS::EFFECT_SUPPRESS_SOUND) && kit->m_soundID) {
+    if (!(effectFlags & CEffect::EFFECT_FLAGS::EFFECT_SUPPRESS_SOUND) && kit->m_soundID) {
         CEffect* effect = new (SMemAlloc(sizeof(CEffect), __FILE__, __LINE__, 0)) CEffect();
-        effect->m_flags = a10;
+        effect->m_flags = effectFlags;
         effect->m_kitRec = kit;
-        effect->AddSoundEffect(kit->m_soundID, 0, spellId, position, this, a8);
+        effect->AddSoundEffect(kit->m_soundID, 0, spellId, position, this, effectFadeTime);
         effect->Release();
     }
 
-    if (!a11 && kit->m_shakeID > 0) {
+    if (!hasEffect && kit->m_shakeID > 0) {
         C3Vector objectPosition;
         const C3Vector* shakePosition = position;
 
@@ -18470,11 +18475,11 @@ void CGUnit_C::UpdateChannelEffects() {
         return;
     }
 
-    uint32_t playAnim = 1;
+    BOOL playAnim = TRUE;
     SpellVisualKitRec* castKit = g_spellVisualKitDB.GetRecord(visual->m_castKit);
 
     if (castKit && this->GetCurrentTorsoAnimId() == static_cast<uint32_t>(castKit->m_animID)) {
-        playAnim = 0;
+        playAnim = FALSE;
     }
 
     PlaySpellVisuaKitData data(&spell, kit, SPELL_VISUAL_KIT_STATE);
@@ -21032,7 +21037,7 @@ void CGUnit_C::CreateProceduralEffect(const SpellRec* spell, const SpellVisualRe
                     if (areaKit) {
                         PlaySpellVisuaKitData data(spell, areaKit, SPELL_VISUAL_KIT_AT_POSITION);
                         data.m_position = &position;
-                        data.m_playAnim = 0;
+                        data.m_playAnim = FALSE;
                         data.m_lightningAttachment = this->m_lightningSequence;
                         this->PlaySpellVisualKit(data);
                     }

@@ -237,8 +237,8 @@ class CGObject_C : public CGObject, public TSHashObject<CGObject_C, CHashKeyGUID
     virtual int32_t IsPointInside(const C3Vector& point) const;
     virtual int32_t AddPassenger(CPassenger* passenger, int32_t a2);
     virtual float GetSpeed() const;
-    virtual void PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, int32_t a5, int32_t a6, WOWGUID guid, uint32_t a8, const SpellVisualRec* visual, uint32_t a10, int32_t a11);
-    virtual void PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), int32_t* hasEffect);
+    virtual void PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, BOOL playAnim, BOOL harmful, WOWGUID guid, uint32_t effectFadeTime, const SpellVisualRec* visual, uint32_t effectFlags, BOOL hasEffect);
+    virtual void PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), BOOL* hasEffect);
     virtual BOOL PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, BOOL playAnim, BOOL harmful, BOOL skipBeamWait, int32_t lightningAttachment, uint32_t unusedFlags, const SpellVisualRec* visual);
 
     CGObject_C();

@@ -872,12 +872,12 @@ float CGObject_C::GetSpeed() const {
 
 // VERIFY: fb1bf54a auto
 // OFFSET: 0x00743550
-void CGObject_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, int32_t a5, int32_t a6, WOWGUID guid, uint32_t a8, const SpellVisualRec* visual, uint32_t a10, int32_t a11) {
+void CGObject_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, BOOL playAnim, BOOL harmful, WOWGUID guid, uint32_t effectFadeTime, const SpellVisualRec* visual, uint32_t effectFlags, BOOL hasEffect) {
 }
 
 // VERIFY: 6ea82269 auto
 // OFFSET: 0x00743560
-void CGObject_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), int32_t* hasEffect) {
+void CGObject_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), BOOL* hasEffect) {
 }
 
 // VERIFY: acfa0e6e auto
@@ -1538,7 +1538,7 @@ void CGObject_C::PlayEffectName(int32_t attachType, uint32_t a3, int32_t spellId
 void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
     uint32_t flags = CEffect::EFFECT_FLAGS::EFFECT_NONE;
     int32_t spellId = 0;
-    int32_t hasEffect = 0;
+    BOOL hasEffect = FALSE;
 
     if (data.m_spellRec) {
         spellId = data.m_spellRec->m_id;
@@ -1580,7 +1580,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
 
     const SpellVisualRec* visual = spell ? g_spellVisualDB.GetRecord(spell->m_spellVisualID[0]) : nullptr;
 
-    if (this->PlaySpellVisualKit_DelayLightningEffects(spell, data.m_impactVisualKit, static_cast<SPELL_VISUAL_KIT_TYPE>(data.m_kitType), data.m_position, data.m_transportGUID, data.m_playAnim, data.m_harmful, data.m_skipBeamWait, data.m_lightningAttachment, flags, visual)) {
+    if (this->PlaySpellVisualKit_DelayLightningEffects(spell, data.m_impactVisualKit, data.m_kitType, data.m_position, data.m_transportGUID, data.m_playAnim, data.m_harmful, data.m_skipBeamWait, data.m_lightningAttachment, flags, visual)) {
         return;
     }
 
@@ -1594,7 +1594,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
         flags |= CEffect::EFFECT_FLAGS::EFFECT_RAW_ANIMATION_ID;
     }
 
-    int32_t animParam = data.m_playAnim;
+    BOOL playAnim = data.m_playAnim;
 
     switch (data.m_kitType) {
         case SPELL_VISUAL_KIT_CAST:
@@ -1637,7 +1637,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
                 flags = (flags & ~(CEffect::EFFECT_FLAGS::EFFECT_SOUND_LOOPING | CEffect::EFFECT_FLAGS::EFFECT_CALLBACK_LIFETIME)) | CEffect::EFFECT_FLAGS::EFFECT_CALLBACK_LIFETIME;
             }
 
-            animParam = 0;
+            playAnim = FALSE;
             flags |= (CEffect::EFFECT_FLAGS::EFFECT_USE_SUPPLIED_POSITION | CEffect::EFFECT_FLAGS::EFFECT_PERSIST_ON_PARTIAL_CLEAR);
             break;
 
@@ -1662,7 +1662,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
 
     if (effectName) {
         this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_HEAD, 0, spellId, kit, effectName, &flags, callback, position, data.m_someGUID, 0, nullptr);
-        hasEffect = 1;
+        hasEffect = TRUE;
     }
 
     effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_worldEffect);
@@ -1698,7 +1698,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
         effect->InitFromUnit(*effectPosition, OsGetAsyncTimeMs(), spellId, data.m_impactVisualKit, effectName, &guid, flags, callback, data.m_effectFadeTime, nullptr, transport);
         effect->Release();
         flags = (flags & ~(CEffect::EFFECT_FLAGS::EFFECT_SOUND_LOOPING | CEffect::EFFECT_FLAGS::EFFECT_PLAY_CAMERA_SHAKE | CEffect::EFFECT_FLAGS::EFFECT_SUPPRESS_SOUND)) | CEffect::EFFECT_FLAGS::EFFECT_SUPPRESS_SOUND;
-        hasEffect = 1;
+        hasEffect = TRUE;
     }
 
     if (flags & CEffect::EFFECT_FLAGS::EFFECT_USE_SUPPLIED_POSITION) {
@@ -1719,35 +1719,35 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_BASE, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_leftHandEffect);
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_SPELLLEFTHAND, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_rightHandEffect);
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_SPELLRIGHTHAND, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_breathEffect);
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_BREATH, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_chestEffect);
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_TORSOSPELL, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         this->PlaySpellVisualKit_HandleWeapons(data.m_spellRec, data.m_impactVisualKit, position, data.m_someGUID, data.m_effectFadeTime, flags, callback, &hasEffect);
@@ -1757,14 +1757,14 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_SPECIAL1, 0, spellId, special, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_specialEffect[1]);
 
         if (effectName) {
             this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_SPECIAL2, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, nullptr);
-            hasEffect = 1;
+            hasEffect = TRUE;
         }
 
         effectName = g_spellVisualEffectNameDB.GetRecord(data.m_impactVisualKit->m_specialEffect[2]);
@@ -1776,7 +1776,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
         this->PlayEffectName(MODEL_ATTACHMENT_ID::ATTACH_UNITEFFECT_SPECIAL3, 0, spellId, data.m_impactVisualKit, effectName, &flags, callback, data.m_position, data.m_someGUID, data.m_effectFadeTime, nullptr);
     }
 
-    hasEffect = 1;
+    hasEffect = TRUE;
 
 attachments:
     int32_t attachCount = SpellVisualsGetModelAttachRecCount(data.m_impactVisualKit->m_id);
@@ -1835,10 +1835,10 @@ attachments:
             this->PlayEffectName(attach->m_attachmentID, 0, spellId, data.m_impactVisualKit, attachEffect, &flags, callback, position, data.m_someGUID, data.m_effectFadeTime, attach);
         }
 
-        hasEffect = 1;
+        hasEffect = TRUE;
     }
 
-    this->PlaySpellVisualKit_PlayAnims(data.m_spellRec, data.m_impactVisualKit, static_cast<SPELL_VISUAL_KIT_TYPE>(data.m_kitType), position, animParam, data.m_harmful, data.m_someGUID, data.m_effectFadeTime, visual, flags, hasEffect);
+    this->PlaySpellVisualKit_PlayAnims(data.m_spellRec, data.m_impactVisualKit, data.m_kitType, position, playAnim, data.m_harmful, data.m_someGUID, data.m_effectFadeTime, visual, flags, hasEffect);
 }
 
 // VERIFY: 1d3e05cf auto

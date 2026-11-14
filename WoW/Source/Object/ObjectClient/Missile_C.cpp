@@ -1304,7 +1304,7 @@ void CMissile::HitTargetAreaEffect(const SpellRec* spell, const SpellVisualRec* 
                 data.m_transportGUID = transport;
                 data.m_position = &position;
                 data.m_someGUID = this->m_casterGuid;
-                data.m_playAnim = 0;
+                data.m_playAnim = FALSE;
                 player->PlaySpellVisualKit(data);
             }
         }
@@ -2138,7 +2138,7 @@ void CMissile::FireMissiles(const C3Vector* position) {
                     data.m_position = &targetPos;
                     data.m_transportGUID = transport;
                     data.m_someGUID = this->m_casterGuid;
-                    data.m_playAnim = 0;
+                    data.m_playAnim = FALSE;
                     data.m_effectFadeTime = this->m_targetingEffectTime;
                     unit->PlaySpellVisualKit(data);
                 } else {

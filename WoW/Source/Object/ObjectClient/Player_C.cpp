@@ -1406,7 +1406,7 @@ int32_t CGPlayer_C::IsGiftWrapping() {
 
 // VERIFY: 58af1e18 auto
 // OFFSET: 0x006CF240
-PlaySpellVisuaKitData::PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, uint32_t kitType) {
+PlaySpellVisuaKitData::PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, SPELL_VISUAL_KIT_TYPE kitType) {
     this->m_spellRec = spellRec;
     this->m_kitType = kitType;
     this->m_impactVisualKit = impactVisualKit;

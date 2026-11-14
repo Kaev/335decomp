@@ -2121,7 +2121,7 @@ void PendingSpellCast::OnSpellGo(CDataStore* msg) {
             if (impactKit && (!visual->m_hasMissile || spell.m_speed <= 0.0f) && !Spell_C_SpellVisualHasChainEffect(visual)) {
                 if (unit) {
                     if (spell.m_speed > 0.0f) {
-                        unit->DelaySpellVisualKit(spellId, impactKitId, SPELL_VISUAL_KIT_AT_POSITION, &this->m_data.m_destPos, this->m_data.m_destTarget, 0, 0, -1, 1, arrival);
+                        unit->DelaySpellVisualKit(spellId, impactKitId, SPELL_VISUAL_KIT_AT_POSITION, &this->m_data.m_destPos, this->m_data.m_destTarget, FALSE, FALSE, PlaySpellVisuaKitData::LIGHTNING_ATTACHMENT::NONE, DelayedSpellVisualKit::ACTIVATION_TYPE::SCHEDULED, arrival);
                     } else {
                         PlaySpellVisuaKitData kitData(&spell, impactKit, SPELL_VISUAL_KIT_AT_POSITION);
                         kitData.m_position = &this->m_data.m_destPos;
@@ -2166,7 +2166,7 @@ void PendingSpellCast::OnSpellGo(CDataStore* msg) {
 
                 if (unit) {
                     if (spell.m_speed > 0.0f) {
-                        unit->DelaySpellVisualKit(spellId, impactKitId, SPELL_VISUAL_KIT_AT_POSITION, &point.m_position, point.m_transport, 0, 0, -1, 1, arrival);
+                        unit->DelaySpellVisualKit(spellId, impactKitId, SPELL_VISUAL_KIT_AT_POSITION, &point.m_position, point.m_transport, FALSE, FALSE, PlaySpellVisuaKitData::LIGHTNING_ATTACHMENT::NONE, DelayedSpellVisualKit::ACTIVATION_TYPE::SCHEDULED, arrival);
                     } else {
                         PlaySpellVisuaKitData kitData(&spell, impactKit, SPELL_VISUAL_KIT_AT_POSITION);
                         kitData.m_position = &point.m_position;

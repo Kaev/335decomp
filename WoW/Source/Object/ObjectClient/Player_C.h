@@ -532,17 +532,17 @@ class PlaySpellVisuaKitData {
 
     /* 0000 */ const SpellRec* m_spellRec;
     /* 0004 */ const SpellVisualKitRec* m_impactVisualKit;
-    /* 0008 */ uint32_t m_kitType;
+    /* 0008 */ SPELL_VISUAL_KIT_TYPE m_kitType;
     /* 000C */ C3Vector* m_position;
     /* 0010 */ WOWGUID m_transportGUID;
-    /* 0018 */ uint32_t m_playAnim;
-    /* 001C */ uint32_t m_harmful;
-    /* 0020 */ uint32_t m_skipBeamWait;
+    /* 0018 */ BOOL m_playAnim;
+    /* 001C */ BOOL m_harmful;
+    /* 0020 */ BOOL m_skipBeamWait;
     /* 0024 */ uint32_t m_lightningAttachment;
     /* 0028 */ WOWGUID m_someGUID;
     /* 0030 */ uint32_t m_effectFadeTime;
 
-    PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, uint32_t kitType);
+    PlaySpellVisuaKitData(const SpellRec* spellRec, const SpellVisualKitRec* impactVisualKit, SPELL_VISUAL_KIT_TYPE kitType);
 };
 
 uint32_t FindEmptySwapIndex();
