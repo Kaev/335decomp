@@ -771,7 +771,7 @@ uint32_t StreamingManager::Run() {
         if (this->m_dirty) {
             Blizzard::Lock::EventWait(0, this->m_event);
             this->m_dirty = false;
-            this->m_state = this->GetNextState();
+            this->m_state = static_cast<StreamingManager::STATE>(this->GetNextState());
 
             if (this->m_current && (cancelled || this->m_state == StreamingManager::STATE::SHUTDOWN)) {
                 Blizzard::Streaming::RemoveCompletion(&completion, this->m_current->m_priority);

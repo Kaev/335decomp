@@ -54,7 +54,7 @@ class StreamingManager {
     };
 
     /* 0000 */ std::map<std::string, StreamingFileEntry*> m_entries;
-    /* 000C */ int32_t m_state;
+    /* 000C */ STATE m_state;
     /* 0010 */ int32_t m_gameState;
     /* 0014 */ bool m_enabled;
     /* 0018 */ int32_t m_zone;
