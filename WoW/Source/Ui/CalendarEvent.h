@@ -70,7 +70,7 @@ class CGCalendarEvent {
     /* 0514 */ InviteSortCriterion m_sortCriteria[6];
     /* 0544 */ uint32_t m_sortType;
     /* 0548 */ uint32_t m_pendingNames;
-    /* 054C */ uint32_t m_signalType;
+    /* 054C */ INVITE_SIGNAL_TYPE m_signalType;
     /* 0550 */ uint32_t m_guildID;
 
     CGCalendarEvent();

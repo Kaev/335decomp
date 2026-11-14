@@ -218,7 +218,7 @@ void CGCalendarEvent::ClearFlag(uint32_t flag) {
 // VERIFY: eec371c3 auto
 // OFFSET: 0x005F1410
 void CGCalendarEvent::SetSignalType(uint32_t signalType) {
-    this->m_signalType = signalType;
+    this->m_signalType = static_cast<CGCalendarEvent::INVITE_SIGNAL_TYPE>(signalType);
 }
 
 // VERIFY: 6949882a auto
