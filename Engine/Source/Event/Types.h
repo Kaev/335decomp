@@ -175,7 +175,7 @@ struct MouseEventData {
     /* 000C */ uint32_t m_metaKeyState;
     /* 0010 */ uint32_t m_flags;
     /* 0014 */ C2Vector m_mousePosition;
-    /* 001C */ uint32_t m_wheelAmount;
+    /* 001C */ int32_t m_wheelAmount; // Signed wheel delta copied from EVENT_DATA_MOUSE.
     /* 0020 */ uint32_t m_eventTime;
 };
 
