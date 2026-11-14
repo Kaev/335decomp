@@ -169,8 +169,8 @@ enum SCHEDSTATE : uint32_t {
 };
 
 struct MouseEventData {
-    /* 0000 */ uint32_t m_mode;
-    /* 0004 */ uint32_t m_button;
+    /* 0000 */ MOUSEMODE m_mode;
+    /* 0004 */ MOUSEBUTTON m_button;
     /* 0008 */ uint32_t m_buttonState;
     /* 000C */ uint32_t m_metaKeyState;
     /* 0010 */ uint32_t m_flags;

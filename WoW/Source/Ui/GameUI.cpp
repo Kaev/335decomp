@@ -3840,14 +3840,14 @@ void CGGameUI::UnitModelUpdate(const WOWGUID& guid, uint32_t flags) {
 // VERIFY: 6cededd1 auto
 // OFFSET: 0x0051FA50
 int32_t CGGameUI::FilterMouseDown(CMouseEvent* evt) {
-    if (evt->m_id == 0x400500C8 && evt->m_data.m_button == 4) {
+    if (evt->m_id == 0x400500C8 && evt->m_data.m_button == MOUSE_BUTTON_RIGHT) {
         if (CGGameUI::m_cursorItem || CGGameUI::m_cursorVirtualID || CGGameUI::m_cursorMoney || CGGameUI::m_cursorSpell || CGGameUI::m_cursorPetAction.m_data || CGGameUI::m_cursorMacro || CGGameUI::m_cursorPet || CGPlayer_C::IsGiftWrapping()) {
             CGGameUI::ClearCursor(1, 1);
             return 1;
         }
     }
 
-    if (evt->m_data.m_mode != 1) {
+    if (evt->m_data.m_mode != MOUSE_MODE_RELATIVE) {
         return 0;
     }
 
@@ -3863,7 +3863,7 @@ int32_t CGGameUI::FilterMouseDown(CMouseEvent* evt) {
 // VERIFY: 27d36d58 auto
 // OFFSET: 0x0051FB00
 int32_t CGGameUI::HandleMouseDown(const CMouseEvent& evt) {
-    if (evt.m_data.m_button != 4) {
+    if (evt.m_data.m_button != MOUSE_BUTTON_RIGHT) {
         return 0;
     }
 
