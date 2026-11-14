@@ -405,6 +405,15 @@ class M2SequenceFallback {
 
 class CM2SequencePlayBack : public TSLinkedNode<CM2SequencePlayBack> {
     public:
+    // Deferred request flags; distinct from M2Sequence flags and retained as a raw 16-bit word.
+    enum FLAGS : uint16_t {
+        NONE = 0,
+        BLEND = 1,
+        PRIMARY = 2,
+        PICK_RANDOM_VARIATION = 4,
+        CANCELED = 8,
+    };
+
     /* 0008 */ CM2Model* m_model;
     /* 000C */ uint16_t m_boneIndex;
     /* 000E */ uint16_t m_flags;

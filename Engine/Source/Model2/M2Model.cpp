@@ -4664,7 +4664,7 @@ int32_t CM2Model::HasDeferredSequence(uint16_t boneIndex, bool primary) {
 
     for (CM2SequenceLoad* load = loads.Head(); !loads.IsEnd(load); load = loads.RawNext(load)) {
         for (CM2SequencePlayBack* playback = load->m_playbacks.Head(); !load->m_playbacks.IsEnd(playback); playback = load->m_playbacks.RawNext(playback)) {
-            if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & 2) != 0) == primary) {
+            if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & CM2SequencePlayBack::FLAGS::PRIMARY) != 0) == primary) {
                 return 1;
             }
         }
@@ -6294,18 +6294,18 @@ found:
     playback->m_boneIndex = boneIndex;
     playback->m_time = time;
     playback->m_fallback = fallback;
-    playback->m_flags = 0;
+    playback->m_flags = CM2SequencePlayBack::FLAGS::NONE;
 
     if (blend) {
-        playback->m_flags = 1;
+        playback->m_flags = CM2SequencePlayBack::FLAGS::BLEND;
     }
 
     if (primary) {
-        playback->m_flags |= 2;
+        playback->m_flags |= CM2SequencePlayBack::FLAGS::PRIMARY;
     }
 
     if (pickRandom) {
-        playback->m_flags |= 4;
+        playback->m_flags |= CM2SequencePlayBack::FLAGS::PICK_RANDOM_VARIATION;
     }
 }
 
@@ -6330,7 +6330,7 @@ void CM2Model::CancelAllDeferredSequences() {
         for (CM2SequenceLoad* load = loads.Head(); !loads.IsEnd(load); load = loads.RawNext(load)) {
             for (CM2SequencePlayBack* playback = load->m_playbacks.Head(); !load->m_playbacks.IsEnd(playback); playback = load->m_playbacks.RawNext(playback)) {
                 if (playback->m_model == this) {
-                    playback->m_flags |= 8;
+                    playback->m_flags |= CM2SequencePlayBack::FLAGS::CANCELED;
                 }
             }
         }
@@ -6347,7 +6347,7 @@ void CM2Model::CancelDeferredSequences(uint16_t boneIndex, bool primary) {
             CM2SequencePlayBack* playback = load->m_playbacks.Head();
 
             while (!load->m_playbacks.IsEnd(playback)) {
-                if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & 2) != 0) == primary) {
+                if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & CM2SequencePlayBack::FLAGS::PRIMARY) != 0) == primary) {
                     playback = load->m_playbacks.DeleteNode(playback);
                 } else {
                     playback = load->m_playbacks.RawNext(playback);
@@ -6357,8 +6357,8 @@ void CM2Model::CancelDeferredSequences(uint16_t boneIndex, bool primary) {
     } else {
         for (CM2SequenceLoad* load = loads.Head(); !loads.IsEnd(load); load = loads.RawNext(load)) {
             for (CM2SequencePlayBack* playback = load->m_playbacks.Head(); !load->m_playbacks.IsEnd(playback); playback = load->m_playbacks.RawNext(playback)) {
-                if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & 2) != 0) == primary) {
-                    playback->m_flags |= 8;
+                if (playback->m_model == this && playback->m_boneIndex == boneIndex && ((playback->m_flags & CM2SequencePlayBack::FLAGS::PRIMARY) != 0) == primary) {
+                    playback->m_flags |= CM2SequencePlayBack::FLAGS::CANCELED;
                 }
             }
         }

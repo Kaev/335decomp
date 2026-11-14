@@ -1946,7 +1946,7 @@ void CM2Shared::LowPrioritySequenceLoadedCallback(void* param) {
     while (!load->m_playbacks.IsEnd(playback)) {
         CM2SequencePlayBack* next = load->m_playbacks.RawNext(playback);
 
-        if (playback->m_flags & 8) {
+        if (playback->m_flags & CM2SequencePlayBack::FLAGS::CANCELED) {
             load->m_playbacks.DeleteNode(playback);
             playback = next;
             continue;
@@ -1958,15 +1958,15 @@ void CM2Shared::LowPrioritySequenceLoadedCallback(void* param) {
             uint16_t boneIndex = playback->m_boneIndex;
             M2ModelBone* bone = &model->m_bones[boneIndex];
 
-            if (playback->m_flags & 2) {
+            if (playback->m_flags & CM2SequencePlayBack::FLAGS::PRIMARY) {
                 M2Sequence* sequence = &shared->m_data->m_sequences[load->m_sequenceIndex];
                 bone->m_sequenceId = sequence->m_id;
                 bone->m_variationIndex = sequence->m_variationIndex;
-                model->SetPrimaryBoneSequence(load->m_sequenceIndex, playback->m_boneIndex, playback->m_fallback, playback->m_time, playback->m_speed, playback->m_flags & 1);
-                bone->m_sequence.m_pickRandomVariation = playback->m_flags & 4;
+                model->SetPrimaryBoneSequence(load->m_sequenceIndex, playback->m_boneIndex, playback->m_fallback, playback->m_time, playback->m_speed, playback->m_flags & CM2SequencePlayBack::FLAGS::BLEND);
+                bone->m_sequence.m_pickRandomVariation = playback->m_flags & CM2SequencePlayBack::FLAGS::PICK_RANDOM_VARIATION;
             } else {
                 model->SetSecondaryBoneSequence(load->m_sequenceIndex, boneIndex, playback->m_fallback, playback->m_time, playback->m_speed);
-                bone->m_secondarySequence.m_pickRandomVariation = playback->m_flags & 4;
+                bone->m_secondarySequence.m_pickRandomVariation = playback->m_flags & CM2SequencePlayBack::FLAGS::PICK_RANDOM_VARIATION;
             }
 
             playback->m_model = nullptr;
