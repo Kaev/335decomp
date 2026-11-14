@@ -2608,7 +2608,7 @@ void CGCalendar::ProcessGetEvent(CDataStore* msg) {
         return;
     }
 
-    uint8_t sendType;
+    uint8_t sendType; // Packet values1/2 mean new/copy; deferred invite-signal IDs are2/3.
     msg->Get(sendType);
     int32_t status = -1;
 

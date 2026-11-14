@@ -89,7 +89,7 @@ class CGCalendarEvent {
     void SetTextureID(int32_t textureID);
     void SetFlag(uint32_t flag);
     void ClearFlag(uint32_t flag);
-    void SetSignalType(uint32_t signalType);
+    void SetSignalType(INVITE_SIGNAL_TYPE signalType);
     bool ProcessUpdateEvent(CDataStore* msg);
     void InviteRemoved(WOWGUID guid);
     void UpdateInviteStatus(WOWGUID guid, uint8_t status, uint32_t responseTime);
