@@ -7,6 +7,7 @@
 #include "Engine/Source/Frame/CSimpleFrame.h"
 #include "Engine/Source/Frame/Types.h"
 #include "Engine/Source/FrameScript/FrameScript_Object.h"
+#include "Engine/Source/Tempest/CRange.h"
 
 class CImVector;
 class CSimpleRegion;
@@ -32,8 +33,7 @@ class CSimpleStatusBar : public CSimpleFrame {
     /* 029C */ uint32_t m_rangeSet : 1;
     /* 029C */ uint32_t m_valueSet : 1;
     /* 029C */ uint32_t m_rotatesTexture : 1;
-    /* 02A0 */ float m_minValue;
-    /* 02A4 */ float m_maxValue;
+    /* 02A0 */ CRange m_valueRange;
     /* 02A8 */ float m_value;
     /* 02AC */ CSimpleTexture* m_barTexture;
     /* 02B0 */ ORIENTATION m_orientation;

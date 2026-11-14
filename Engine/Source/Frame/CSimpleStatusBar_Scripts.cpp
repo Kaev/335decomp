@@ -69,8 +69,8 @@ static int32_t Script_SetOrientation(lua_State* L) {
 static int32_t Script_GetMinMaxValues(lua_State* L) {
     CSimpleStatusBar* statusBar = static_cast<CSimpleStatusBar*>(FrameScript_GetObjectThis(L, CSimpleStatusBar::GetObjectType()));
 
-    lua_pushnumber(L, statusBar->m_minValue);
-    lua_pushnumber(L, statusBar->m_maxValue);
+    lua_pushnumber(L, statusBar->m_valueRange.m_l);
+    lua_pushnumber(L, statusBar->m_valueRange.m_h);
     return 2;
 }
 

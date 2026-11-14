@@ -331,8 +331,8 @@ void CGNamePlateFrame::OnLayerUpdate(float elapsedSec) {
     if (this->m_channeling) {
         value -= elapsedSec;
 
-        if (value < castBar->m_minValue) {
-            value = castBar->m_minValue;
+        if (value < castBar->m_valueRange.m_l) {
+            value = castBar->m_valueRange.m_l;
             this->m_castHoldTime = 0.0f;
             this->m_castFadeTime = 1.0f;
             color.Set(1.0f, 0.0f, 1.0f, 0.0f);
@@ -342,8 +342,8 @@ void CGNamePlateFrame::OnLayerUpdate(float elapsedSec) {
     } else {
         value += elapsedSec;
 
-        if (value > castBar->m_maxValue) {
-            value = castBar->m_maxValue;
+        if (value > castBar->m_valueRange.m_h) {
+            value = castBar->m_valueRange.m_h;
             this->m_castHoldTime = 0.0f;
             this->m_castFadeTime = 1.0f;
             color.Set(1.0f, 0.0f, 1.0f, 0.0f);
