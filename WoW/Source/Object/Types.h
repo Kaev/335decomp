@@ -297,7 +297,7 @@ enum UNIT_FLAGS2 : uint32_t {
     UNIT_FLAG2_PREVENT_SPELL_CLICK                = 0x00002000u,
     UNIT_FLAG2_ALLOW_ENEMY_INTERACTION            = 0x00004000u,
     UNIT_FLAG2_CANNOT_TURN                        = 0x00008000u,
-    UNIT_FLAG2_UNKNOWN_16                         = 0x00010000u, // Checked for shared-vehicle attack restrictions; broader meaning unverified.
+    UNIT_FLAG2_RESTRICT_VEHICLE_ATTACKS                         = 0x00010000u, // Inferred: enables vehicle/passenger attack checks if set on either unit; TrinityCore calls this UNK2.
     UNIT_FLAG2_PLAY_DEATH_ANIMATION               = 0x00020000u,
     UNIT_FLAG2_ALLOW_DEBUG_SPELLS                 = 0x00040000u, // Allows SPELL_ATTR7_DEBUG_SPELL casts.
     UNIT_FLAG2_UNKNOWN_19                         = 0x00080000u, // Bits 19-31 have no verified 3.3.5 meaning here.

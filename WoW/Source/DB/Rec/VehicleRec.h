@@ -29,7 +29,7 @@ class VehicleRec {
         TRAJECTORY_FREE_LOOK = 0x4000000,
         TRAJECTORY_CAST_MISSILE = 0x8000000,
         BATTLEFIELD_VEHICLE = 0x10000000,
-        UNKNOWN_20000000 = 0x20000000,
+        PREVENT_ATTACKS_WITH_PASSENGERS = 0x20000000, // Inferred: blocks attacks both ways with passengers, including nested passengers, when either unit has UNIT_FLAG2_RESTRICT_VEHICLE_ATTACKS.
         UNKNOWN_40000000 = 0x40000000,
         TRAJECTORY_MASK = 0xF800000,
         MOUSE_AIM_CAMERA_PITCH_MASK = 0x40040000,

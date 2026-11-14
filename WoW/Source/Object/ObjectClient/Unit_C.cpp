@@ -3157,15 +3157,15 @@ bool CGUnit_C::CanAttack(const CGUnit_C* unit) const {
     CGUnit_C* self = const_cast<CGUnit_C*>(this);
     CGUnit_C* other = const_cast<CGUnit_C*>(unit);
 
-    if ((this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_UNKNOWN_16) || (unit->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_UNKNOWN_16)) {
+    if ((this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_RESTRICT_VEHICLE_ATTACKS) || (unit->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_RESTRICT_VEHICLE_ATTACKS)) {
         const VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
         const VehicleRec* otherVehicleRec = unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-        if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::UNKNOWN_20000000) && other->FindRootVehicle(self) == self) {
+        if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::PREVENT_ATTACKS_WITH_PASSENGERS) && other->FindRootVehicle(self) == self) {
             return false;
         }
 
-        if (otherVehicleRec && (otherVehicleRec->m_flags & VehicleRec::FLAGS::UNKNOWN_20000000) && self->FindRootVehicle(other) == other) {
+        if (otherVehicleRec && (otherVehicleRec->m_flags & VehicleRec::FLAGS::PREVENT_ATTACKS_WITH_PASSENGERS) && self->FindRootVehicle(other) == other) {
             return false;
         }
     }
