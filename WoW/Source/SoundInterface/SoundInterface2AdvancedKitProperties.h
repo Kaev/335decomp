@@ -5,6 +5,7 @@
 #include <cstdint>
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C3Vector.h"
+#include "Engine/Source/Tempest/CRange.h"
 
 class SE2SoundKitObject;
 class SI2AdvancedSound;
@@ -41,8 +42,7 @@ class SI2AdvancedSound {
     /* 0054 */ float m_volume;
     /* 0058 */ int32_t m_usage;
     /* 005C */ int32_t m_nextInterval;
-    /* 0060 */ int32_t m_intervalMin;
-    /* 0064 */ int32_t m_intervalMax;
+    /* 0060 */ CiRange m_interval;
     /* 0068 */ int32_t m_volumeSliderCategory;
     /* 006C */ float m_duck[SI2_DUCK_COUNT];
     /* 0078 */ float m_innerRadiusOfInfluence;

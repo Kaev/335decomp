@@ -358,13 +358,13 @@ int32_t SI2::UpdateAdvancedSounds(const void* data, void* param) {
 
             SI2SoundUserData* userData = static_cast<SI2SoundUserData*>(sound->m_object->m_sound.GetUserData());
 
-            if (!sound->m_usage && userData && userData->m_def->m_numFiles > 1 && sound->m_intervalMin > 0.0f && sound->m_intervalMax > 0.0f) {
+            if (!sound->m_usage && userData && userData->m_def->m_numFiles > 1 && sound->m_interval.m_l > 0.0f && sound->m_interval.m_h > 0.0f) {
                 sound->m_nextInterval -= elapsed;
 
                 if (sound->m_nextInterval < 0) {
                     StopAdvancedSoundObject(sound, 0);
                     sound->Play();
-                    sound->m_nextInterval = RandomBetween(sound->m_intervalMin, sound->m_intervalMax);
+                    sound->m_nextInterval = RandomBetween(sound->m_interval.m_l, sound->m_interval.m_h);
                 }
             }
 
@@ -464,7 +464,7 @@ int32_t SI2::UpdateAdvancedSounds(const void* data, void* param) {
 
                 if (node->m_sound->m_nextInterval < 0) {
                     node->m_sound->Play();
-                    sound->m_nextInterval = RandomBetween(sound->m_intervalMin, sound->m_intervalMax);
+                    sound->m_nextInterval = RandomBetween(sound->m_interval.m_l, sound->m_interval.m_h);
                 }
             }
         }
@@ -705,9 +705,9 @@ int32_t SI2::AddAdvancedSound(SoundEntriesAdvancedRec* rec, int32_t soundKitId, 
     sound->m_volume = 1.0f;
     sound->m_randomOffset = RandomBetween(0, sound->m_randomOffsetRange);
     sound->m_usage = forceLoop ? 0 : rec->m_usage;
-    sound->m_intervalMin = rec->m_timeIntervalMin;
-    sound->m_intervalMax = rec->m_timeIntervalMax;
-    sound->m_nextInterval = RandomBetween(sound->m_intervalMin, sound->m_intervalMax);
+    sound->m_interval.m_l = rec->m_timeIntervalMin;
+    sound->m_interval.m_h = rec->m_timeIntervalMax;
+    sound->m_nextInterval = RandomBetween(sound->m_interval.m_l, sound->m_interval.m_h);
     sound->m_volumeSliderCategory = rec->m_volumeSliderCategory;
     sound->m_duck[SI2_DUCK_SFX] = (rec->m_duckToSfx < 0.0f || rec->m_duckToSfx > 1.0f) ? 1.0f : rec->m_duckToSfx;
     sound->m_duck[SI2_DUCK_MUSIC] = (rec->m_duckToMusic < 0.0f || rec->m_duckToMusic > 1.0f) ? 1.0f : rec->m_duckToMusic;
