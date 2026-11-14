@@ -2090,8 +2090,8 @@ void CVehiclePassenger_C::OnUpdateTransport(WOWGUID transport, uint8_t seat, CGU
     }
 
     uint32_t high = static_cast<uint32_t>(transport.m_guid >> 32);
-    int32_t exiting = (high & 0xF0F00000) != 0xF0500000 && ((high & 0xF0000000) || !((high & 0xF07FFFFF) | static_cast<uint32_t>(transport.m_guid)));
-    int32_t allowed = this->m_unit->VehiclePassengerIsTransitionAllowed(this->m_seatRec, exiting);
+    BOOL exiting = (high & 0xF0F00000) != 0xF0500000 && ((high & 0xF0000000) || !((high & 0xF07FFFFF) | static_cast<uint32_t>(transport.m_guid)));
+    BOOL allowed = this->m_unit->VehiclePassengerIsTransitionAllowed(this->m_seatRec, exiting);
 
     if (this->m_vehicleGuid && !vehicle && CVehiclePassenger_C::s_pendingCount) {
         CVehiclePassenger_C::AddPendingRescueTransition(this->m_unit->m_obj->m_guid, transport, seat, allowed);

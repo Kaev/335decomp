@@ -5648,8 +5648,8 @@ VehicleSeatRec* CGUnit_C::GetVehicleSeatRec(uint8_t seat) const {
 
 // VERIFY: af7909ae manual
 // OFFSET: 0x006D1DE0
-int32_t __stdcall CGUnit_C::UnitCanGossip(CGUnit_C* unit) {
-    return unit->IsQuestGiver() && unit->m_questStatus >= 2;
+BOOL __stdcall CGUnit_C::UnitCanGossip(CGUnit_C* unit) {
+    return unit->IsQuestGiver() && unit->m_questStatus >= QUEST_GIVER_STATUS::QUEST_GIVER_UNKNOWN_2;
 }
 
 // VERIFY: c178f90d manual
@@ -5764,9 +5764,9 @@ BOOL CGUnit_C::ShouldFadeout() {
 
 // VERIFY: 8b66139f auto
 // OFFSET: 0x00714C80
-int32_t __stdcall CGUnit_C::IsTwoHanded(const CGUnitVirtualItem* item) {
+BOOL __stdcall CGUnit_C::IsTwoHanded(const CGUnitVirtualItem* item) {
     if (!item || item->m_classID != ITEM_CLASS::ITEM_CLASS_WEAPON) {
-        return 0;
+        return FALSE;
     }
 
     switch (item->m_subclassID) {
@@ -5778,10 +5778,10 @@ int32_t __stdcall CGUnit_C::IsTwoHanded(const CGUnitVirtualItem* item) {
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_EXOTIC2:
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_SPEAR:
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_FISHING_POLE:
-            return 1;
+            return TRUE;
 
         default:
-            return 0;
+            return FALSE;
     }
 }
 
@@ -7119,7 +7119,7 @@ BOOL CGUnit_C::UsesNpcBakedTexture() const {
 
 // VERIFY: 97e6d037 manual
 // OFFSET: 0x0071C600
-int32_t __stdcall CGUnit_C::MaybeDeferTeleport(const WOWGUID* transport) {
+BOOL __stdcall CGUnit_C::MaybeDeferTeleport(const WOWGUID* transport) {
     return *transport && !ClntObjMgrObjectPtr(*transport, TYPE_OBJECT, __FILE__, __LINE__);
 }
 
@@ -7836,7 +7836,7 @@ void CGUnit_C::SetMaxAlpha(float alpha) {
 
 // VERIFY: c0baa56a auto
 // OFFSET: 0x0074B840
-int32_t CGUnit_C::VehiclePassengerIsTransitionAllowed(const VehicleSeatRec* seat, int32_t checkSeat) const {
+BOOL CGUnit_C::VehiclePassengerIsTransitionAllowed(const VehicleSeatRec* seat, BOOL checkSeat) const {
     return (this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_ALLOW_VEHICLE_TRANSITION) || (checkSeat && seat && (seat->m_flagsB & VEHICLE_SEAT_FLAGS_B::VEHICLE_SEAT_FLAG_B_ALLOW_PASSENGER_TRANSITION));
 }
 
@@ -9339,7 +9339,7 @@ void CGUnit_C::SetKeyBoneSequence(CM2Model* model, uint32_t boneId, uint32_t seq
 
 // VERIFY: a814c576 manual
 // OFFSET: 0x00735A60
-int32_t CGUnit_C::UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL blend, BOOL primary, BOOL force) {
+BOOL CGUnit_C::UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL blend, BOOL primary, BOOL force) {
     if (!model) {
         return FALSE;
     }
@@ -9348,7 +9348,7 @@ int32_t CGUnit_C::UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL bl
         return FALSE;
     }
 
-    int32_t result;
+    BOOL result;
 
     if (model->IsLoaded(0, 0) && model->BoneHasParent(boneId)) {
         result = TRUE;
@@ -9374,7 +9374,7 @@ int32_t CGUnit_C::UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL bl
 
 // VERIFY: 3f921c2a manual
 // OFFSET: 0x00735BB0
-void CGUnit_C::SetBoneSequenceTimeRecursive(CM2Model* model, uint32_t boneId, uint32_t time, int32_t force) {
+void CGUnit_C::SetBoneSequenceTimeRecursive(CM2Model* model, uint32_t boneId, uint32_t time, BOOL force) {
     if (!model) {
         return;
     }
@@ -9395,14 +9395,14 @@ void CGUnit_C::SetBoneSequenceTimeRecursive(CM2Model* model, uint32_t boneId, ui
         CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*passenger->m_ownerGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit && unit->m_vehiclePassenger && unit->m_vehiclePassenger->OverridesModelAnimation()) {
-            unit->SetBoneSequenceTimeRecursive(unit->GetObjectModel(), boneId, time, 1);
+            unit->SetBoneSequenceTimeRecursive(unit->GetObjectModel(), boneId, time, TRUE);
         }
     }
 }
 
 // VERIFY: 2a100620 manual
 // OFFSET: 0x00735DD0
-void CGUnit_C::UpdateBoneSequenceFlags(CM2Model* model, int32_t freeze, int32_t force) {
+void CGUnit_C::UpdateBoneSequenceFlags(CM2Model* model, BOOL freeze, BOOL force) {
     if (!model) {
         return;
     }
@@ -9428,7 +9428,7 @@ void CGUnit_C::UpdateBoneSequenceFlags(CM2Model* model, int32_t freeze, int32_t 
         CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(*passenger->m_ownerGuid, TYPE_UNIT, __FILE__, __LINE__));
 
         if (unit && unit->m_vehiclePassenger && unit->m_vehiclePassenger->OverridesModelAnimation()) {
-            unit->UpdateBoneSequenceFlags(unit->GetObjectModel(), freeze, 1);
+            unit->UpdateBoneSequenceFlags(unit->GetObjectModel(), freeze, TRUE);
         }
     }
 }
@@ -9718,7 +9718,7 @@ void CGUnit_C::SetClientInitData(const CClientObjCreate& create, bool reenable) 
         return;
     }
 
-    int32_t activePlayer = create.m_updateFlags & OBJECT_UPDATE_FLAGS::UPDATEFLAG_SELF;
+    BOOL activePlayer = create.m_updateFlags & OBJECT_UPDATE_FLAGS::UPDATEFLAG_SELF;
     this->m_movementData.SetUpdateInfo(OsGetAsyncTimeMs(), &create.m_move, activePlayer);
 
     if (this->m_movementData.m_flags & MOVEMENTFLAG_FALLING_FAR) {

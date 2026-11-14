@@ -931,16 +931,16 @@ void CVehicleCamera_C::BeginTransition(uint32_t time) {
     this->m_seatRec = passenger->m_seatRec;
     uint32_t passengerState = passenger->m_state;
     float delay = 0.0f;
-    int32_t exiting;
+    BOOL exiting;
 
     switch (passengerState) {
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_NONE:
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_EXITING:
-            exiting = 1;
+            exiting = TRUE;
             break;
 
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_ENTER_DELAY:
-            exiting = 0;
+            exiting = FALSE;
 
             if (this->m_seatRec) {
                 delay = this->m_seatRec->m_field33512213004;
@@ -950,11 +950,11 @@ void CVehicleCamera_C::BeginTransition(uint32_t time) {
 
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_ENTERING:
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_RIDING:
-            exiting = 0;
+            exiting = FALSE;
             break;
 
         case CVehiclePassenger_C::TRANSITION_STATE::STATE_EXIT_DELAY:
-            exiting = 1;
+            exiting = TRUE;
 
             if (this->m_seatRec) {
                 delay = this->m_seatRec->m_field33512213017;

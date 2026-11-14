@@ -246,10 +246,10 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     static void PitchMissileTrajectoryTargetingNextFrame();
     static void SetMissileTrajectoryTargetingSpell(uint32_t spellId);
     static int32_t __stdcall GetRecordForTitle(int32_t maskId);
-    static int32_t __stdcall UnitCanGossip(CGUnit_C* unit);
-    static int32_t __stdcall IsTwoHanded(const CGUnitVirtualItem* item);
+    static BOOL __stdcall UnitCanGossip(CGUnit_C* unit);
+    static BOOL __stdcall IsTwoHanded(const CGUnitVirtualItem* item);
     static bool FactionHasReputation(int32_t factionId);
-    static int32_t __stdcall MaybeDeferTeleport(const WOWGUID* transport);
+    static BOOL __stdcall MaybeDeferTeleport(const WOWGUID* transport);
     static void VehiclePassengerInitWorldCameraState();
     static bool __stdcall IsSpellAllowedInArena(const SpellRec* spell);
     static void ApplyGuildTabard(int32_t guildId, const WOWGUID& guid, void* param, bool apply);
@@ -649,7 +649,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     CGUnit_C* GetRootVehicleUnit();
     void PlayVehicleExitEndAnimation(const VehicleSeatRec* seat, uint32_t anim);
     CGUnit_C* FindRootVehicleOfPassengerChain(CGUnit_C* stop);
-    int32_t VehiclePassengerIsTransitionAllowed(const VehicleSeatRec* seat, int32_t checkSeat) const;
+    BOOL VehiclePassengerIsTransitionAllowed(const VehicleSeatRec* seat, BOOL checkSeat) const;
     int32_t ShouldUseVehicleSeatExitAnimation(const VehicleSeatRec* seat) const;
     BOOL IsRunning() const;
     BOOL ChooseMovementAnim(uint32_t selectionMask, uint32_t* anim) const;
@@ -766,9 +766,9 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     void SetKeyBoneSequenceSpeed(CM2Model* model, uint32_t boneId, float speed, int32_t force);
     void ReleaseEffectsBySpell(int32_t spellId);
     void SetKeyBoneSequence(CM2Model* model, uint32_t boneId, uint32_t sequenceId, uint32_t variation, uint32_t time, float speed, int32_t blend, int32_t primary, int32_t force);
-    int32_t UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL blend, BOOL primary, BOOL force);
-    void SetBoneSequenceTimeRecursive(CM2Model* model, uint32_t boneId, uint32_t time, int32_t force);
-    void UpdateBoneSequenceFlags(CM2Model* model, int32_t freeze, int32_t force);
+    BOOL UnsetKeyBoneSequence(CM2Model* model, uint32_t boneId, BOOL blend, BOOL primary, BOOL force);
+    void SetBoneSequenceTimeRecursive(CM2Model* model, uint32_t boneId, uint32_t time, BOOL force);
+    void UpdateBoneSequenceFlags(CM2Model* model, BOOL freeze, BOOL force);
     void ResetKeyBoneSequences();
     void OnCollideFalling();
     void CreateVehicleData(const CClientObjCreate* create, int32_t vehicleId);

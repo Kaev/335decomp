@@ -1509,10 +1509,10 @@ void CEffect::CreateProceduralEffectImpl(int32_t expireTime, float param, uint32
                 duration = info.m_duration;
             }
 
-            unit->SetBoneSequenceTimeRecursive(unit->m_mountModel, 0xFFFFFFFF, duration, 0);
+            unit->SetBoneSequenceTimeRecursive(unit->m_mountModel, 0xFFFFFFFF, duration, FALSE);
         }
 
-        unit->UpdateBoneSequenceFlags(unit->m_mountModel, 1, 0);
+        unit->UpdateBoneSequenceFlags(unit->m_mountModel, TRUE, FALSE);
     } else {
         this->m_attachToMount = 1;
     }
@@ -1531,10 +1531,10 @@ void CEffect::CreateProceduralEffectImpl(int32_t expireTime, float param, uint32
                 duration = info.m_duration;
             }
 
-            unit->SetBoneSequenceTimeRecursive(unit->m_worldModel, 0xFFFFFFFF, duration, 0);
+            unit->SetBoneSequenceTimeRecursive(unit->m_worldModel, 0xFFFFFFFF, duration, FALSE);
         }
 
-        unit->UpdateBoneSequenceFlags(unit->m_worldModel, 1, 0);
+        unit->UpdateBoneSequenceFlags(unit->m_worldModel, TRUE, FALSE);
     } else {
         this->m_attachToModel = 1;
     }
