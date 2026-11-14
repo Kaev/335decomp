@@ -693,7 +693,7 @@ void CVehicle_C::PlayBoneAnimOrFallback(CM2Model* model, uint32_t boneId) {
 
     if (!this->m_unit->UnsetKeyBoneSequence(model, bone, TRUE, TRUE, FALSE)) {
         this->BoneAnimEndHandler(model, bone, INVALID_ANIMATION, 1, 0);
-        this->m_unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+        this->m_unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
     }
 }
 
@@ -729,7 +729,7 @@ void CVehicle_C::RemoveBoneAnimListener(uint32_t boneId, WOWGUID guid) {
 
     if (!this->m_unit->UnsetKeyBoneSequence(model, boneId, TRUE, TRUE, FALSE)) {
         this->BoneAnimEndHandler(model, boneId, INVALID_ANIMATION, 1, 0);
-        this->m_unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+        this->m_unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
     }
 }
 
@@ -779,7 +779,7 @@ void CVehicle_C::BoneAnimEndHandler(CM2Model* model, uint32_t boneId, uint32_t s
             this->m_unit->SetKeyBoneSequence(model, boneId == 26 ? 0xFFFFFFFF : boneId, sequenceId, 0xFFFFFFFF, time, 1.0f, 1, 1, 0);
             s_inBoneAnimEnd = 0;
         } else if (boneId == 26) {
-            this->m_unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+            this->m_unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
         } else {
             this->PlayBoneAnimOrFallback(model, boneId);
         }

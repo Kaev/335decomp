@@ -702,7 +702,7 @@ void CEffect::MoveToDestroyList() {
                 this->m_attachToModel = 0;
             }
 
-            unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+            unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
         }
     }
 
@@ -722,7 +722,7 @@ void CEffect::MoveToDestroyList() {
                 unit->StopMountTransition();
             }
 
-            unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+            unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
         }
 
         SpellVisualsCancelMountTransition(this->m_mountTransition);
@@ -817,7 +817,7 @@ CEffect::~CEffect() {
 
         if (unit) {
             unit->StopMountTransition();
-            unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+            unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
         }
 
         SpellVisualsCancelMountTransition(this->m_mountTransition);
@@ -1248,7 +1248,7 @@ void CEffect::EffectUpdate() {
             this->m_attachToModel = 0;
         }
 
-        unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+        unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
         this->MoveToDestroyList();
     } else if (this->unk_00D0 && static_cast<int32_t>(FrameTime::s_curTimeMs - this->unk_00D0) > 0) {
         CGObject_C* object = ClntObjMgrObjectPtr(this->m_sourceGuid, TYPE_OBJECT, __FILE__, __LINE__);

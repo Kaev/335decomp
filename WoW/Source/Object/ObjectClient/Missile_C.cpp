@@ -1667,7 +1667,7 @@ void CMissile::CalcPosition(int32_t advance) {
             target->m_worldModel->GetSequenceInfo(animId, 0, info);
 
             if (info.m_animId) {
-                target->PlayBaseAnimation(animId, 0);
+                target->PlayBaseAnimation(animId, ANIM_PLAY_FLAGS::PLAY_NONE);
             }
         }
     }
@@ -1879,7 +1879,7 @@ void CMissile::MissedTarget(CGUnit_C* target, const C3Vector* direction) {
             target->m_worldModel->GetSequenceInfo(ANIM_DODGE, 0, info);
 
             if (info.m_animId) {
-                target->PlayBaseAnimation(ANIM_DODGE, 0);
+                target->PlayBaseAnimation(ANIM_DODGE, ANIM_PLAY_FLAGS::PLAY_NONE);
             }
         }
 
@@ -2093,7 +2093,7 @@ void CMissile::FireMissiles(const C3Vector* position) {
 
                 if (delay <= 0) {
                     if (info.m_animId) {
-                        target->PlayBaseAnimation(animId, 0);
+                        target->PlayBaseAnimation(animId, ANIM_PLAY_FLAGS::PLAY_NONE);
                     }
                 } else {
                     this->m_victimAnimTime = delay + OsGetAsyncTimeMs();

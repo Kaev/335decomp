@@ -1061,7 +1061,7 @@ void CVehiclePassenger_C::SetState(uint32_t state, CGUnit_C* vehicle, uint8_t se
             }
         }
 
-        this->m_unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
+        this->m_unit->UpdateBaseAnimation(ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
     }
 
     if (this->m_state == TRANSITION_STATE::STATE_RIDING && this->m_boneAnimGuid) {
@@ -1217,7 +1217,7 @@ void CVehiclePassenger_C::SetState(uint32_t state, CGUnit_C* vehicle, uint8_t se
             this->m_flags &= ~VEHICLE_PASSENGER_FLAGS::VEHICLE_PASSENGER_FLAG_ANIM_START_DONE_MASK;
         }
 
-        this->m_unit->UpdateBaseAnimation(entered != 0, ANIM_SELECTION_FLAGS::ALL);
+        this->m_unit->UpdateBaseAnimation(entered ? ANIM_PLAY_FLAGS::PLAY_NO_BLEND : ANIM_PLAY_FLAGS::PLAY_NONE, ANIM_SELECTION_FLAGS::ALL);
 
         if (!keepAnimFlags) {
             this->m_flags &= ~VEHICLE_PASSENGER_FLAGS::VEHICLE_PASSENGER_FLAG_ANIM_START_DONE_MASK;

@@ -391,7 +391,7 @@ void CGUnit_C::PlayCombatSpellMissEffects(uint32_t reason, const WOWGUID& source
 
     switch (reason) {
         case 3:
-            this->PlayBaseAnimation(ANIM_DODGE, 0);
+            this->PlayBaseAnimation(ANIM_DODGE, ANIM_PLAY_FLAGS::PLAY_NONE);
             break;
 
         case 4: {
@@ -402,7 +402,7 @@ void CGUnit_C::PlayCombatSpellMissEffects(uint32_t reason, const WOWGUID& source
         }
 
         case 5: {
-            this->PlayBaseAnimation(ANIM_SHIELD_BLOCK, 0);
+            this->PlayBaseAnimation(ANIM_SHIELD_BLOCK, ANIM_PLAY_FLAGS::PLAY_NONE);
             this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, false);
             const CGUnitVirtualItem* shield = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_OFFHAND, false);
 
@@ -698,13 +698,13 @@ void CGUnit_C::HandleCombatAnimEvent(uint32_t eventId, uint32_t data, const C3Ve
                 this->m_lastAttackRound.m_hitInfo &= ~HIT_INFO_FLAGS::HIT_INFO_FLAG_AFFECTS_VICTIM;
             } else if (victimState == VS_DODGE || victimState == VS_DEFLECT) {
                 if (!target->m_creatureCacheEntry || !(target->m_creatureCacheEntry->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_NO_DODGE_PARRY_BLOCK_ANIMS)) {
-                    target->PlayBaseAnimation(ANIM_DODGE, 0);
+                    target->PlayBaseAnimation(ANIM_DODGE, ANIM_PLAY_FLAGS::PLAY_NONE);
                 }
 
                 this->m_lastAttackRound.m_hitInfo &= ~HIT_INFO_FLAGS::HIT_INFO_FLAG_AFFECTS_VICTIM;
             } else if (this->m_lastAttackRound.m_blocked) {
                 if (!target->m_creatureCacheEntry || !(target->m_creatureCacheEntry->m_typeFlags & CREATURE_TYPE_FLAGS::CREATURE_TYPE_FLAG_NO_DODGE_PARRY_BLOCK_ANIMS)) {
-                    target->PlayBaseAnimation(ANIM_SHIELD_BLOCK, 0);
+                    target->PlayBaseAnimation(ANIM_SHIELD_BLOCK, ANIM_PLAY_FLAGS::PLAY_NONE);
                 }
 
                 this->m_lastAttackRound.m_hitInfo &= ~HIT_INFO_FLAGS::HIT_INFO_FLAG_AFFECTS_VICTIM;

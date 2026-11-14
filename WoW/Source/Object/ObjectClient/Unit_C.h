@@ -774,7 +774,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     void CreateVehicleData(const CClientObjCreate* create, int32_t vehicleId);
     void RefreshDataPointers();
     void InitializeActivePlayerComponent();
-    void PlayBaseAnimation(uint32_t animId, int32_t flags);
+    void PlayBaseAnimation(uint32_t animId, int32_t playbackFlags);
     void SetAnimType(uint8_t animTier);
     void RegisterScript(uint32_t flags);
     void UnregisterScript(uint32_t flags);
@@ -1129,7 +1129,7 @@ BOOL IsBowAnim(uint32_t animId);
 BOOL IsRifleAnim(uint32_t animId);
 BOOL IsMeleeAttackAnim(uint32_t animId);
 BOOL IsUnarmedAnim(uint32_t animId);
-void ApplyKitAnimFlags(uint32_t kitFlags, uint32_t* animFlags);
+void ApplyKitAnimFlags(uint32_t kitFlags, uint32_t* playbackFlags);
 BOOL IsFullBodyAnim(uint32_t animId);
 BOOL IsLocomotionAnimId(uint32_t animId);
 BOOL IsMeleeOrReadyAnim(uint32_t animId);

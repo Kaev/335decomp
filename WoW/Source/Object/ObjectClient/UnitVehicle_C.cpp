@@ -373,13 +373,13 @@ void CGUnit_C::PlayVehicleExitEndAnimation(const VehicleSeatRec* seat, uint32_t 
         uint32_t flags = this->m_movement->m_flags;
 
         if (flags & MOVEMENTFLAG_FALLING) {
-            this->PlayBaseAnimation(ANIM_FALL, 0);
+            this->PlayBaseAnimation(ANIM_FALL, ANIM_PLAY_FLAGS::PLAY_NONE);
             this->m_animFlags |= UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_FALL_LAND_PENDING;
             return;
         }
 
         if (flags & MOVEMENTFLAG_SWIMMING) {
-            this->PlayBaseAnimation(ANIM_SWIM_IDLE, 0);
+            this->PlayBaseAnimation(ANIM_SWIM_IDLE, ANIM_PLAY_FLAGS::PLAY_NONE);
             return;
         }
 
@@ -388,7 +388,7 @@ void CGUnit_C::PlayVehicleExitEndAnimation(const VehicleSeatRec* seat, uint32_t 
         }
     }
 
-    this->PlayBaseAnimation(anim, 1);
+    this->PlayBaseAnimation(anim, ANIM_PLAY_FLAGS::PLAY_NO_BLEND);
 }
 
 // VERIFY: d8cede4e auto

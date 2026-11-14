@@ -83,6 +83,19 @@ enum ANIM_SELECTION_FLAGS : int32_t {
     SPECIAL_IDLE_GUARD = 0x7FF,
 };
 
+// PlayBaseAnimation options and chooser output; separate from selection and persistent unit flags.
+enum ANIM_PLAY_FLAGS : int32_t {
+    PLAY_NONE = 0,
+    PLAY_NO_BLEND = 0x1,
+    PLAY_FORCE_SPECIFIC_ANIMATION = 0x2,
+    PLAY_BYPASS_ANIMATION_TIERS = 0x4,
+    PLAY_SPECIFIC_WEAPON_SPECIAL = 0x8,
+    PLAY_SEQUENCE_ENDED = 0x10,
+    PLAY_DO_NOT_SHEATHE_WEAPON = 0x20,
+    PLAY_KEEP_CURRENT_MELEE_ATTACK = 0x40,
+    PLAY_RAW_ANIMATION_ID_MASK = 0x6,
+};
+
 // CGUnit_C::m_animFlags; reconstructed flag names from 3.3.5 writers/readers.
 enum UNIT_ANIM_FLAGS : uint32_t {
     // Turning keys or CameraCanTurnPlayer(); inhibits automatic untwisting.
