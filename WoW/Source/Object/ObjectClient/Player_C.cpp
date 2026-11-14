@@ -13794,7 +13794,7 @@ void CGPlayer_C::PlayUnitSound(UNITSOUNDTYPE soundType, int32_t force) {
         properties.m_priority = 110;
 
         if (soundType == UNITSOUNDTYPE_WINGFLAP) {
-            properties.m_maxAudibleBehavior = 0;
+            properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         } else if (soundType != UNITSOUNDTYPE_STAND && soundType != UNITSOUNDTYPE::UNITSOUNDTYPE_UNUSED_6 && soundType != UNITSOUNDTYPE_WINGGLIDE && soundType != UNITSOUNDTYPE_JUMPSTART && soundType != UNITSOUNDTYPE_JUMPEND && soundType != UNITSOUNDTYPE_INJURY_FALL && this->m_unit->m_classID == CLASS_DEATH_KNIGHT) {
             properties.m_useDspChain = 1;
             SI2::DK_GetPlayerFilterName(this, properties.m_dspChainName, sizeof(properties.m_dspChainName));

@@ -307,7 +307,7 @@ void CGUnit_C::PlayUnitSound(UNITSOUNDTYPE soundType, int32_t force) {
         properties.ResetToDefaults();
 
         if (soundType == UNITSOUNDTYPE_WINGFLAP) {
-            properties.m_maxAudibleBehavior = 0;
+            properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         }
 
         properties.m_group = this->GetUnitSoundKitIndex(soundType);
@@ -574,7 +574,7 @@ void CGUnit_C::CheckLoopSound() {
         SE2SoundKitProperties properties;
         properties.ResetToDefaults();
         properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
-        properties.m_maxAudibleBehavior = 0;
+        properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         properties.m_streaming = true;
         SI2::PlaySoundKit(soundData->m_loopSoundID, &position, &this->m_loopSound, &properties, 0, nullptr, 1, 0);
         SI2::AttachToObject(&this->m_loopSound, this->m_obj->m_guid);

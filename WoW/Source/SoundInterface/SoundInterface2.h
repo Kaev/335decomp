@@ -52,7 +52,7 @@ class SE2SoundKitProperties {
     /* 0024 */ SE2_SUPPRESSOR_MODE m_suppressorMode;
     /* 0028 */ uint32_t m_decodeBufferSize;
     /* 002C */ float m_maxDistance;
-    /* 0030 */ int32_t m_maxAudibleBehavior;
+    /* 0030 */ SE2_MAX_AUDIBLE_BEHAVIOR m_maxAudibleBehavior;
     /* 0034 */ float m_muteFadeSpeed;
     /* 0038 */ bool m_streaming;
     /* 003C */ int32_t m_reverb;

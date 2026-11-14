@@ -32,6 +32,13 @@ enum SECHANNELSTATE {
     SECHANNELSTATE_OTHER = 4,
 };
 
+// Game policy values translated by SetSoundGroupMaxAudibleBehavior.
+enum SE2_MAX_AUDIBLE_BEHAVIOR : int32_t {
+    SE2_MAX_AUDIBLE_MUTE = 0,
+    SE2_MAX_AUDIBLE_STEAL_LOWEST = 1,
+    SE2_MAX_AUDIBLE_FAIL = 2,
+};
+
 struct SEDriverInfo {
     /* 0000 */ char m_name[256];
 };

@@ -1165,19 +1165,19 @@ void SE2::SetSoundGroupMaxAudibleBehavior(FMOD::SoundGroup* soundGroup, int32_t 
     FMOD_RESULT result;
 
     switch (behavior) {
-        case 0:
+        case SE2_MAX_AUDIBLE_MUTE:
             result = soundGroup->setMaxAudibleBehavior(FMOD_SOUNDGROUP_BEHAVIOR_MUTE);
             SE_ERRCHECK(result);
             result = soundGroup->setMuteFadeSpeed(muteFadeSpeed);
             SE_ERRCHECK(result);
             break;
 
-        case 1:
+        case SE2_MAX_AUDIBLE_STEAL_LOWEST:
             result = soundGroup->setMaxAudibleBehavior(FMOD_SOUNDGROUP_BEHAVIOR_STEALLOWEST);
             SE_ERRCHECK(result);
             break;
 
-        case 2:
+        case SE2_MAX_AUDIBLE_FAIL:
             result = soundGroup->setMaxAudibleBehavior(FMOD_SOUNDGROUP_BEHAVIOR_FAIL);
             SE_ERRCHECK(result);
             break;

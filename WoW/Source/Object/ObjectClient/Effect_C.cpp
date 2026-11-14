@@ -509,7 +509,7 @@ void CEffect::AddSoundEffect(int32_t soundId, int32_t expireTime, int32_t spellI
         properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
         properties.m_noRandomStart = 1;
     } else {
-        properties.m_maxAudibleBehavior = 0;
+        properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
 
         if (CGUnit_C::s_activeMover == this->m_sourceGuid) {
@@ -1407,7 +1407,7 @@ void CEffect::PostInitialize() {
 
         if (this->m_flags & EFFECT_FLAGS::EFFECT_AURA_ANIMATION) {
             properties.m_streaming = true;
-            properties.m_maxAudibleBehavior = 0;
+            properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         }
 
         properties.m_noRandomStart = 1;
@@ -1423,7 +1423,7 @@ void CEffect::PostInitialize() {
     C3Vector position = C3Vector();
     const C3Vector* soundPosition = nullptr;
     properties.m_loopMode = SE2_LOOP_MODE_NONLOOPING;
-    properties.m_maxAudibleBehavior = 0;
+    properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
 
     if (listenerAtCharacter) {
         properties.m_volumeScale = 0.64999998f;

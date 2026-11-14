@@ -3363,7 +3363,7 @@ static void GameObject_C_PlayAnimatedSound(uint32_t displayId, int32_t index, co
 
     if (!SI2::IsSoundKitLooping(soundKitId)) {
         properties.ResetToDefaults();
-        properties.m_maxAudibleBehavior = 0;
+        properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         SI2::PlaySoundKit(soundKitId, &position, nullptr, &properties, 0, nullptr, 1, 0);
         return;
     }
@@ -3376,7 +3376,7 @@ static void GameObject_C_PlayAnimatedSound(uint32_t displayId, int32_t index, co
     properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
     properties.m_streaming = true;
     properties.m_software = 1;
-    properties.m_maxAudibleBehavior = 0;
+    properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
     SI2::PlaySoundKit(soundKitId, &position, sound, &properties, 0, nullptr, 1, 0);
 }
 
@@ -3436,7 +3436,7 @@ void GameObject_C_ProcessAnimEvent(uint32_t eventId, uint32_t displayId, uint32_
                 properties.m_fadeInTime = 1.0f;
                 properties.m_fadeOutTime = 1.0f;
                 properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
-                properties.m_maxAudibleBehavior = 0;
+                properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
                 properties.m_streaming = true;
                 properties.m_software = 1;
                 SI2::PlaySoundKit(data, &position, sound, &properties, 0, nullptr, 1, 0);

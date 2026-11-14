@@ -159,7 +159,7 @@ void SE2SoundKitProperties::ResetToDefaults() {
     this->m_muteFadeSpeed = 0.5f;
     this->m_suppressorMode = SE2_SUPPRESSOR_MODE_DEFAULT;
     this->m_decodeBufferSize = 0;
-    this->m_maxAudibleBehavior = 1;
+    this->m_maxAudibleBehavior = SE2_MAX_AUDIBLE_STEAL_LOWEST;
     this->m_coneInsideAngle = 360.0f;
     this->m_reverb = 1;
     this->m_coneOutsideAngle = 360.0f;
@@ -818,7 +818,7 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
 
     if (properties->m_forceLoop) {
         looping = 1;
-        properties->m_maxAudibleBehavior = 0;
+        properties->m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         properties->m_streaming = true;
         properties->m_software = 1;
     }
@@ -827,7 +827,7 @@ int32_t SI2::PlaySoundKit(int32_t soundKitId, const C3Vector* position, SE2Sound
         DebugLog("XXXX\nXXXX ERROR!! Sound Kit ID %d is a looping sound but there is no user handle! This sound will play forever!! \nXXXX\n", soundKitId);
     }
 
-    SE2::SetSoundGroupMaxAudibleBehavior(def->m_loadSoundGroup, 1, 0.0f);
+    SE2::SetSoundGroupMaxAudibleBehavior(def->m_loadSoundGroup, SE2_MAX_AUDIBLE_STEAL_LOWEST, 0.0f);
     SE2::SetSoundGroupMaxAudibleBehavior(def->m_soundGroup, properties->m_maxAudibleBehavior, properties->m_muteFadeSpeed);
 
     if (def->m_advanced && !advancedId) {

@@ -59,7 +59,7 @@ void CMapStaticEntity::ModelEventCallback(CM2Model* model, uint32_t boneId, uint
             properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
             properties.m_streaming = true;
             properties.m_software = 1;
-            properties.m_maxAudibleBehavior = 0;
+            properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
 
             SI2::PlaySoundKit(data, position, &doodadDef->m_soundKitObject, &properties, 0, nullptr, 1, 0);
             break;

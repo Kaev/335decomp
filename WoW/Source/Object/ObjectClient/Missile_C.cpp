@@ -2159,7 +2159,7 @@ void CMissile::FireMissiles(const C3Vector* position) {
         properties.m_fadeInTime = 0.5f;
         properties.m_loopMode = SE2_LOOP_MODE_LOOPING;
         properties.m_noRandomStart = 1;
-        properties.m_maxAudibleBehavior = 0;
+        properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         properties.m_streaming = true;
 
         if (this->m_casterGuid == CGUnit_C::s_activeMover || this->m_targetGuid == CGUnit_C::s_activeMover) {

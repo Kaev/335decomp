@@ -90,7 +90,7 @@ void SI2::PlayFootstepSound(int32_t footstepId, const C3Vector* position, int32_
     } else {
         properties.ResetToDefaults();
         properties.m_group = 13;
-        properties.m_maxAudibleBehavior = 0;
+        properties.m_maxAudibleBehavior = SE2_MAX_AUDIBLE_MUTE;
         SI2::PlaySoundKit(soundKitId, position, nullptr, &properties, 0, nullptr, 1, 0);
     }
 }
