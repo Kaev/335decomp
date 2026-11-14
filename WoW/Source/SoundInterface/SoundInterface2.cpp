@@ -153,7 +153,7 @@ void SE2SoundKitProperties::ResetToDefaults() {
     this->m_fadeInTime = 0.0f;
     this->m_fadeOutTime = 0.0f;
     this->m_group = 0;
-    this->m_selectMode = 2;
+    this->m_selectMode = SE2_FILE_SELECT_WEIGHTED_CYCLE;
     this->m_maxDistance = -1.0f;
     this->m_loopMode = SE2_LOOP_MODE_DEFAULT;
     this->m_muteFadeSpeed = 0.5f;

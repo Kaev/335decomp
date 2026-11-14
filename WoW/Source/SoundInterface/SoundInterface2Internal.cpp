@@ -66,7 +66,7 @@ VSOUNDKITDEF::VSOUNDKITDEF() {
 // VERIFY: 229de6de manual
 // OFFSET: 0x004CBAC0
 const char* VSOUNDKITDEF::SelectFile(uint32_t mode, int32_t* index, int32_t fileIndex, int32_t priority) {
-    if (mode > 2) {
+    if (mode > SE2_FILE_SELECT_WEIGHTED_CYCLE) {
         return nullptr;
     }
 
@@ -129,11 +129,11 @@ const char* VSOUNDKITDEF::SelectFile(uint32_t mode, int32_t* index, int32_t file
             break;
         }
 
-        if (mode == 0) {
+        if (mode == SE2_FILE_SELECT_SEQUENTIAL) {
             for (int32_t i = 0; i < 10; i++) {
                 this->m_weights[i] = 1;
             }
-        } else if (mode == 1 || mode == 2) {
+        } else if (mode == SE2_FILE_SELECT_WEIGHTED_RANDOM || mode == SE2_FILE_SELECT_WEIGHTED_CYCLE) {
             for (int32_t i = 0; i < this->m_numFiles; i++) {
                 this->m_weights[i] = this->m_frequencies[i];
             }
@@ -200,7 +200,7 @@ const char* VSOUNDKITDEF::SelectFile(uint32_t mode, int32_t* index, int32_t file
         selected = 0;
     }
 
-    if (mode == 1) {
+    if (mode == SE2_FILE_SELECT_WEIGHTED_RANDOM) {
         for (int32_t k = 0; k < 10; k++) {
             this->m_weights[k] = 0;
         }

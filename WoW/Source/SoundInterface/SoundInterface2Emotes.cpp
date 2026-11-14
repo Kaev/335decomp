@@ -53,7 +53,7 @@ int32_t SI2::GetTextEmoteSoundIndex(uint32_t emotesTextId, uint32_t race, uint32
     }
 
     int32_t index = 0;
-    def->SelectFile(2, &index, -1, 5);
+    def->SelectFile(SE2_FILE_SELECT_WEIGHTED_CYCLE, &index, -1, 5);
     return index;
 }
 

@@ -626,7 +626,7 @@ int32_t SI2::ZoneSoundsUpdate(const void* data, void* param) {
 
     properties.ResetToDefaults();
     properties.m_group = 1;
-    properties.m_selectMode = 2;
+    properties.m_selectMode = SE2_FILE_SELECT_WEIGHTED_CYCLE;
     properties.m_fadeInTime = s_zoneMusic.IsPlaying() ? 4.0f : 0.01f;
     properties.m_fadeOutTime = 4.0f;
     properties.m_priority = 100;

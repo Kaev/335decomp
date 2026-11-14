@@ -31,6 +31,13 @@ enum SE2_LOOP_MODE : int32_t {
     SE2_LOOP_MODE_NONLOOPING = 2,
 };
 
+// Weight policies used after the explicit file-index and pending-download overrides.
+enum SE2_FILE_SELECT_MODE : int32_t {
+    SE2_FILE_SELECT_SEQUENTIAL = 0, // Refill with unit weights and consume in file order.
+    SE2_FILE_SELECT_WEIGHTED_RANDOM = 1, // Refill from frequencies and clear weights after each draw.
+    SE2_FILE_SELECT_WEIGHTED_CYCLE = 2, // Refill from frequencies and retain remaining weights between draws.
+};
+
 class SE2SoundKitProperties {
     public:
     /* 0000 */ int32_t m_group;
@@ -39,7 +46,7 @@ class SE2SoundKitProperties {
     /* 000C */ int32_t m_fileIndex;
     /* 0010 */ float m_fadeInTime;
     /* 0014 */ float m_fadeOutTime;
-    /* 0018 */ int32_t m_selectMode;
+    /* 0018 */ SE2_FILE_SELECT_MODE m_selectMode;
     /* 001C */ SE2_LOOP_MODE m_loopMode;
     /* 0020 */ int32_t m_priority;
     /* 0024 */ SE2_SUPPRESSOR_MODE m_suppressorMode;

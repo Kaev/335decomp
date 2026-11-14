@@ -100,7 +100,7 @@ int32_t SI2::CreditsMusicUpdate(const void* data, void* param) {
         SE2SoundKitProperties properties;
         properties.ResetToDefaults();
         properties.m_group = 1;
-        properties.m_selectMode = 0;
+        properties.m_selectMode = SE2_FILE_SELECT_SEQUENTIAL;
 
         SI2::PlaySoundKit(s_creditsMusicName, nullptr, &s_creditsMusic, &properties);
     }
@@ -165,7 +165,7 @@ void SI2::StartCreditsMusic(const char* name) {
     SE2SoundKitProperties properties;
     properties.ResetToDefaults();
     properties.m_group = 1;
-    properties.m_selectMode = 0;
+    properties.m_selectMode = SE2_FILE_SELECT_SEQUENTIAL;
 
     SI2::PlaySoundKit(s_creditsMusicName, nullptr, &s_creditsMusic, &properties);
     EventRegister(EVENT_ID_POLL, SI2::CreditsMusicUpdate);
