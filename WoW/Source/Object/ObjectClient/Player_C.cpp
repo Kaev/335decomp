@@ -8532,7 +8532,7 @@ int32_t __stdcall CGPlayer_C::OnLootMoneyNotify(CDataStore* msg) {
 // OFFSET: 0x006CEDD0
 void CGPlayer_C::ClearLootingObject() {
     this->m_lootTarget = WOWGUID();
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
 }
 
 // VERIFY: 5787f2d9 manual
@@ -8561,7 +8561,7 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
             }
 
             this->m_lootTarget = WOWGUID();
-            this->UpdateBaseAnimation(0, -1);
+            this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
             CGGameUI::UnlockItem(guid);
             return 1;
         }
@@ -8662,9 +8662,9 @@ int32_t CGPlayer_C::OnLootResponse(uint32_t time, CDataStore* msg) {
     }
 
     this->m_lootTarget = WOWGUID();
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     CGGameUI::UnlockItem(guid);
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     return 1;
 }
 
@@ -8715,7 +8715,7 @@ int32_t CGPlayer_C::OnLootReleaseResponse(CDataStore* msg) {
 
     if (released && guid == this->m_lootTarget) {
         this->m_lootTarget = WOWGUID();
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
         CGGameUI::CloseLoot(false, false, false);
     }
 
@@ -9133,7 +9133,7 @@ int32_t Packet_Group_9(void* param, NETMESSAGE msgId, uint32_t time, CDataStore*
                 if (player) {
                     if (item == player->m_lootTarget) {
                         CGGameUI::CloseLoot(true, false, false);
-                        player->UpdateBaseAnimation(0, -1);
+                        player->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
                     }
 
                     Spell_C_CancelSpellByCaster(item);
@@ -10666,7 +10666,7 @@ applyEffects:
 
     if (this->m_sheatheState == WEAPONMODE_RANGEDMODE && slot == 17) {
         this->SetSheatheState(WEAPONMODE_RANGEDMODE, FALSE, FALSE);
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     CGGameUI::UnitModelUpdate(this->m_obj->m_guid, 3);
@@ -13323,7 +13323,7 @@ void CGPlayer_C::Dance() {
     msg.Put(static_cast<uint8_t>(0));
     msg.Finalize();
     ClientServices::Send2(&msg);
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
 }
 
 // VERIFY: fb947d00 auto
@@ -13744,7 +13744,7 @@ void CGPlayer_C::OnSpellEffectClear(CEffect* effect) {
     CGObject_C::OnSpellEffectClear(effect);
 
     if (updateAnimation) {
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 }
 

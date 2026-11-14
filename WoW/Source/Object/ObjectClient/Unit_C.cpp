@@ -748,7 +748,7 @@ int32_t EmoteStateUpdateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fie
     CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
     if (unit) {
-        unit->UpdateBaseAnimation(false, -1);
+        unit->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
     }
 
     return 1;
@@ -1346,7 +1346,7 @@ void CGUnit_C::ModelLoaded(CM2Model* model) {
     }
 
     if (this->m_modelFlags & OBJECT_MODEL_FLAGS::OBJECT_MODEL_FLAG_POST_INITED) {
-        this->UpdateBaseAnimation(true, -1);
+        this->UpdateBaseAnimation(true, ANIM_SELECTION_FLAGS::ALL);
 
         AnimationDataRec* animRec = g_animationDataDB.GetRecord(this->GetCurrentTorsoAnimId());
 
@@ -2307,7 +2307,7 @@ void CGUnit_C::PlayFallLandAnimation(uint32_t oldFlags, int32_t jumping) {
         return;
     }
 
-    this->UpdateBaseAnimation(false, -1);
+    this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
 }
 
 // VERIFY: 8a0e5647 manual
@@ -2449,13 +2449,13 @@ BOOL CGUnit_C::HasAnim466() {
 
 // VERIFY: 6ce0c56f manual
 // OFFSET: 0x00724060
-int32_t CGUnit_C::ChooseDeathAnim(uint32_t mask, uint32_t* anim, uint32_t* animFlags) {
+BOOL CGUnit_C::ChooseDeathAnim(uint32_t selectionMask, uint32_t* anim, uint32_t* playbackFlags) {
     if (!this->IsDeadOrAttachmentDying()) {
-        return (mask & ~0x1) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::DEATH) == 0;
     }
 
     if (this->m_vehiclePassenger && this->m_vehiclePassenger->m_state == CVehiclePassenger_C::TRANSITION_STATE::STATE_RIDING && !(this->m_unit->m_unitFieldFlags2 & UNIT_FLAGS2::UNIT_FLAG2_PLAY_DEATH_ANIMATION)) {
-        return (mask & ~0x1) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::DEATH) == 0;
     }
 
     uint32_t flags = 0;
@@ -2483,11 +2483,11 @@ int32_t CGUnit_C::ChooseDeathAnim(uint32_t mask, uint32_t* anim, uint32_t* animF
             if (flags & 0x2) {
                 *anim = effect->m_kitRec->m_animID;
 
-                if (animFlags) {
-                    *animFlags |= 0x2;
+                if (playbackFlags) {
+                    *playbackFlags |= 0x2;
                 }
 
-                return 1;
+                return TRUE;
             }
         }
     }
@@ -2495,7 +2495,7 @@ int32_t CGUnit_C::ChooseDeathAnim(uint32_t mask, uint32_t* anim, uint32_t* animF
     uint32_t torsoAnim = this->GetCurrentTorsoAnimId();
 
     if ((this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_AIRBORNE_DEATH) && IsDeadOrDyingAnim(torsoAnim)) {
-        return 1;
+        return TRUE;
     }
 
     if (this->HasAnim466()) {
@@ -2505,16 +2505,16 @@ int32_t CGUnit_C::ChooseDeathAnim(uint32_t mask, uint32_t* anim, uint32_t* animF
             *anim = ANIM_DEATH_END_HOLD;
         }
 
-        return 1;
+        return TRUE;
     }
 
     uint32_t moveFlags = this->m_movementData.m_flags;
 
-    if ((!(moveFlags & MOVEMENTFLAG_FALLING) || !(moveFlags & MOVEMENTFLAG_FALLING_FAR)) && !IsDyingAnim(torsoAnim) && (mask & 0x1)) {
+    if ((!(moveFlags & MOVEMENTFLAG_FALLING) || !(moveFlags & MOVEMENTFLAG_FALLING_FAR)) && !IsDyingAnim(torsoAnim) && (selectionMask & ANIM_SELECTION_FLAGS::DEATH)) {
         *anim = (moveFlags & MOVEMENTFLAG_SWIMMING) ? ANIM_DROWNED : ANIM_DEAD;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: 4075ac71 manual
@@ -2567,57 +2567,57 @@ int32_t CGUnit_C::GetSpellVisualKitAnim(uint32_t* anim, uint32_t* kitFlags) {
 
 // VERIFY: 2c7afb93 auto
 // OFFSET: 0x00724330
-int32_t CGUnit_C::ChooseSpellVisualKitAnim(uint32_t mask, uint32_t* anim, uint32_t* animFlags) {
+BOOL CGUnit_C::ChooseSpellVisualKitAnim(uint32_t selectionMask, uint32_t* anim, uint32_t* playbackFlags) {
     if ((!this->m_unit->m_unitChannelSpell && !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_CASTING)) || !(this->m_animFlags & (UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_TORSO | UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE)) || this->m_mountModel) {
-        return (mask & ~0x1F) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SPELL_VISUAL_KIT) == 0;
     }
 
     uint32_t kitAnim;
     uint32_t kitFlags = 0;
 
     if (!this->GetSpellVisualKitAnim(&kitAnim, &kitFlags)) {
-        return (mask & ~0x1F) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SPELL_VISUAL_KIT) == 0;
     }
 
-    ApplyKitAnimFlags(kitFlags, animFlags);
+    ApplyKitAnimFlags(kitFlags, playbackFlags);
 
     if (kitAnim == this->GetCurrentTorsoAnimId() && this->GetCurrentTorsoAnimId() != this->GetCurrentBaseAnimId()) {
         *anim = kitAnim;
-        return 1;
+        return TRUE;
     }
 
     if (kitAnim != this->GetCurrentTorsoAnimId()) {
-        if (mask & 0x10) {
+        if (selectionMask & ANIM_SELECTION_FLAGS::SPELL_VISUAL_KIT) {
             *anim = kitAnim;
         }
 
-        return 1;
+        return TRUE;
     }
 
-    if ((*animFlags & 0x10) && (kitFlags & SpellVisualKitRec::KIT_FLAGS::REPEAT_CHANNEL_ANIMATION)) {
+    if ((*playbackFlags & 0x10) && (kitFlags & SpellVisualKitRec::KIT_FLAGS::REPEAT_CHANNEL_ANIMATION)) {
         *anim = kitAnim;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: a6f466cd auto
 // OFFSET: 0x0071E0D0
-int32_t CGUnit_C::ChooseCombatAnim(uint32_t mask, uint32_t* anim, uint32_t* animFlags) {
+BOOL CGUnit_C::ChooseCombatAnim(uint32_t selectionMask, uint32_t* anim, uint32_t* playbackFlags) {
     if (!(this->m_animFlags & (UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_TORSO | UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE)) || !this->m_combat.m_attacking.m_guid) {
-        return (mask & ~0x3F) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_COMBAT) == 0;
     }
 
-    if (!(mask & 0x20)) {
-        return 1;
+    if (!(selectionMask & ANIM_SELECTION_FLAGS::COMBAT)) {
+        return TRUE;
     }
 
-    if (animFlags && (*animFlags & 0x40)) {
+    if (playbackFlags && (*playbackFlags & 0x40)) {
         uint32_t torsoAnim = this->GetCurrentTorsoAnimId();
 
         if (IsMeleeAttackAnim(torsoAnim)) {
             *anim = torsoAnim;
-            return 1;
+            return TRUE;
         }
     }
 
@@ -2626,40 +2626,40 @@ int32_t CGUnit_C::ChooseCombatAnim(uint32_t mask, uint32_t* anim, uint32_t* anim
     if (meleeAnim == INVALID_ANIMATION) {
         if (this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) {
             *anim = ANIM_SWIM_IDLE;
-            return 1;
+            return TRUE;
         }
 
         meleeAnim = this->GetCombatReadyAnim();
     }
 
     *anim = meleeAnim;
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: ae3652c1 auto
 // OFFSET: 0x0071E180
-int32_t CGUnit_C::ChooseShuffleAnim(uint32_t mask, uint32_t* anim) {
+BOOL CGUnit_C::ChooseShuffleAnim(uint32_t selectionMask, uint32_t* anim) {
     if (!this->CanPlayTurnAnim()) {
-        return (mask & ~0x7F) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SHUFFLE) == 0;
     }
 
-    if ((this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_ALL) && (mask & 0x40)) {
+    if ((this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_ALL) && (selectionMask & ANIM_SELECTION_FLAGS::SHUFFLE)) {
         if (!(this->m_movementData.m_flags & MOVEMENTFLAG_TURN_LEFT) && !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_TURNING_LEFT)) {
             *anim = ANIM_SHUFFLE_RIGHT;
-            return 1;
+            return TRUE;
         }
 
         *anim = ANIM_SHUFFLE_LEFT;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: acc35172 manual
 // OFFSET: 0x0071E1F0
-int32_t CGUnit_C::ChooseStandStateAnim(uint32_t mask, uint32_t* anim) {
+BOOL CGUnit_C::ChooseStandStateAnim(uint32_t selectionMask, uint32_t* anim) {
     if (!(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) || this->m_mountModel) {
-        return (mask & ~0x1FF) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_STAND_STATE) == 0;
     }
 
     uint32_t standAnim;
@@ -2677,7 +2677,7 @@ int32_t CGUnit_C::ChooseStandStateAnim(uint32_t mask, uint32_t* anim) {
                     standAnim = ANIM_KNEEL_END;
                     break;
                 default:
-                    return (mask & ~0x1FF) == 0;
+                    return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_STAND_STATE) == 0;
             }
 
             break;
@@ -2688,7 +2688,7 @@ int32_t CGUnit_C::ChooseStandStateAnim(uint32_t mask, uint32_t* anim) {
             standAnim = (this->m_animStandState != UNIT_STANDING) + ANIM_SLEEP_DOWN;
 
             if (standAnim == ANIM_COUNT) {
-                return 1;
+                return TRUE;
             }
 
             break;
@@ -2703,7 +2703,7 @@ int32_t CGUnit_C::ChooseStandStateAnim(uint32_t mask, uint32_t* anim) {
             break;
         case UNIT_DEAD:
             if (this->m_animStandState == UNIT_DEAD) {
-                return 1;
+                return TRUE;
             }
 
             if (this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING) {
@@ -2717,36 +2717,36 @@ int32_t CGUnit_C::ChooseStandStateAnim(uint32_t mask, uint32_t* anim) {
             standAnim = (this->m_animStandState != UNIT_STANDING) + ANIM_KNEEL_START;
 
             if (standAnim == ANIM_COUNT) {
-                return 1;
+                return TRUE;
             }
 
             break;
         default:
-            return (mask & ~0x1FF) == 0;
+            return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_STAND_STATE) == 0;
     }
 
-    if (mask & 0x100) {
+    if (selectionMask & ANIM_SELECTION_FLAGS::STAND_STATE) {
         *anim = standAnim;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: c45e9335 auto
 // OFFSET: 0x00724500
-uint32_t CGUnit_C::ChooseAnimation(uint32_t mask, uint32_t* animFlags, int32_t* usedDefault) {
+uint32_t CGUnit_C::ChooseAnimation(uint32_t selectionMask, uint32_t* playbackFlags, BOOL* usedDefault) {
     uint32_t anim = ANIM_COUNT;
 
-    if (this->ChooseDeathAnim(mask, &anim, animFlags) || this->ChooseSpecialIdleAnim(mask, &anim) || (this->m_vehiclePassenger && this->m_vehiclePassenger->PickHighPriorityAnimation(mask, &anim))) {
+    if (this->ChooseDeathAnim(selectionMask, &anim, playbackFlags) || this->ChooseSpecialIdleAnim(selectionMask, &anim) || (this->m_vehiclePassenger && this->m_vehiclePassenger->PickHighPriorityAnimation(selectionMask, &anim))) {
         return anim;
     }
 
     if (this->m_vehicle && this->m_vehicle->m_vehicleRec && this->m_vehicle->HasHighPriorityCastingAnim()) {
-        this->ChooseSpellVisualKitAnim(mask, &anim, animFlags);
+        this->ChooseSpellVisualKitAnim(selectionMask, &anim, playbackFlags);
         return anim;
     }
 
-    if (this->ChooseSubmergeAnim(mask, &anim) || this->ChooseFallAnim(&anim) || this->ChooseMovementAnim(mask, &anim) || this->ChooseLootAnim(mask, &anim) || this->ChooseSpellVisualKitAnim(mask, &anim, animFlags) || this->ChooseCombatAnim(mask, &anim, animFlags) || this->ChooseShuffleAnim(mask, &anim) || this->ChooseRangedLoadAnim(mask, &anim) || this->ChooseStandStateAnim(mask, &anim) || this->ChooseEmoteAnim(mask, &anim) || (this->m_vehiclePassenger && this->m_vehiclePassenger->ChooseSeatExitAnim(mask, &anim))) {
+    if (this->ChooseSubmergeAnim(selectionMask, &anim) || this->ChooseFallAnim(&anim) || this->ChooseMovementAnim(selectionMask, &anim) || this->ChooseLootAnim(selectionMask, &anim) || this->ChooseSpellVisualKitAnim(selectionMask, &anim, playbackFlags) || this->ChooseCombatAnim(selectionMask, &anim, playbackFlags) || this->ChooseShuffleAnim(selectionMask, &anim) || this->ChooseRangedLoadAnim(selectionMask, &anim) || this->ChooseStandStateAnim(selectionMask, &anim) || this->ChooseEmoteAnim(selectionMask, &anim) || (this->m_vehiclePassenger && this->m_vehiclePassenger->ChooseSeatExitAnim(selectionMask, &anim))) {
         return anim;
     }
 
@@ -2755,7 +2755,7 @@ uint32_t CGUnit_C::ChooseAnimation(uint32_t mask, uint32_t* animFlags, int32_t* 
     }
 
     if (usedDefault) {
-        *usedDefault = 1;
+        *usedDefault = TRUE;
     }
 
     if (this->m_awaitingEndAnimId == INVALID_ANIMATION) {
@@ -2767,23 +2767,23 @@ uint32_t CGUnit_C::ChooseAnimation(uint32_t mask, uint32_t* animFlags, int32_t* 
 
 // VERIFY: bb382509 manual
 // OFFSET: 0x0073AC30
-void CGUnit_C::UpdateBaseAnimation(uint32_t animFlags, int32_t mask) {
+void CGUnit_C::UpdateBaseAnimation(uint32_t playbackFlags, int32_t selectionMask) {
     if (this->m_worldModel && !this->m_worldModel->IsLoaded(0, 0)) {
         return;
     }
 
-    uint32_t anim = this->ChooseAnimation(mask, &animFlags, nullptr);
+    uint32_t anim = this->ChooseAnimation(selectionMask, &playbackFlags, nullptr);
 
     if (anim == ANIM_COUNT) {
         if (this->m_vehiclePassenger && this->m_vehiclePassenger->m_state) {
-            this->PlayBaseAnimation(ANIM_STAND, animFlags);
+            this->PlayBaseAnimation(ANIM_STAND, playbackFlags);
         }
     } else {
         if (static_cast<int32_t>(anim) == this->m_pendingAnimId) {
             this->m_awaitingEndAnimId = anim;
         }
 
-        this->PlayBaseAnimation(anim, animFlags);
+        this->PlayBaseAnimation(anim, playbackFlags);
     }
 
     if (this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) {
@@ -2880,7 +2880,7 @@ void CGUnit_C::UpdateClientStandState(UNITSTANDSTATE standState) {
                 }
 
                 this->m_animFlags |= UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE;
-                this->UpdateBaseAnimation(0, -1);
+                this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
                 break;
             case UNIT_DEAD:
                 this->ClearLockedTarget();
@@ -2894,7 +2894,7 @@ void CGUnit_C::UpdateClientStandState(UNITSTANDSTATE standState) {
                 break;
             default:
                 this->m_animFlags |= UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE;
-                this->UpdateBaseAnimation(0, -1);
+                this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
                 break;
         }
 
@@ -5824,46 +5824,46 @@ uint32_t CGUnit_C::GetCombatReadyAnim() const {
 
 // VERIFY: cfd62b02 auto
 // OFFSET: 0x00714F90
-int32_t CGUnit_C::ChooseRangedLoadAnim(uint32_t flags, uint32_t* anim) const {
+BOOL CGUnit_C::ChooseRangedLoadAnim(uint32_t selectionMask, uint32_t* anim) const {
     if (this->m_sheatheState != WEAPONMODE_RANGEDMODE || !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_CASTING_AUTO_REPEAT)) {
-        return (flags & 0xFFFFFF00) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_RANGED_LOAD) == 0;
     }
 
-    if (!(flags & 0x80) || (this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_RANGED_WEAPON_LOADED)) {
-        return 1;
+    if (!(selectionMask & ANIM_SELECTION_FLAGS::RANGED_LOAD) || (this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_RANGED_WEAPON_LOADED)) {
+        return TRUE;
     }
 
     *anim = ANIM_READY_UNARMED;
     const CGUnitVirtualItem* item = this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_RANGED, false);
 
     if (!item || item->m_classID != ITEM_CLASS::ITEM_CLASS_WEAPON) {
-        return 1;
+        return TRUE;
     }
 
     switch (item->m_subclassID) {
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_BOW: {
             *anim = ANIM_LOAD_BOW;
-            return 1;
+            return TRUE;
         }
 
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_GUN:
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_CROSSBOW: {
             *anim = ANIM_LOAD_RIFLE;
-            return 1;
+            return TRUE;
         }
 
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_THROWN: {
             *anim = ANIM_LOAD_THROWN;
-            return 1;
+            return TRUE;
         }
 
         case ITEM_SUBCLASS_WEAPON::ITEM_SUBCLASS_WEAPON_WAND: {
             *anim = ANIM_HOLD_THROWN;
-            return 1;
+            return TRUE;
         }
 
         default: {
-            return 1;
+            return TRUE;
         }
     }
 }
@@ -6803,49 +6803,49 @@ void CGUnit_C::RequestMirrorImageData() {
 
 // VERIFY: a2e758f2 auto
 // OFFSET: 0x00716FD0
-int32_t CGUnit_C::ChooseSpecialIdleAnim(uint32_t flags, uint32_t* anim) const {
+BOOL CGUnit_C::ChooseSpecialIdleAnim(uint32_t selectionMask, uint32_t* anim) const {
     if (!(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) || this->m_mountModel || this->m_animStandState != UNIT_STANDSTATE_UNINITIALIZED) {
-        return (flags & 0xFFFFF800) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::SPECIAL_IDLE_GUARD) == 0;
     }
 
     if (this->m_clientFlags & UNIT_CLIENT_FLAGS::UNIT_CLIENT_FLAG_SUPPRESS_SPECIAL_IDLE_ANIM) {
-        return 0;
+        return FALSE;
     }
 
     if (!this->m_worldModel->HasSequence(ANIM_BIRTH)) {
-        return (flags & 0xFFFFFFFC) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SUBMERGE) == 0;
     }
 
     *anim = ANIM_BIRTH;
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: 5f734b90 auto
 // OFFSET: 0x007171C0
-int32_t CGUnit_C::ChooseEmoteAnim(uint32_t flags, uint32_t* anim) const {
+BOOL CGUnit_C::ChooseEmoteAnim(uint32_t selectionMask, uint32_t* anim) const {
     uint32_t state = this->m_animFlags;
 
     if ((!(state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) || this->m_mountModel) && !(state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_TORSO)) {
-        return (flags & 0x200) == 0;
+        return (selectionMask & ANIM_SELECTION_FLAGS::EMOTE) == 0;
     }
 
     int32_t emoteState = this->m_unit->m_unitNpcEmotestate;
 
     if (!emoteState) {
-        return (flags & 0x200) == 0;
+        return (selectionMask & ANIM_SELECTION_FLAGS::EMOTE) == 0;
     }
 
     EmotesRec* emote = g_emotesDB.GetRecord(emoteState);
 
     if (!emote || (CGGameUI::m_interactTarget == this->m_obj->m_guid && (emote->m_emoteFlags & EMOTE_FLAGS::EMOTE_FLAG_UNKNOWN_13))) {
-        return (flags & 0x200) == 0;
+        return (selectionMask & ANIM_SELECTION_FLAGS::EMOTE) == 0;
     }
 
-    if (flags & 0x200) {
+    if (selectionMask & ANIM_SELECTION_FLAGS::EMOTE) {
         *anim = emote->m_animID;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: a913b882 auto
@@ -7866,58 +7866,58 @@ BOOL CGUnit_C::IsRunning() const {
 
 // VERIFY: 2be9606e manual
 // OFFSET: 0x00717050
-int32_t CGUnit_C::ChooseMovementAnim(uint32_t flags, uint32_t* anim) const {
+BOOL CGUnit_C::ChooseMovementAnim(uint32_t selectionMask, uint32_t* anim) const {
     uint32_t moveFlags = this->m_movementData.m_flags;
 
     if (!(moveFlags & MOVEMENTFLAG_HORIZONTAL_MOVE_MASK)) {
-        return (flags & 0xFFFFFFF8) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_MOVEMENT) == 0;
     }
 
     uint32_t state = this->m_animFlags;
 
-    if (!(state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_ALL) || !(flags & 0x4) || (state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_JUMP_START) || (state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_ANIM_TIER_TRANSITION)) {
-        return 1;
+    if (!(state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_ALL) || !(selectionMask & ANIM_SELECTION_FLAGS::MOVEMENT) || (state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_JUMP_START) || (state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_ANIM_TIER_TRANSITION)) {
+        return TRUE;
     }
 
     if (moveFlags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) {
         if (moveFlags & MOVEMENTFLAG_STRAFE_MASK) {
             *anim = ANIM_SWIM_RIGHT - ((moveFlags & MOVEMENTFLAG_STRAFE_LEFT) != 0);
-            return 1;
+            return TRUE;
         }
 
         *anim = (moveFlags & MOVEMENTFLAG_BACKWARD) ? ANIM_SWIM_BACKWARDS : ANIM_SWIM;
-        return 1;
+        return TRUE;
     }
 
     if (this->IsOnFlyingSpline()) {
         *anim = ANIM_FLY;
-        return 1;
+        return TRUE;
     }
 
     if (moveFlags & MOVEMENTFLAG_BACKWARD) {
         *anim = ANIM_WALKBACKWARDS;
-        return 1;
+        return TRUE;
     }
 
     if (this->m_unit->m_visFlags & UNIT_VIS_FLAG_CREEP) {
         *anim = ANIM_STEALTH_WALK;
-        return 1;
+        return TRUE;
     }
 
     float speed = this->m_movementData.GetBaseSpeed(0);
 
     if (speed >= 11.0f) {
         *anim = ANIM_SPRINT;
-        return 1;
+        return TRUE;
     }
 
     if (this->m_movementData.m_walkSpeed + this->m_movementData.m_walkSpeed < speed) {
         *anim = ANIM_RUN;
-        return 1;
+        return TRUE;
     }
 
     *anim = ANIM_WALK;
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: 2b271f9b manual
@@ -8049,15 +8049,15 @@ BOOL Packet_SMSG_MOUNTSPECIAL_ANIM(void* param, NETMESSAGE msgId, uint32_t time,
 
 // VERIFY: 486abade manual
 // OFFSET: 0x0071DFF0
-int32_t CGUnit_C::ChooseSubmergeAnim(uint32_t flags, uint32_t* anim) const {
+BOOL CGUnit_C::ChooseSubmergeAnim(uint32_t selectionMask, uint32_t* anim) const {
     uint32_t state = this->m_animFlags;
 
     if (state & (UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_BIRTH | UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_SUBMERGE)) {
-        return 1;
+        return TRUE;
     }
 
     if (!(state & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) || this->m_mountModel) {
-        return (flags & 0xFFFFFFFC) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SUBMERGE) == 0;
     }
 
     uint32_t submerge;
@@ -8066,7 +8066,7 @@ int32_t CGUnit_C::ChooseSubmergeAnim(uint32_t flags, uint32_t* anim) const {
         submerge = (this->m_animStandState == UNIT_SUBMERGED) + ANIM_SUBMERGE;
     } else {
         if (this->m_animStandState != UNIT_SUBMERGED) {
-            return (flags & 0xFFFFFFFC) == 0;
+            return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SUBMERGE) == 0;
         }
 
         submerge = ANIM_EMERGE;
@@ -8077,14 +8077,14 @@ int32_t CGUnit_C::ChooseSubmergeAnim(uint32_t flags, uint32_t* anim) const {
     }
 
     if (!this->m_worldModel->HasSequence(submerge)) {
-        return (flags & 0xFFFFFFFC) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_SUBMERGE) == 0;
     }
 
-    if (this->GetCurrentTorsoAnimId() != submerge && (flags & 0x2)) {
+    if (this->GetCurrentTorsoAnimId() != submerge && (selectionMask & ANIM_SELECTION_FLAGS::SUBMERGE)) {
         *anim = submerge;
     }
 
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: 1313ac12 manual
@@ -8247,7 +8247,7 @@ void CGUnit_C::CreateFishingLineEffect() {
 
 // VERIFY: ef43f122 manual
 // OFFSET: 0x00724200
-int32_t CGUnit_C::ChooseFallAnim(uint32_t* anim) const {
+BOOL CGUnit_C::ChooseFallAnim(uint32_t* anim) const {
     int32_t falling = this->m_movementData.IsFalling();
 
     if (!falling) {
@@ -8256,7 +8256,7 @@ int32_t CGUnit_C::ChooseFallAnim(uint32_t* anim) const {
 
     uint32_t current = (this->m_worldModel && this->m_worldModel->IsLoaded(0, 0)) ? this->m_worldModel->GetBoneSequenceId(0xFFFFFFFF) : 0xFFFFFFFF;
     *anim = IsAirborneAnim(current) ? ANIM_COUNT : ANIM_FALL;
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: 1fe5c010 manual
@@ -9174,31 +9174,31 @@ bool CGUnit_C::IsMovingToward(CGObject_C* target) const {
 
 // VERIFY: fbe09df2 auto
 // OFFSET: 0x00724280
-int32_t CGUnit_C::ChooseLootAnim(uint32_t flags, uint32_t* animId) {
+BOOL CGUnit_C::ChooseLootAnim(uint32_t selectionMask, uint32_t* animId) {
     if (this->m_mountModel || !(this->m_animFlags & UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_BASE) || !this->ShouldKneelForLoot()) {
-        return (flags & 0xFFFFFFF0) == 0;
+        return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_LOOT) == 0;
     }
 
     uint32_t torso = this->GetCurrentTorsoAnimId();
 
     if (!this->IsLooting()) {
         if (torso != 188) {
-            return (flags & 0xFFFFFFF0) == 0;
+            return (selectionMask & ~ANIM_SELECTION_FLAGS::THROUGH_LOOT) == 0;
         }
 
-        if (flags & 0x8) {
+        if (selectionMask & ANIM_SELECTION_FLAGS::LOOT) {
             *animId = ANIM_LOOT_UP;
         }
 
-        return 1;
+        return TRUE;
     }
 
-    if (!(flags & 0x8) || torso == 188 || torso == 50) {
-        return 1;
+    if (!(selectionMask & ANIM_SELECTION_FLAGS::LOOT) || torso == 188 || torso == 50) {
+        return TRUE;
     }
 
     *animId = ANIM_LOOT;
-    return 1;
+    return TRUE;
 }
 
 // VERIFY: ecaae3a5 auto
@@ -9942,7 +9942,7 @@ void CGUnit_C::PostInit(uint32_t time, const CClientObjCreate& create, bool reen
         this->m_animStandState = UNIT_STANDSTATE_UNINITIALIZED;
     }
 
-    this->UpdateBaseAnimation(false, -1);
+    this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
 
     uint32_t sequenceId;
 
@@ -10196,7 +10196,7 @@ void CGUnit_C::PostReenable() {
         this->m_alpha = this->m_fadeEndAlpha;
     }
 
-    this->UpdateBaseAnimation(false, -1);
+    this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
     this->DestroyUnitMount(1);
     this->UpdateDisplayInfo(0);
 
@@ -11401,7 +11401,7 @@ void CGUnit_C::MoveEventHappened(uint32_t msgId) {
         case MSG_MOVE_START_ASCEND:
         case MSG_MOVE_START_DESCEND:
             this->CancelRangedMode();
-            this->UpdateBaseAnimation(false, -1);
+            this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
             break;
 
         case MSG_MOVE_STOP:
@@ -11423,7 +11423,7 @@ void CGUnit_C::MoveEventHappened(uint32_t msgId) {
         case CMSG_MOVE_GRAVITY_ENABLE_ACK:
         case SMSG_MOVE_SPLINE_DISABLE_GRAVITY:
         case SMSG_MOVE_SPLINE_ENABLE_GRAVITY:
-            this->UpdateBaseAnimation(false, -1);
+            this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
             break;
 
         case MSG_MOVE_JUMP:
@@ -11446,7 +11446,7 @@ void CGUnit_C::MoveEventHappened(uint32_t msgId) {
         case CMSG_FORCE_FLIGHT_SPEED_CHANGE_ACK:
         case CMSG_FORCE_FLIGHT_BACK_SPEED_CHANGE_ACK:
             if (this->m_movement->m_flags & MOVEMENTFLAG_MOVING_MASK) {
-                this->UpdateBaseAnimation(false, -1);
+                this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
             }
 
             break;
@@ -11470,7 +11470,7 @@ void CGUnit_C::MoveEventHappened(uint32_t msgId) {
                 this->ResetSmoothFacing();
 
                 if (this->GetCurrentTorsoAnimId() == ANIM_FALL || this->GetCurrentMountAnimId() == ANIM_FALL) {
-                    this->UpdateBaseAnimation(false, -1);
+                    this->UpdateBaseAnimation(false, ANIM_SELECTION_FLAGS::ALL);
                     break;
                 }
 
@@ -12483,7 +12483,7 @@ int32_t CGUnit_C::OnMoveEvent(NETMESSAGE msgId, uint32_t time, CDataStore* msg) 
 
     if (changed) {
         this->MoveEventHappened(msgId);
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     return 1;
@@ -12574,7 +12574,7 @@ int32_t CGUnit_C::OnSpeedChangeEvent(NETMESSAGE msgId, uint32_t time, CDataStore
 
     if (changed) {
         this->MoveEventHappened(msgId);
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     return 1;
@@ -12750,7 +12750,7 @@ int32_t CGUnit_C::OnSplineMoveEffectPacket(NETMESSAGE msgId) {
     }
 
     this->MoveEventHappened(msgId);
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     return 1;
 }
 
@@ -12790,7 +12790,7 @@ int32_t CGUnit_C::OnSplineSpeedChange(NETMESSAGE msgId, float value) {
     }
 
     this->MoveEventHappened(msgId);
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     return 1;
 }
 
@@ -13006,7 +13006,7 @@ void CGUnit_C::OnMonsterMove(CDataStore* msg, NETMESSAGE msgId, uint64_t transpo
 
             if (CGUnit_C::s_cvPathingDistTolerance->m_floatValue * CGUnit_C::s_cvPathingDistTolerance->m_floatValue > (start.x - position.x) * (start.x - position.x) + (start.y - position.y) * (start.y - position.y) + (start.z - position.z) * (start.z - position.z)) {
                 this->m_movementData.OnSplineSnap(splineId, start, 0, 1);
-                this->UpdateBaseAnimation(0, -1);
+                this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
                 return;
             }
 
@@ -13247,7 +13247,7 @@ void CGUnit_C::OnMonsterMove(CDataStore* msg, NETMESSAGE msgId, uint64_t transpo
         this->m_fishingLineEffect = nullptr;
     }
 
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
 }
 
 // VERIFY: c47943c5 auto
@@ -14614,7 +14614,7 @@ void CGUnit_C::OnBaseAnimEnd(CM2Model* model, uint32_t boneId, uint32_t sequence
             }
 
             if (ride) {
-                this->UpdateBaseAnimation(0, -1);
+                this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
                 return;
             }
         }
@@ -14664,7 +14664,7 @@ void CGUnit_C::OnBaseAnimEnd(CM2Model* model, uint32_t boneId, uint32_t sequence
 
         case ANIM_JUMP_END: {
             this->m_animFlags &= ~UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_JUMP_LANDING;
-            this->UpdateBaseAnimation(16, -1);
+            this->UpdateBaseAnimation(16, ANIM_SELECTION_FLAGS::ALL);
             return;
         }
 
@@ -14765,7 +14765,7 @@ void CGUnit_C::OnBaseAnimEnd(CM2Model* model, uint32_t boneId, uint32_t sequence
             this->m_ammoModel->DetachFromParent();
             this->m_animFlags &= ~UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_RANGED_WEAPON_LOADED;
             this->m_rangedWeaponModel->SetBoneSequence(0xFFFFFFFF, ANIM_ITEM_STAND, 0xFFFFFFFF, 0, 1.0f, 1, 1);
-            this->UpdateBaseAnimation(16, -1);
+            this->UpdateBaseAnimation(16, ANIM_SELECTION_FLAGS::ALL);
             return;
         }
 
@@ -14802,7 +14802,7 @@ void CGUnit_C::OnBaseAnimEnd(CM2Model* model, uint32_t boneId, uint32_t sequence
 
         case ANIM_BIRTH: {
             this->m_animFlags &= ~UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_BIRTH;
-            this->UpdateBaseAnimation(16, -1);
+            this->UpdateBaseAnimation(16, ANIM_SELECTION_FLAGS::ALL);
             return;
         }
 
@@ -14876,7 +14876,7 @@ void CGUnit_C::OnBaseAnimEnd(CM2Model* model, uint32_t boneId, uint32_t sequence
         }
     }
 
-    this->UpdateBaseAnimation(16, -1);
+    this->UpdateBaseAnimation(16, ANIM_SELECTION_FLAGS::ALL);
 }
 
 // VERIFY: 81228148 manual
@@ -14909,11 +14909,11 @@ void CGUnit_C::OnKeyBoneAnimEnd(CM2Model* model, uint32_t boneId, uint32_t seque
     torso.m_complete = 0;
     uint32_t anim = INVALID_ANIMATION;
     int32_t unsetTorso = 0;
-    int32_t usedDefault = 0;
+    BOOL usedDefault = FALSE;
 
     if (this->m_worldModel && this->m_worldModel->IsLoaded(0, 0)) {
         uint32_t animFlags = 0;
-        uint32_t chosen = this->ChooseAnimation(INVALID_ANIMATION, &animFlags, &usedDefault);
+        uint32_t chosen = this->ChooseAnimation(ANIM_SELECTION_FLAGS::ALL, &animFlags, &usedDefault);
         anim = this->ResolveAnimForModel(chosen, nullptr);
         torso.m_sequenceId = anim;
         CVehiclePassenger_C* passenger = this->m_vehiclePassenger;
@@ -15383,7 +15383,7 @@ void CGUnit_C::OnVisFlagChanged(uint8_t oldFlags) {
     uint8_t changed = oldFlags ^ this->m_unit->m_visFlags;
 
     if (changed & UNIT_VIS_FLAG_CREEP) {
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
 
         if (this->m_nameDesc) {
             PlayerNameTriggerNameRegenerate(this->m_nameDesc);
@@ -17069,7 +17069,7 @@ void CGUnit_C::PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVi
                         this->PlayBaseAnimation(animId, animFlags);
                     }
 
-                    this->UpdateBaseAnimation(animFlags, -1);
+                    this->UpdateBaseAnimation(animFlags, ANIM_SELECTION_FLAGS::ALL);
                 }
             } else if (!(a10 & CEffect::EFFECT_FLAGS::EFFECT_PRECAST) || (!noCastTime && !holdCast)) {
                 if (IsWoundAnim(kit->m_animID)) {
@@ -18097,7 +18097,7 @@ void CGUnit_C::OnLife(bool a1) {
     this->CheckLoopSound();
     this->m_lootableTime = 0;
     this->SetKeyBoneSequenceSpeed(this->m_worldModel, 0xFFFFFFFF, 1.0f, 0);
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     PlayerNameTriggerColorUpdate(this->m_nameDesc);
 
     if (this->m_namePlateFrame) {
@@ -18572,7 +18572,7 @@ void CGUnit_C::OnFlagChanged(uint32_t oldFlags) {
     if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer()) {
         this->OnFlagChangedActivePlayer(flags, changed);
     } else if (static_cast<int32_t>(this->m_unit->m_unitFieldHealth) > 0 && (changed & UNIT_FLAGS::UNIT_FLAG_LOOTING)) {
-        this->UpdateBaseAnimation(0, -1);
+        this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     if (changed & UNIT_FLAGS::UNIT_FLAG_DISARMED) {
@@ -21366,7 +21366,7 @@ void CGUnit_C::DestroyUnitMount(int32_t a2) {
     this->SetMountModel(nullptr);
     this->SetKeyBoneSequence(this->m_worldModel, 0xFFFFFFFF, ANIM_STAND, 0xFFFFFFFF, 0, 1.0f, 0, 1, 0);
     this->m_animFlags &= ~UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_RESET_ON_MOUNT_REMOVAL;
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     this->UpdateSelectionRadius();
     this->UpdateEffectAttachments();
     this->m_soundDataOverride = nullptr;
@@ -21466,7 +21466,7 @@ void CGUnit_C::CreateUnitMount(int32_t a2, int32_t a3) {
     }
 
     this->m_animFlags |= UNIT_ANIM_FLAGS::UNIT_ANIM_FLAG_UPDATE_MOUNT;
-    this->UpdateBaseAnimation(0, -1);
+    this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
 
     if (this->m_obj->m_guid == CGWorldFrame::GetActiveCamera()->m_targetGUID) {
         CGGameUI::ResetCamera(this->m_obj->m_guid);
@@ -23910,7 +23910,7 @@ void CGUnit_C::OnFlag2Changed(uint32_t oldFlags) {
             this->PlayDeathAnimation(1);
         } else {
             this->CheckLoopSound();
-            this->UpdateBaseAnimation(0, -1);
+            this->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
         }
     }
 

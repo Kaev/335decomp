@@ -903,7 +903,7 @@ void ClearSpellCastState(CGUnit_C* unit, PendingSpellCast* cast, const SpellRec*
         SpellVisualKitRec* kit = g_spellVisualKitDB.GetRecord(visual->m_precastKit);
 
         if (kit && (kit->m_startAnimID || kit->m_animID)) {
-            unit->UpdateBaseAnimation(0, -1);
+            unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
         }
     }
 

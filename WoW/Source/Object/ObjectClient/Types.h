@@ -57,6 +57,32 @@ enum UNIT_CLIENT_FLAGS2 : uint32_t {
         | UNIT_CLIENT_FLAG2_SMOOTH_SWIM_FACING,
 };
 
+// ChooseAnimation selection and early-exit mask; animation IDs use ANIMATION_ID.
+// Guard composites retain native stopping rules, including the unclassified bit 0x400.
+enum ANIM_SELECTION_FLAGS : int32_t {
+    ALL = -1,
+    DEATH = 0x1,
+    SUBMERGE = 0x2,
+    MOVEMENT = 0x4,
+    LOOT = 0x8,
+    SPELL_VISUAL_KIT = 0x10,
+    COMBAT = 0x20,
+    SHUFFLE = 0x40,
+    RANGED_LOAD = 0x80,
+    STAND_STATE = 0x100,
+    EMOTE = 0x200,
+    UNKNOWN_400 = 0x400,
+    THROUGH_SUBMERGE = 0x3,
+    THROUGH_MOVEMENT = 0x7,
+    THROUGH_LOOT = 0xF,
+    THROUGH_SPELL_VISUAL_KIT = 0x1F,
+    THROUGH_COMBAT = 0x3F,
+    THROUGH_SHUFFLE = 0x7F,
+    THROUGH_RANGED_LOAD = 0xFF,
+    THROUGH_STAND_STATE = 0x1FF,
+    SPECIAL_IDLE_GUARD = 0x7FF,
+};
+
 // CGUnit_C::m_animFlags; reconstructed flag names from 3.3.5 writers/readers.
 enum UNIT_ANIM_FLAGS : uint32_t {
     // Turning keys or CameraCanTurnPlayer(); inhibits automatic untwisting.

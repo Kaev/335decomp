@@ -387,7 +387,7 @@ void CVehiclePassenger_C::ComputeSeatOffset(const VehicleSeatRec* seat, CM2Model
 
 // VERIFY: ac9be9b7 auto
 // OFFSET: 0x007485B0
-int32_t CVehiclePassenger_C::ChooseSeatExitAnim(uint32_t flags, uint32_t* anim) const {
+int32_t CVehiclePassenger_C::ChooseSeatExitAnim(uint32_t unusedSelectionMask, uint32_t* anim) const {
     uint32_t state = this->m_state;
 
     if (state != TRANSITION_STATE::STATE_RIDING && this->m_unit->m_unit->m_unitFieldHealth > 0) {
@@ -712,7 +712,7 @@ void CVehiclePassenger_C::OnAnimEnd(uint32_t anim) {
 
 // VERIFY: 9156af0b auto
 // OFFSET: 0x00748560
-int32_t CVehiclePassenger_C::PickHighPriorityAnimation(int32_t unused_a2, uint32_t* anim) const {
+int32_t CVehiclePassenger_C::PickHighPriorityAnimation(int32_t unusedSelectionMask, uint32_t* anim) const {
     if ((this->m_state == TRANSITION_STATE::STATE_NONE || this->m_state == TRANSITION_STATE::STATE_RIDING) && this->m_unit->m_unit->m_unitFieldHealth > 0) {
         return 0;
     }
@@ -1061,7 +1061,7 @@ void CVehiclePassenger_C::SetState(uint32_t state, CGUnit_C* vehicle, uint8_t se
             }
         }
 
-        this->m_unit->UpdateBaseAnimation(0, -1);
+        this->m_unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     if (this->m_state == TRANSITION_STATE::STATE_RIDING && this->m_boneAnimGuid) {
@@ -1217,7 +1217,7 @@ void CVehiclePassenger_C::SetState(uint32_t state, CGUnit_C* vehicle, uint8_t se
             this->m_flags &= ~VEHICLE_PASSENGER_FLAGS::VEHICLE_PASSENGER_FLAG_ANIM_START_DONE_MASK;
         }
 
-        this->m_unit->UpdateBaseAnimation(entered != 0, -1);
+        this->m_unit->UpdateBaseAnimation(entered != 0, ANIM_SELECTION_FLAGS::ALL);
 
         if (!keepAnimFlags) {
             this->m_flags &= ~VEHICLE_PASSENGER_FLAGS::VEHICLE_PASSENGER_FLAG_ANIM_START_DONE_MASK;

@@ -4380,7 +4380,7 @@ void CGGameUI::ClearInteractTarget(const WOWGUID& guid, int32_t a2) {
             unit->PlayNPCSound(false);
         }
 
-        unit->UpdateBaseAnimation(0, -1);
+        unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
     }
 
     CGGameUI::CloseInteraction();
@@ -4499,7 +4499,7 @@ void CGGameUI::SetInteractTarget(const WOWGUID& guid) {
 
         if (!same) {
             unit->PlayNPCSound(true);
-            unit->UpdateBaseAnimation(0, -1);
+            unit->UpdateBaseAnimation(0, ANIM_SELECTION_FLAGS::ALL);
         }
     } else if (object->m_obj->m_type & TYPE_GAMEOBJECT) {
         CGGameObject_C* gameObject = static_cast<CGGameObject_C*>(object);

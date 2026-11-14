@@ -164,7 +164,7 @@ class CVehiclePassenger_C {
     void StopBoneAnimIfSameBone(WOWGUID guid, const VehicleSeatRec* seat);
     void StartWaitingForVehicleTransitionAnim(WOWGUID guid, uint8_t seat, const VehicleSeatRec* seatRec, int32_t entering, CVehicle_C* vehicle);
     void ComputeSeatOffset(const VehicleSeatRec* seat, CM2Model* model);
-    int32_t ChooseSeatExitAnim(uint32_t flags, uint32_t* anim) const;
+    int32_t ChooseSeatExitAnim(uint32_t unusedSelectionMask, uint32_t* anim) const;
     int32_t GetLowerAnim(const VehicleSeatRec* seat) const;
     int32_t GetUpperAnim(const VehicleSeatRec* seat) const;
     CGUnit_C* GetStoredRootVehicleUnit() const;
@@ -175,7 +175,7 @@ class CVehiclePassenger_C {
     int32_t UpdateState(CGUnit_C* vehicle, VehicleSeatRec* seatRec, uint32_t time);
     C3Vector ComputeStartWorldPosition(const C3Vector& offset, const C3Vector& fallback) const;
     void OnAnimEnd(uint32_t anim);
-    int32_t PickHighPriorityAnimation(int32_t unused_a2, uint32_t* anim) const;
+    int32_t PickHighPriorityAnimation(int32_t unusedSelectionMask, uint32_t* anim) const;
     C3Vector ComputeInterpolatedUnitPosition() const;
     int32_t OverridesModelAnimation() const;
 
