@@ -6,6 +6,7 @@
 #include "Engine/Source/SoundEngine/fmodex/src/fmod.hpp"
 #include "Engine/Source/Storm/H/stpl.h"
 #include "Engine/Source/Tempest/C3Vector.h"
+#include "Engine/Source/Tempest/CRange.h"
 
 class SESound;
 class SESoundInternal;
@@ -46,8 +47,7 @@ struct SEChannelGroup {
 struct SEChannelInfo {
     /* 0000 */ SECHANNELSTATE m_state;
     /* 0004 */ C3Vector m_position;
-    /* 0010 */ float m_minDistance;
-    /* 0014 */ float m_maxDistance;
+    /* 0010 */ CRange m_distanceRange;
     /* 0018 */ uint8_t m_is3D;
     /* 0019 */ uint8_t m_looping;
     /* 001A */ uint8_t m_fadingIn;
@@ -115,8 +115,7 @@ class SESoundInternal : public TSLinkedNode<SESoundInternal> {
     /* 0040 */ TSLink<SESoundInternal> m_deleteLink;
     /* 0048 */ TSLink<SESoundInternal> m_objectLink;
     /* 0050 */ C3Vector m_position;
-    /* 005C */ float m_minDistance;
-    /* 0060 */ float m_maxDistance;
+    /* 005C */ CRange m_distanceRange;
     /* 0064 */ int32_t m_channelGroup;
     /* 0068 */ FMOD_MODE m_mode;
     /* 006C */ uint8_t m_play;
