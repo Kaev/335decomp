@@ -84,6 +84,21 @@ class M2Loop {
 
 class M2Sequence {
     public:
+    // Sequence flags, including runtime loading state; names reconstructed from current consumers.
+    enum FLAGS : uint32_t {
+        NONE = 0,
+        NON_LOOPING = 1,
+        BLEND_TO_UP = 2,
+        BLEND_FROM_UP = 4,
+        ALIGN_TO_UP = 8,
+        LOAD_PENDING = 0x10,
+        LOADED = 0x20,
+        ALIAS = 0x40,
+        SECONDARY_NON_LOOPING = 0x80,
+        UP_VECTOR_MASK = 0xe,
+        LOAD_STATE_MASK = 0x30,
+    };
+
     /* 0000 */ uint16_t m_id;
     /* 0002 */ uint16_t m_variationIndex;
     /* 0004 */ uint32_t m_duration;

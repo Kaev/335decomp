@@ -1645,7 +1645,7 @@ void CM2Model::SetPrimaryBoneSequence(uint16_t sequenceIndex, uint16_t boneIndex
 
     this->SetupBoneSequence(sequenceIndex, fallback, time, speed, &bone->m_sequence);
 
-    if (bone->m_sequence.m_startTime == bone->m_sequence.m_endTime || ((sequence->m_flags & 1) && static_cast<int32_t>(bone->m_sequence.m_endTime - this->m_scene->m_time) <= 0)) {
+    if (bone->m_sequence.m_startTime == bone->m_sequence.m_endTime || ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) && static_cast<int32_t>(bone->m_sequence.m_endTime - this->m_scene->m_time) <= 0)) {
         bone->m_sequence.m_finished = 1;
     }
 
@@ -1853,7 +1853,7 @@ void CM2Model::LoadSequence(uint32_t id) {
     while (index < data->m_sequences.m_count) {
         M2Sequence* sequence = &data->m_sequences[index];
 
-        if (!(sequence->m_flags & 0x30)) {
+        if (!(sequence->m_flags & M2Sequence::FLAGS::LOAD_STATE_MASK)) {
             this->m_shared->LoadLowPrioritySequence(static_cast<uint16_t>(index));
         }
 
@@ -4293,7 +4293,7 @@ void CM2Model::GetSequenceInfo(uint32_t id, uint32_t variation, M2SequenceInfo& 
 
     if (index == 0xFFFF) {
         info.m_moveSpeed = 0.0f;
-        info.m_flags = 0;
+        info.m_flags = M2Sequence::FLAGS::NONE;
         info.m_duration = 0;
         info.m_bounds.b = C3Vector(0.0f, 0.0f, 0.0f);
         info.m_bounds.t = C3Vector(0.0f, 0.0f, 0.0f);
@@ -4615,10 +4615,10 @@ void CM2Model::SetWorldTransform(const C3Vector& position, float rotation, float
             this->GetSequenceInfo(state.m_sequenceId, state.m_variationIndex, info);
 
             float blend = 0.0f;
-            uint32_t mode = info.m_flags & 0xE;
-            int32_t apply = 0;
+            uint32_t alignmentFlags = info.m_flags & M2Sequence::FLAGS::UP_VECTOR_MASK;
+            BOOL apply = FALSE;
 
-            if (mode == 2 || mode == 4) {
+            if (alignmentFlags == M2Sequence::FLAGS::BLEND_TO_UP || alignmentFlags == M2Sequence::FLAGS::BLEND_FROM_UP) {
                 float speed = state.m_speed;
 
                 if (speed == 0.0f) {
@@ -4636,14 +4636,14 @@ void CM2Model::SetWorldTransform(const C3Vector& position, float rotation, float
                     blend = t;
                 }
 
-                if (info.m_flags & 4) {
+                if (info.m_flags & M2Sequence::FLAGS::BLEND_FROM_UP) {
                     blend = 1.0f - blend;
                 }
 
                 apply = blend > 0.0f;
-            } else if (mode == 8) {
+            } else if (alignmentFlags == M2Sequence::FLAGS::ALIGN_TO_UP) {
                 blend = 1.0f;
-                apply = 1;
+                apply = TRUE;
             }
 
             if (apply) {
@@ -4769,7 +4769,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
         M2Sequence* sequence = &data->m_sequences[sequenceIndex];
         uint32_t time;
 
-        if ((sequence->m_flags & 1) && static_cast<int32_t>(bone->m_sequence.m_endTime - now) <= 0) {
+        if ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) && static_cast<int32_t>(bone->m_sequence.m_endTime - now) <= 0) {
             int32_t elapsed = bone->m_sequence.m_endTime - bone->m_sequence.m_startTime;
             int32_t current = static_cast<int32_t>(elapsed * bone->m_sequence.m_speed) + bone->m_sequence.m_startOffset;
 
@@ -4781,7 +4781,7 @@ void CM2Model::AnimateMTSimple(const C44Matrix* view, const C3Vector& diffuse, c
                 time = current;
             }
         } else {
-            if ((sequence->m_flags & 1) && static_cast<int32_t>(bone->m_sequence.m_startTime - now) > 0) {
+            if ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) && static_cast<int32_t>(bone->m_sequence.m_startTime - now) > 0) {
                 now = bone->m_sequence.m_startTime;
             }
 
@@ -5128,7 +5128,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
             M2Sequence* sequence = &data->m_sequences[bone->m_sequence.m_sequenceIndex];
             uint32_t time;
 
-            if ((sequence->m_flags & 1) && static_cast<int32_t>(bone->m_sequence.m_endTime - now) <= 0) {
+            if ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) && static_cast<int32_t>(bone->m_sequence.m_endTime - now) <= 0) {
                 int32_t elapsed = bone->m_sequence.m_endTime - bone->m_sequence.m_startTime;
                 int32_t current = static_cast<int32_t>(elapsed * bone->m_sequence.m_speed) + bone->m_sequence.m_startOffset;
 
@@ -5140,7 +5140,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
                     time = current;
                 }
             } else {
-                if ((sequence->m_flags & 1) && static_cast<int32_t>(bone->m_sequence.m_startTime - now) > 0) {
+                if ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) && static_cast<int32_t>(bone->m_sequence.m_startTime - now) > 0) {
                     now = bone->m_sequence.m_startTime;
                 }
 
@@ -5199,7 +5199,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
             uint32_t now = this->m_scene->m_time;
             uint32_t time;
 
-            if ((sequence->m_flags & 0x80) && static_cast<int32_t>(bone->m_secondarySequence.m_endTime - now) <= 0) {
+            if ((sequence->m_flags & M2Sequence::FLAGS::SECONDARY_NON_LOOPING) && static_cast<int32_t>(bone->m_secondarySequence.m_endTime - now) <= 0) {
                 int32_t elapsed = bone->m_secondarySequence.m_endTime - bone->m_secondarySequence.m_startTime;
                 int32_t current = static_cast<int32_t>(elapsed * bone->m_secondarySequence.m_speed) + bone->m_secondarySequence.m_startOffset;
 
@@ -5211,7 +5211,7 @@ void CM2Model::AnimateMT(const C44Matrix* view, const C3Vector& diffuse, const C
                     time = current;
                 }
             } else {
-                if ((sequence->m_flags & 0x80) && static_cast<int32_t>(bone->m_secondarySequence.m_startTime - now) > 0) {
+                if ((sequence->m_flags & M2Sequence::FLAGS::SECONDARY_NON_LOOPING) && static_cast<int32_t>(bone->m_secondarySequence.m_startTime - now) > 0) {
                     now = bone->m_secondarySequence.m_startTime;
                 }
 
@@ -5903,7 +5903,7 @@ uint32_t CM2Model::ProcessEventCallbacks(uint32_t boneIndex, uint32_t sequenceIn
     M2Data* data = this->m_shared->m_data;
     M2ModelBone* bone = &this->m_bones[boneIndex];
 
-    if (data->m_sequences[sequenceIndex].m_flags & 1) {
+    if (data->m_sequences[sequenceIndex].m_flags & M2Sequence::FLAGS::NON_LOOPING) {
         period = 0;
     }
 
@@ -6250,7 +6250,7 @@ void CM2Model::SetupLighting() {
 void CM2Model::SetBoneSequenceDeferred(uint16_t sequenceIndex, M2Data* data, uint16_t boneIndex, uint32_t time, float speed, M2SequenceFallback fallback, int32_t blend, int32_t primary, int32_t pickRandom) {
     CM2SequencePlayBack* playback;
 
-    if (data->m_sequences[sequenceIndex].m_flags & 0x10) {
+    if (data->m_sequences[sequenceIndex].m_flags & M2Sequence::FLAGS::LOAD_PENDING) {
         uint16_t index = sequenceIndex;
 
         while (true) {
@@ -6390,7 +6390,7 @@ void CM2Model::CallSequenceCallback(M2ModelCallback* entry) {
 
     M2Sequence* sequence = &data->m_sequences[sequenceIndex];
 
-    if (sequence->m_flags & 1) {
+    if (sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) {
         bone->m_sequence.m_finished = 1;
     }
 
@@ -6404,7 +6404,7 @@ void CM2Model::CallSequenceCallback(M2ModelCallback* entry) {
         }
     }
 
-    if ((sequence->m_flags & 1) || !bone->m_sequence.m_pickRandomVariation || (!sequence->m_variationIndex && sequence->m_variationNext == 0xFFFF)) {
+    if ((sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) || !bone->m_sequence.m_pickRandomVariation || (!sequence->m_variationIndex && sequence->m_variationNext == 0xFFFF)) {
         return;
     }
 
@@ -6423,7 +6423,7 @@ void CM2Model::CallSequenceCallback(M2ModelCallback* entry) {
         time = static_cast<uint32_t>(entry->m_time * bone->m_sequence.m_invSpeed);
     }
 
-    if (data->m_sequences[index].m_flags & 0x20) {
+    if (data->m_sequences[index].m_flags & M2Sequence::FLAGS::LOADED) {
         float currentSpeed = bone->m_sequence.m_speed;
         bone->m_sequenceId = entry->m_id;
         bone->m_variationIndex = variation;
@@ -6494,7 +6494,7 @@ int32_t CM2Model::ProcessCallbacks() {
                     uint32_t loopEnd;
                     int32_t finished;
 
-                    if (sequence->m_flags & 1) {
+                    if (sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) {
                         loopEnd = bone->m_sequence.m_endTime;
                         loopStart = 0;
                         finished = static_cast<int32_t>(loopEnd - current) <= 0;
@@ -6868,7 +6868,7 @@ void CM2Model::SetBoneSequence(uint32_t boneId, uint32_t sequenceId, uint32_t va
         this->PickRandomSequenceVariation(&variation, &index);
     }
 
-    if (!(data->m_sequences[index].m_flags & 0x20)) {
+    if (!(data->m_sequences[index].m_flags & M2Sequence::FLAGS::LOADED)) {
         this->SetBoneSequenceDeferred(index, data, boneIndex, time, speed, fallback, blend, primary, pickRandom);
         return;
     }

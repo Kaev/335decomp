@@ -2108,7 +2108,7 @@ void CMissile::FireMissiles(const C3Vector* position) {
                 float speedScale;
                 M2SequenceInfo info;
 
-                if (this->m_model->IsLoaded(0, 0) && this->m_model->HasSequence(ANIM_ITEM_INFLIGHT) && (info.Clear(), this->m_model->GetSequenceInfo(ANIM_ITEM_INFLIGHT, 0, info), info.m_flags & 1)) {
+                if (this->m_model->IsLoaded(0, 0) && this->m_model->HasSequence(ANIM_ITEM_INFLIGHT) && (info.Clear(), this->m_model->GetSequenceInfo(ANIM_ITEM_INFLIGHT, 0, info), info.m_flags & M2Sequence::FLAGS::NON_LOOPING)) {
                     speedScale = info.m_duration * this->m_speed * TIME_SECONDS_PER_MILLISECOND_FLOAT / distance;
                 } else {
                     speedScale = 1.0f;

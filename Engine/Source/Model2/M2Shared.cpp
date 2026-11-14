@@ -24,7 +24,7 @@
 #include "Engine/Source/Storm/H/storm.h"
 #include "Engine/Source/Tempest/CImVector.h"
 #include "Engine/Source/Os/OsMemory.h"
-
+#include "WoW/Source/Object/ObjectClient/Types.h"
 // STATIC: 0x00A45644
 static const uint32_t s_skinProfileBoneCounts[4] = { 256, 64, 53, 21 };
 
@@ -175,7 +175,7 @@ int32_t M2Init(uint8_t* base, uint32_t size, const M2Data& data, M2TrackBase& tr
             track.m_sequenceTimes.Relocate(base);
 
             for (uint32_t i = 0; i < track.m_sequenceTimes.m_count; i++) {
-                if (data.m_sequences[i].m_flags & 0x20) {
+                if (data.m_sequences[i].m_flags & M2Sequence::FLAGS::LOADED) {
                     track.m_sequenceTimes[i].Relocate(base);
                 }
             }
@@ -197,7 +197,7 @@ int32_t M2Init(uint8_t* base, uint32_t size, const M2Data& data, M2Track<T>& tra
             track.m_sequenceTimes.Relocate(base);
 
             for (uint32_t i = 0; i < track.m_sequenceTimes.m_count; i++) {
-                if (data.m_sequences[i].m_flags & 0x20) {
+                if (data.m_sequences[i].m_flags & M2Sequence::FLAGS::LOADED) {
                     track.m_sequenceTimes[i].Relocate(base);
                 }
             }
@@ -209,7 +209,7 @@ int32_t M2Init(uint8_t* base, uint32_t size, const M2Data& data, M2Track<T>& tra
             track.m_sequenceKeys.Relocate(base);
 
             for (uint32_t i = 0; i < track.m_sequenceTimes.m_count; i++) {
-                if (data.m_sequences[i].m_flags & 0x20) {
+                if (data.m_sequences[i].m_flags & M2Sequence::FLAGS::LOADED) {
                     track.m_sequenceKeys[i].Relocate(base);
                 }
             }
@@ -244,26 +244,26 @@ int32_t M2Init<M2Sequence>(uint8_t* base, uint32_t size, const M2Data& data, M2A
     for (uint32_t i = 0; i < array.m_count; i++) {
         M2Sequence* sequence = &array[i];
 
-        if (sequence->m_flags & 1) {
-            sequence->m_flags |= 0x80;
+        if (sequence->m_flags & M2Sequence::FLAGS::NON_LOOPING) {
+            sequence->m_flags |= M2Sequence::FLAGS::SECONDARY_NON_LOOPING;
         }
 
         switch (sequence->m_id) {
-            case 0:
-            case 4:
-            case 5:
-            case 13:
-            case 41:
-            case 42:
-            case 43:
-            case 44:
-            case 45:
-            case 69:
-            case 119:
-            case 120:
-            case 143:
-            case 223:
-                sequence->m_flags &= ~1u;
+            case ANIMATION_ID::ANIM_STAND:
+            case ANIMATION_ID::ANIM_WALK:
+            case ANIMATION_ID::ANIM_RUN:
+            case ANIMATION_ID::ANIM_WALKBACKWARDS:
+            case ANIMATION_ID::ANIM_SWIM_IDLE:
+            case ANIMATION_ID::ANIM_SWIM:
+            case ANIMATION_ID::ANIM_SWIM_LEFT:
+            case ANIMATION_ID::ANIM_SWIM_RIGHT:
+            case ANIMATION_ID::ANIM_SWIM_BACKWARDS:
+            case ANIMATION_ID::ANIM_EMOTE_DANCE:
+            case ANIMATION_ID::ANIM_STEALTH_WALK:
+            case ANIMATION_ID::ANIM_STEALTH_STAND:
+            case ANIMATION_ID::ANIM_SPRINT:
+            case ANIMATION_ID::ANIM_STEALTH_RUN:
+                sequence->m_flags &= ~M2Sequence::FLAGS::NON_LOOPING;
                 break;
             default:
                 break;
@@ -1564,7 +1564,7 @@ int32_t CM2Shared::FinishLoadingLowPrioritySequence(uint32_t sequenceIndex, uint
         return 0;
     }
 
-    sequence->m_flags = (sequence->m_flags & ~0x30u) | 0x20;
+    sequence->m_flags = (sequence->m_flags & ~M2Sequence::FLAGS::LOAD_STATE_MASK) | M2Sequence::FLAGS::LOADED;
 
     return 1;
 }
@@ -1746,7 +1746,7 @@ int32_t CM2Shared::FinishLoading() {
     uint32_t count = 0;
 
     for (uint32_t i = 0; i < this->m_data->m_sequences.m_count; i++) {
-        if (!(this->m_data->m_sequences[i].m_flags & 0x20)) {
+        if (!(this->m_data->m_sequences[i].m_flags & M2Sequence::FLAGS::LOADED)) {
             count++;
         }
     }
@@ -2008,7 +2008,7 @@ CM2SequenceLoad* CM2Shared::LoadLowPrioritySequence(uint16_t sequenceIndex) {
 
     M2Sequence* source = sequence;
 
-    while (source->m_flags & 0x40) {
+    while (source->m_flags & M2Sequence::FLAGS::ALIAS) {
         source = &this->m_data->m_sequences[source->m_aliasNext];
     }
 
@@ -2052,10 +2052,10 @@ CM2SequenceLoad* CM2Shared::LoadLowPrioritySequence(uint16_t sequenceIndex) {
     load->m_sequenceBufferIndex = static_cast<uint16_t>(this->m_lowPrioritySequenceCount);
     this->m_lowPrioritySequenceBuffers[this->m_lowPrioritySequenceCount++] = buffer;
 
-    sequence->m_flags |= 0x10;
+    sequence->m_flags |= M2Sequence::FLAGS::LOAD_PENDING;
 
     for (uint16_t i = sequence->m_aliasNext; i != sequenceIndex; i = this->m_data->m_sequences[i].m_aliasNext) {
-        this->m_data->m_sequences[i].m_flags |= 0x10;
+        this->m_data->m_sequences[i].m_flags |= M2Sequence::FLAGS::LOAD_PENDING;
     }
 
     load->m_asyncObject->m_file = file;
