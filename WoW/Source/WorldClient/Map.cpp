@@ -429,7 +429,7 @@ DepthCoordTable* CMap::GetDepthCoordTable(uint32_t liquidType) {
 
     LiquidMaterialRec* materialRec = g_liquidMaterialDB.GetRecord(typeRec->m_materialID);
 
-    if (!materialRec || (materialRec->m_lvf != 0 && materialRec->m_lvf != 2)) {
+    if (!materialRec || (materialRec->m_lvf != LIQUID_VERTEX_HEIGHT_DEPTH && materialRec->m_lvf != LIQUID_VERTEX_DEPTH_ONLY)) {
         return nullptr;
     }
 

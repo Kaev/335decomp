@@ -2704,7 +2704,7 @@ void CWorldScene::PrepareLiquidInstances() {
                 Liquid::CClientEnvironment* environment = Liquid::CClientEnvironment::Create(exterior == 0);
                 Liquid::CMeshGeomFactory* geomFactory = Liquid::CMeshGeomFactory::Create(mapObj, mapObjGroup);
                 const LiquidMaterialRec* materialRec = g_liquidMaterialDB.GetRecord(typeRec->m_materialID);
-                geomFactory->SetMagma(materialRec->m_lvf == 1);
+                geomFactory->SetMagma(materialRec->m_lvf == LIQUID_VERTEX_HEIGHT_TEXCOORD);
 
                 float texCoord1ValueX = 0.0f;
                 CImVector color;

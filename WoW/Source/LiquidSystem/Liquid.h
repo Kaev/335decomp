@@ -203,7 +203,7 @@ namespace Liquid {
     class CChunkVertexData : public IVertexData {
         public:
         /* 0008 */ const uint8_t* m_data;
-        /* 000C */ uint32_t m_format;
+        /* 000C */ uint32_t m_format; // LIQUID_VERTEX_FORMAT values in the native unsigned DWORD carrier.
 
         virtual float GetHeight(uint32_t index);
         virtual uint8_t GetDepth(uint32_t index);

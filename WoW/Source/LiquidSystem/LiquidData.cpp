@@ -81,7 +81,7 @@ const uint8_t* Liquid::CAreaData::GetExistsTable(const SMLiquidInstance* instanc
 // VERIFY: 0ecbc03f manual
 // OFFSET: 0x008A3130
 float Liquid::CInstanceVertexData::GetHeight(uint32_t index) {
-    if (this->m_instance->m_vertexFormat > 1) {
+    if (this->m_instance->m_vertexFormat > LIQUID_VERTEX_HEIGHT_TEXCOORD) {
         return 0.0f;
     }
 
@@ -93,11 +93,11 @@ float Liquid::CInstanceVertexData::GetHeight(uint32_t index) {
 uint8_t Liquid::CInstanceVertexData::GetDepth(uint32_t index) {
     const SMLiquidInstance* instance = this->m_instance;
 
-    if (instance->m_vertexFormat == 0) {
+    if (instance->m_vertexFormat == LIQUID_VERTEX_HEIGHT_DEPTH) {
         return (this->m_data + instance->m_offsetVertexData + 4 * this->m_vertexCount)[index];
     }
 
-    if (instance->m_vertexFormat != 2) {
+    if (instance->m_vertexFormat != LIQUID_VERTEX_DEPTH_ONLY) {
         return 0;
     }
 
@@ -111,7 +111,7 @@ uint8_t Liquid::CInstanceVertexData::GetDepth(uint32_t index) {
 // VERIFY: 5fa5f4f8 manual
 // OFFSET: 0x008A31B0
 const uint16_t* Liquid::CInstanceVertexData::GetTexCoord(uint32_t index) {
-    if (this->m_instance->m_vertexFormat == 1) {
+    if (this->m_instance->m_vertexFormat == LIQUID_VERTEX_HEIGHT_TEXCOORD) {
         return reinterpret_cast<const uint16_t*>(this->m_data + this->m_instance->m_offsetVertexData + 4 * (index + this->m_vertexCount));
     }
 
@@ -128,7 +128,7 @@ Liquid::CChunkVertexData::CChunkVertexData(const uint8_t* data, uint32_t format)
 // VERIFY: 9dcee70a manual
 // OFFSET: 0x008A3200
 float Liquid::CChunkVertexData::GetHeight(uint32_t index) {
-    if (this->m_format > 1) {
+    if (this->m_format > LIQUID_VERTEX_HEIGHT_TEXCOORD) {
         return 0.0f;
     }
 
@@ -140,7 +140,7 @@ float Liquid::CChunkVertexData::GetHeight(uint32_t index) {
 uint8_t Liquid::CChunkVertexData::GetDepth(uint32_t index) {
     uint32_t format = this->m_format;
 
-    if (format == 0 || format == 2) {
+    if (format == LIQUID_VERTEX_HEIGHT_DEPTH || format == LIQUID_VERTEX_DEPTH_ONLY) {
         return reinterpret_cast<const SLVert*>(this->m_data + 8 * index)->m_waterVert.m_depth;
     }
 
@@ -150,7 +150,7 @@ uint8_t Liquid::CChunkVertexData::GetDepth(uint32_t index) {
 // VERIFY: 681ed984 manual
 // OFFSET: 0x008A3250
 const uint16_t* Liquid::CChunkVertexData::GetTexCoord(uint32_t index) {
-    if (this->m_format == 1) {
+    if (this->m_format == LIQUID_VERTEX_HEIGHT_TEXCOORD) {
         return &reinterpret_cast<const SLVert*>(this->m_data + 8 * index)->m_magmaVert.m_s;
     }
 

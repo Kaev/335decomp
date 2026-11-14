@@ -37,7 +37,7 @@ class CChunkLiquid {
 
     /* 0000 */ int32_t m_objectIndex;
     /* 0004 */ int32_t m_type;
-    /* 0008 */ int32_t m_vertexFormat;
+    /* 0008 */ int32_t m_vertexFormat; // LIQUID_VERTEX_FORMAT values in the native signed DWORD carrier.
     /* 000C */ C3Vector m_topLeftCoords;
     /* 0018 */ CAaSphere m_sphere;
     /* 0028 */ CRange m_height{}; // Preserve the native constructor's zeroed endpoints.
