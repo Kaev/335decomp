@@ -882,8 +882,8 @@ void CGObject_C::PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const S
 
 // VERIFY: acfa0e6e auto
 // OFFSET: 0x00743570
-int32_t CGObject_C::PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, int32_t a6, int32_t a7, int32_t a8, int32_t a9, uint32_t a10, const SpellVisualRec* visual) {
-    return 0;
+BOOL CGObject_C::PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, BOOL playAnim, BOOL harmful, BOOL skipBeamWait, int32_t lightningAttachment, uint32_t unusedFlags, const SpellVisualRec* visual) {
+    return FALSE;
 }
 
 // VERIFY: c530e49a auto
@@ -1580,7 +1580,7 @@ void CGObject_C::PlaySpellVisualKit(const PlaySpellVisuaKitData& data) {
 
     const SpellVisualRec* visual = spell ? g_spellVisualDB.GetRecord(spell->m_spellVisualID[0]) : nullptr;
 
-    if (this->PlaySpellVisualKit_DelayLightningEffects(spell, data.m_impactVisualKit, static_cast<SPELL_VISUAL_KIT_TYPE>(data.m_kitType), data.m_position, data.m_transportGUID, data.m_playAnim, data.m_harmful, data.unknown_0020, data.unknown_0024, flags, visual)) {
+    if (this->PlaySpellVisualKit_DelayLightningEffects(spell, data.m_impactVisualKit, static_cast<SPELL_VISUAL_KIT_TYPE>(data.m_kitType), data.m_position, data.m_transportGUID, data.m_playAnim, data.m_harmful, data.m_skipBeamWait, data.m_lightningAttachment, flags, visual)) {
         return;
     }
 

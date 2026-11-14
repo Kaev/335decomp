@@ -2124,12 +2124,12 @@ void CGUnit_C::UpdateDelayedSpellVisualKits() {
             continue;
         }
 
-        if (static_cast<int32_t>(FrameTime::s_curTimeMs - delayed->m_startTime) < 0) {
+        if (static_cast<int32_t>(FrameTime::s_curTimeMs - delayed->m_activationTime) < 0) {
             pending++;
             continue;
         }
 
-        if (delayed->unk_0028 == 1) {
+        if (delayed->m_activationType == DelayedSpellVisualKit::ACTIVATION_TYPE::SCHEDULED) {
             SpellRec spellRec;
 
             if (g_spellDB.GetRecord(delayed->m_spellId, &spellRec)) {
@@ -2145,8 +2145,8 @@ void CGUnit_C::UpdateDelayedSpellVisualKits() {
 
                     data.m_playAnim = (delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::PLAY_ANIM) != 0;
                     data.m_harmful = (delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::HARMFUL) != 0;
-                    data.unknown_0020 = 1;
-                    data.unknown_0024 = delayed->m_delay;
+                    data.m_skipBeamWait = TRUE;
+                    data.m_lightningAttachment = delayed->m_lightningAttachment;
                     this->PlaySpellVisualKit(data);
                 }
             }
@@ -9116,7 +9116,7 @@ void CGUnit_C::SetEmoteQueue(const QUESTGIVEREMOTENODE* nodes, uint32_t count) {
 
 // VERIFY: 088aa6dd auto
 // OFFSET: 0x00728050
-DelayedSpellVisualKit* CGUnit_C::DelaySpellVisualKit(int32_t spellId, int32_t kitId, int32_t kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t delay, int32_t a10, int32_t a11) {
+DelayedSpellVisualKit* CGUnit_C::DelaySpellVisualKit(int32_t spellId, int32_t kitId, int32_t kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t lightningAttachment, int32_t activationType, int32_t activationTime) {
     uint32_t index;
 
     for (index = 0; index < this->m_delayedSpellVisualKits.m_count; index++) {
@@ -9146,13 +9146,13 @@ DelayedSpellVisualKit* CGUnit_C::DelaySpellVisualKit(int32_t spellId, int32_t ki
         kit->m_targetGuid = WOWGUID();
     }
 
-    kit->m_delay = delay;
+    kit->m_lightningAttachment = lightningAttachment;
     kit->m_flags = (kit->m_flags & ~DelayedSpellVisualKit::DELAY_FLAGS::PLAY_ANIM_OR_HARMFUL) |
         DelayedSpellVisualKit::DELAY_FLAGS::IN_USE |
         (playAnim ? DelayedSpellVisualKit::DELAY_FLAGS::PLAY_ANIM : 0) |
         (harmful ? DelayedSpellVisualKit::DELAY_FLAGS::HARMFUL : 0);
-    kit->unk_0028 = a10;
-    kit->m_startTime = a11;
+    kit->m_activationType = activationType;
+    kit->m_activationTime = activationTime;
     return kit;
 }
 
@@ -16954,13 +16954,13 @@ void CGUnit_C::HandleSpellEventSound() {
 
 // VERIFY: 28e7526d auto
 // OFFSET: 0x0072AF60
-int32_t CGUnit_C::PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, int32_t a6, int32_t a7, int32_t a8, int32_t a9, uint32_t a10, const SpellVisualRec* visual) {
-    if (!spell || !visual || !Spell_C_SpellVisualHasChainEffect(visual) || a8 || !(kit->m_flags & SpellVisualKitRec::KIT_FLAGS::WAIT_FOR_BEAM_ACTIVATION)) {
-        return 0;
+BOOL CGUnit_C::PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, BOOL playAnim, BOOL harmful, BOOL skipBeamWait, int32_t lightningAttachment, uint32_t unusedFlags, const SpellVisualRec* visual) {
+    if (!spell || !visual || !Spell_C_SpellVisualHasChainEffect(visual) || skipBeamWait || !(kit->m_flags & SpellVisualKitRec::KIT_FLAGS::WAIT_FOR_BEAM_ACTIVATION)) {
+        return FALSE;
     }
 
-    this->DelaySpellVisualKit(spell->m_id, kit->m_id, type, position, guid, a6, a7, a9, 0, FrameTime::s_curTimeMs + 10000);
-    return 1;
+    this->DelaySpellVisualKit(spell->m_id, kit->m_id, type, position, guid, playAnim, harmful, lightningAttachment, DelayedSpellVisualKit::ACTIVATION_TYPE::WAIT_FOR_BEAM, FrameTime::s_curTimeMs + DelayedSpellVisualKit::TIMING::BEAM_WAIT_TIMEOUT_MS);
+    return TRUE;
 }
 
 // VERIFY: 6c474fbc auto
@@ -21033,7 +21033,7 @@ void CGUnit_C::CreateProceduralEffect(const SpellRec* spell, const SpellVisualRe
                         PlaySpellVisuaKitData data(spell, areaKit, SPELL_VISUAL_KIT_AT_POSITION);
                         data.m_position = &position;
                         data.m_playAnim = 0;
-                        data.unknown_0024 = this->m_lightningSequence;
+                        data.m_lightningAttachment = this->m_lightningSequence;
                         this->PlaySpellVisualKit(data);
                     }
                 }
@@ -23439,7 +23439,7 @@ void CGUnit_C::ConnectToLightningThisFrame(uint32_t spellId, int32_t attachment)
     for (uint32_t i = 0; i < this->m_delayedSpellVisualKits.m_count; i++) {
         DelayedSpellVisualKit* delayed = &this->m_delayedSpellVisualKits.m_data[i];
 
-        if (!(delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::IN_USE) || delayed->unk_0028 || delayed->m_spellId != static_cast<int32_t>(spellId) || delayed->m_delay != attachment) {
+        if (!(delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::IN_USE) || delayed->m_activationType != DelayedSpellVisualKit::ACTIVATION_TYPE::WAIT_FOR_BEAM || delayed->m_spellId != static_cast<int32_t>(spellId) || delayed->m_lightningAttachment != attachment) {
             continue;
         }
 
@@ -23456,8 +23456,8 @@ void CGUnit_C::ConnectToLightningThisFrame(uint32_t spellId, int32_t attachment)
 
                 data.m_harmful = (delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::HARMFUL) != 0;
                 data.m_playAnim = (delayed->m_flags & DelayedSpellVisualKit::DELAY_FLAGS::PLAY_ANIM) != 0;
-                data.unknown_0020 = 1;
-                data.unknown_0024 = delayed->m_delay;
+                data.m_skipBeamWait = TRUE;
+                data.m_lightningAttachment = delayed->m_lightningAttachment;
                 this->PlaySpellVisualKit(data);
             }
         }

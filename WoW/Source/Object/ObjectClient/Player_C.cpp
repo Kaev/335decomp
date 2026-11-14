@@ -1412,10 +1412,10 @@ PlaySpellVisuaKitData::PlaySpellVisuaKitData(const SpellRec* spellRec, const Spe
     this->m_impactVisualKit = impactVisualKit;
     this->m_position = nullptr;
     this->m_transportGUID = WOWGUID();
-    this->m_playAnim = 1;
-    this->m_harmful = 0;
-    this->unknown_0020 = 0;
-    this->unknown_0024 = -1;
+    this->m_playAnim = TRUE;
+    this->m_harmful = FALSE;
+    this->m_skipBeamWait = FALSE;
+    this->m_lightningAttachment = LIGHTNING_ATTACHMENT::NONE;
     this->m_someGUID = WOWGUID();
     this->m_effectFadeTime = 0;
 }

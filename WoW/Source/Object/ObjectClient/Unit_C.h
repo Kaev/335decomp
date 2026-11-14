@@ -103,6 +103,15 @@ struct QUESTGIVEREMOTEQUEUE {
 };
 
 struct DelayedSpellVisualKit {
+    enum ACTIVATION_TYPE : int32_t {
+        WAIT_FOR_BEAM = 0,
+        SCHEDULED = 1,
+    };
+
+    enum TIMING : int32_t {
+        BEAM_WAIT_TIMEOUT_MS = 10000,
+    };
+
     enum DELAY_FLAGS : uint32_t {
         HAS_POSITION = 0x1,
         PLAY_ANIM = 0x2,
@@ -116,10 +125,10 @@ struct DelayedSpellVisualKit {
     /* 0008 */ int32_t m_kitType;
     /* 000C */ C3Vector m_position;
     /* 0018 */ WOWGUID m_targetGuid;
-    /* 0020 */ int32_t m_delay;
+    /* 0020 */ int32_t m_lightningAttachment;
     /* 0024 */ uint32_t m_flags;
-    /* 0028 */ int32_t unk_0028;
-    /* 002C */ int32_t m_startTime;
+    /* 0028 */ int32_t m_activationType;
+    /* 002C */ int32_t m_activationTime; // Scheduled playback time or beam-wait expiry.
 };
 
 struct UnitThreatHandle {
@@ -747,7 +756,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     void OnDismissControlledVehicleLocal(uint32_t eventTime);
     void SetEmoteQueue(const QUESTGIVEREMOTENODE* nodes, uint32_t count);
     void PlayEmotes(const QUESTGIVEREMOTEQUEUE& emotes);
-    DelayedSpellVisualKit* DelaySpellVisualKit(int32_t spellId, int32_t kitId, int32_t kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t delay, int32_t a10, int32_t a11);
+    DelayedSpellVisualKit* DelaySpellVisualKit(int32_t spellId, int32_t kitId, int32_t kitType, const C3Vector* position, WOWGUID targetGuid, BOOL playAnim, BOOL harmful, int32_t lightningAttachment, int32_t activationType, int32_t activationTime);
     C3Vector GetGroundNormal() const;
     bool IsMovingToward(CGObject_C* target) const;
     BOOL ChooseLootAnim(uint32_t selectionMask, uint32_t* animId);
@@ -977,7 +986,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     void CreateProceduralEffect(const SpellRec* spell, const SpellVisualRec* visual, const SpellVisualKitRec* kit, int32_t expireTime, uint32_t flags, WOWGUID guid);
     void PlaySpellVisualKit_PlayAnims(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, int32_t a5, int32_t a6, WOWGUID guid, uint32_t a8, const SpellVisualRec* visual, uint32_t a10, int32_t a11) override;
     void PlaySpellVisualKit_HandleWeapons(const SpellRec* spell, const SpellVisualKitRec* kit, const C3Vector* position, WOWGUID guid, uint32_t a5, uint32_t flags, void (*callback)(CM2Model*, uint32_t, uint32_t, int32_t, uint32_t, uint64_t), int32_t* hasEffect) override;
-    int32_t PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, int32_t a6, int32_t a7, int32_t a8, int32_t a9, uint32_t a10, const SpellVisualRec* visual) override;
+    BOOL PlaySpellVisualKit_DelayLightningEffects(const SpellRec* spell, const SpellVisualKitRec* kit, SPELL_VISUAL_KIT_TYPE type, const C3Vector* position, WOWGUID guid, BOOL playAnim, BOOL harmful, BOOL skipBeamWait, int32_t lightningAttachment, uint32_t unusedFlags, const SpellVisualRec* visual) override;
     void HandleSpellEventSound();
     BOOL IsHostileCritter();
     float GetSpellChanceToCrit() const;
