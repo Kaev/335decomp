@@ -904,7 +904,7 @@ static int32_t Script_GetBattlefieldVehicleInfo(lua_State* L) {
     }
 
     VehicleRec* vehicle = unit->GetVehicleRec();
-    bool hasType = vehicle && (vehicle->m_flags & 0x10000000);
+    bool hasType = vehicle && (vehicle->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE);
     lua_pushnumber(L, x);
     lua_pushnumber(L, y);
     lua_pushstring(L, unit->GetUnitName(nullptr, true));

@@ -2078,7 +2078,7 @@ void CGMinimapFrame::Render() {
 
             VehicleRec* vehicleRec = vehicle->m_vehicle ? vehicle->m_vehicle->m_vehicleRec : nullptr;
 
-            if (!vehicleRec || !(vehicleRec->m_flags & 0x10000000)) {
+            if (!vehicleRec || !(vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE)) {
                 continue;
             }
 
@@ -2405,7 +2405,7 @@ static void SetMemberData(WOWGUID guid, MEMBERINFO* member, CGPlayer_C* player, 
                 }
 
                 VehicleRec* vehicleRec = vehicle->m_vehicle ? vehicle->m_vehicle->m_vehicleRec : nullptr;
-                bool shown = vehicleRec && (vehicleRec->m_flags & 0x10000000);
+                bool shown = vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE);
                 CGUnitData* unitData = vehicle->m_unit;
 
                 if (unitData->m_unitFieldFlags & UNIT_FLAGS::UNIT_FLAG_POSSESSED) {
@@ -2465,7 +2465,7 @@ static void SetMemberData(WOWGUID guid, MEMBERINFO* member, CGPlayer_C* player, 
             }
 
             VehicleRec* vehicleRec = vehicle->m_vehicle ? vehicle->m_vehicle->m_vehicleRec : nullptr;
-            bool shown = vehicleRec && (vehicleRec->m_flags & 0x10000000);
+            bool shown = vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE);
 
             if (vehicle->IsPossessedBy(guid) && shown) {
                 member->m_offMap = 0;

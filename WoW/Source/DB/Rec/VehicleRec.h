@@ -8,6 +8,33 @@ class SFileImpl;
 
 class VehicleRec {
     public:
+    // DBC flags; distinct from CVehicle_C runtime state and VehicleSeatRec flags.
+    enum FLAGS : int32_t {
+        USE_UNIT_PITCH = 0x10,
+        USE_PITCH_LIMITS = 0x40,
+        UNSTOPPABLE_GROUND = 0x80,
+        UNSTOPPABLE_SWIMMING_OR_FLYING = 0x100,
+        USE_PITCH_BONE = 0x200,
+        ADJUSTABLE_AIM_ANGLE = 0x400,
+        ADJUSTABLE_AIM_POWER = 0x800,
+        FIXED_FACING = 0x1000,
+        HIGH_PRIORITY_CASTING_ANIMATION = 0x10000,
+        ALLOW_CAMERA_PITCH_INPUT = 0x40000,
+        CUSTOM_CAMERA_FADE_DISTANCE = 0x80000,
+        CUSTOM_POWER_DISPLAY = 0x100000,
+        LIMIT_FACING = 0x200000,
+        TRAJECTORY_ALWAYS = 0x800000,
+        TRAJECTORY_MOUSE_DRAG = 0x1000000,
+        TRAJECTORY_PITCH_INPUT = 0x2000000,
+        TRAJECTORY_FREE_LOOK = 0x4000000,
+        TRAJECTORY_CAST_MISSILE = 0x8000000,
+        BATTLEFIELD_VEHICLE = 0x10000000,
+        UNKNOWN_20000000 = 0x20000000,
+        UNKNOWN_40000000 = 0x40000000,
+        TRAJECTORY_MASK = 0xF800000,
+        MOUSE_AIM_CAMERA_PITCH_MASK = 0x40040000,
+    };
+
     static const int32_t s_numColumns = 40;
     static const int32_t s_rowSize = 160;
     static const bool s_generatedID = false;

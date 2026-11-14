@@ -1488,8 +1488,8 @@ void CGUnit_C::PreAnimate(CGWorldFrame* frame) {
     int32_t fixedFacing;
 
     if (vehicleRec) {
-        pitchBone = vehicleRec->m_flags & 0x200;
-        fixedFacing = (pitchBone || (vehicleRec->m_flags & 0x1000)) ? 1 : 0;
+        pitchBone = vehicleRec->m_flags & VehicleRec::FLAGS::USE_PITCH_BONE;
+        fixedFacing = (pitchBone || (vehicleRec->m_flags & VehicleRec::FLAGS::FIXED_FACING)) ? 1 : 0;
     } else {
         pitchBone = 0;
         fixedFacing = 0;
@@ -3156,11 +3156,11 @@ bool CGUnit_C::CanAttack(const CGUnit_C* unit) const {
         const VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
         const VehicleRec* otherVehicleRec = unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-        if (vehicleRec && (vehicleRec->m_flags & 0x20000000) && other->FindRootVehicle(self) == self) {
+        if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::UNKNOWN_20000000) && other->FindRootVehicle(self) == self) {
             return false;
         }
 
-        if (otherVehicleRec && (otherVehicleRec->m_flags & 0x20000000) && self->FindRootVehicle(other) == other) {
+        if (otherVehicleRec && (otherVehicleRec->m_flags & VehicleRec::FLAGS::UNKNOWN_20000000) && self->FindRootVehicle(other) == other) {
             return false;
         }
     }
@@ -9986,7 +9986,7 @@ void CGUnit_C::PostInit(uint32_t time, const CClientObjCreate& create, bool reen
 
     VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
 
-    if (vehicleRec && (vehicleRec->m_flags & 0x10000000)) {
+    if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE)) {
         WOWGUID vehicleGuid = this->m_obj->m_guid;
         CGBattlefieldInfo::AddVehicle(vehicleGuid);
     }
@@ -10175,7 +10175,7 @@ void CGUnit_C::Reenable() {
 
     VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
 
-    if (vehicleRec && (vehicleRec->m_flags & 0x10000000)) {
+    if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE)) {
         WOWGUID vehicleGuid = this->m_obj->m_guid;
         CGBattlefieldInfo::AddVehicle(vehicleGuid);
     }
@@ -10467,7 +10467,7 @@ void CGUnit_C::Disable() {
 
     VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
 
-    if (vehicleRec && (vehicleRec->m_flags & 0x10000000)) {
+    if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::BATTLEFIELD_VEHICLE)) {
         WOWGUID guid = this->m_obj->m_guid;
         CGBattlefieldInfo::RemoveVehicle(guid);
     }

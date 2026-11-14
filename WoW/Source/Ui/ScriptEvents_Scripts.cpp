@@ -993,7 +993,7 @@ static int32_t Script_UnitPowerType(lua_State* L) {
     WOWGUID unitGuid = guid;
     CGUnit_C* unit = static_cast<CGUnit_C*>(ClntObjMgrObjectPtr(guid, TYPE_UNIT, __FILE__, __LINE__));
 
-    if (unit && unit->m_vehicle && unit->m_vehicle->m_vehicleRec && (unit->m_vehicle->m_vehicleRec->m_flags & 0x100000) && index < 3) {
+    if (unit && unit->m_vehicle && unit->m_vehicle->m_vehicleRec && (unit->m_vehicle->m_vehicleRec->m_flags & VehicleRec::FLAGS::CUSTOM_POWER_DISPLAY) && index < 3) {
         PowerDisplayRec* display = g_powerDisplayDB.GetRecord(unit->m_vehicle->m_vehicleRec->m_powerDisplayID[index]);
 
         if (display && display->m_actualType == unit->m_unit->m_displayPower) {

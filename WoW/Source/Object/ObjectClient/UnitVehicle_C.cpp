@@ -174,13 +174,13 @@ void CGUnit_C::ConvertVehicleCameraRelativeFacingToTransportRelativeFacing(float
 void CGUnit_C::UpdateVehicleUISliders(CGUnit_C* unit, const VehicleRec* vehicleRec) {
     int32_t enable = unit && !unit->IsAlteredFormTransitionPreventingMovement();
 
-    if (enable && vehicleRec && (vehicleRec->m_flags & 0x400)) {
+    if (enable && vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_ANGLE)) {
         FrameScript_SignalEvent(SCRIPT_EVENT_VEHICLE_ANGLE_SHOW, "%d", 1);
     } else {
         FrameScript_SignalEvent(SCRIPT_EVENT_VEHICLE_ANGLE_SHOW, nullptr);
     }
 
-    if (enable && vehicleRec && (vehicleRec->m_flags & 0x800)) {
+    if (enable && vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_POWER)) {
         FrameScript_SignalEvent(SCRIPT_EVENT_VEHICLE_POWER_SHOW, "%d", 1);
     } else {
         FrameScript_SignalEvent(SCRIPT_EVENT_VEHICLE_POWER_SHOW, nullptr);
@@ -521,7 +521,7 @@ uint32_t CGUnit_C::IsVehicleCurrentlyUnstoppable() const {
         return 0;
     }
 
-    return vehicle->m_flags & ((this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) ? 0x100 : 0x80);
+    return vehicle->m_flags & ((this->m_movement->m_flags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK) ? VehicleRec::FLAGS::UNSTOPPABLE_SWIMMING_OR_FLYING : VehicleRec::FLAGS::UNSTOPPABLE_GROUND);
 }
 
 // VERIFY: 2533cf6d auto

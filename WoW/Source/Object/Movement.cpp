@@ -1141,7 +1141,7 @@ void CMovement_C::OnPitchToAngleLocal(uint32_t eventTime, float pitch) {
     CVehicle_C* vehicle = this->m_unit->m_vehicle;
     VehicleRec* rec = vehicle ? vehicle->m_vehicleRec : nullptr;
 
-    if (rec && (rec->m_flags & 0x40)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS)) {
         if (pitch < rec->m_pitchMin) {
             pitch = rec->m_pitchMin;
         } else if (rec->m_pitchMax <= pitch) {
@@ -1266,7 +1266,7 @@ void CMovement_C::OnSetPitchLocal(uint32_t eventTime, float pitch) {
     CVehicle_C* vehicle = this->m_unit->m_vehicle;
     VehicleRec* rec = vehicle ? vehicle->m_vehicleRec : nullptr;
 
-    if (rec && (rec->m_flags & 0x40)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS)) {
         if (pitch < rec->m_pitchMin) {
             pitch = rec->m_pitchMin;
         } else if (rec->m_pitchMax <= pitch) {
@@ -1918,7 +1918,7 @@ int32_t CMovement_C::ComputeLegalRawFacingRange(float& min, float& max) const {
 
     VehicleRec* rec = vehicle->m_vehicleRec;
 
-    if (!rec || !(rec->m_flags & 0x200000)) {
+    if (!rec || !(rec->m_flags & VehicleRec::FLAGS::LIMIT_FACING)) {
         return 0;
     }
 
@@ -2006,7 +2006,7 @@ void CMovement_C::OnPitchStartLocal(uint32_t eventTime, int32_t up) {
     CVehicle_C* vehicle = this->m_unit->m_vehicle;
     VehicleRec* rec = vehicle ? vehicle->m_vehicleRec : nullptr;
 
-    if (rec && (rec->m_flags & 0x40)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS)) {
         this->OnPitchToAngleLocal(eventTime, up ? rec->m_pitchMax : rec->m_pitchMin);
         return;
     }

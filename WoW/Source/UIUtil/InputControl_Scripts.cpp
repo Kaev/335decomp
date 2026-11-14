@@ -567,7 +567,7 @@ static int32_t Script_IsVehicleAimAngleAdjustable(lua_State* L) {
     CGUnit_C* unit = GetVehicleUnitPtr();
     VehicleRec* rec = unit && unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-    if (rec && (rec->m_flags & 0x400)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_ANGLE)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -582,7 +582,7 @@ static int32_t Script_IsVehicleAimPowerAdjustable(lua_State* L) {
     CGUnit_C* unit = GetVehicleUnitPtr();
     VehicleRec* rec = unit && unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-    if (rec && (rec->m_flags & 0x800)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_POWER)) {
         lua_pushnumber(L, 1.0);
     } else {
         lua_pushnil(L);
@@ -622,7 +622,7 @@ static int32_t Script_VehicleAimGetNormAngle(lua_State* L) {
     float pitchMin;
     float pitchMax;
 
-    if (rec && (rec->m_flags & 0x40)) {
+    if (rec && (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS)) {
         pitchMin = rec->m_pitchMin;
         pitchMax = rec->m_pitchMax;
     } else {
@@ -646,7 +646,7 @@ static int32_t Script_VehicleAimRequestAngle(lua_State* L) {
     if (unit) {
         VehicleRec* rec = unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-        if (rec && (rec->m_flags & 0x400) && lua_isnumber(L, 1)) {
+        if (rec && (rec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_ANGLE) && lua_isnumber(L, 1)) {
             inputControl->SetPlayerPitch(unit, time, static_cast<float>(lua_tonumber(L, 1)));
         }
     }
@@ -667,7 +667,7 @@ static int32_t Script_VehicleAimRequestNormAngle(lua_State* L) {
 
     VehicleRec* rec = unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-    if (!rec || !(rec->m_flags & 0x400)) {
+    if (!rec || !(rec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_ANGLE)) {
         return 0;
     }
 
@@ -676,7 +676,7 @@ static int32_t Script_VehicleAimRequestNormAngle(lua_State* L) {
         float pitchMin;
         float pitchMax;
 
-        if (rec->m_flags & 0x40) {
+        if (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS) {
             pitchMin = rec->m_pitchMin;
             pitchMax = rec->m_pitchMax;
         } else {

@@ -335,7 +335,7 @@ void CGUnit_C::UpdateMissileTrajectoryTargeting() {
 
     VehicleRec* vehicleRec = unit->m_vehicle ? unit->m_vehicle->m_vehicleRec : nullptr;
 
-    if (!vehicleRec || !(vehicleRec->m_flags & 0xF800000)) {
+    if (!vehicleRec || !(vehicleRec->m_flags & VehicleRec::FLAGS::TRAJECTORY_MASK)) {
         return;
     }
 
@@ -367,23 +367,23 @@ void CGUnit_C::UpdateMissileTrajectoryTargeting() {
     int32_t mode;
     bool active;
 
-    if (flags & 0x800000) {
+    if (flags & VehicleRec::FLAGS::TRAJECTORY_ALWAYS) {
         mode = 0;
         active = true;
         s_trajectoryMode = 0;
-    } else if ((flags & 0x1000000) && input->IsMouseDragging()) {
+    } else if ((flags & VehicleRec::FLAGS::TRAJECTORY_MOUSE_DRAG) && input->IsMouseDragging()) {
         mode = 1;
         active = true;
         s_trajectoryMode = 1;
-    } else if ((flags & 0x2000000) && (pitchNextFrame || (input->m_flags & INPUT_PITCH_PLAYER_MASK))) {
+    } else if ((flags & VehicleRec::FLAGS::TRAJECTORY_PITCH_INPUT) && (pitchNextFrame || (input->m_flags & INPUT_PITCH_PLAYER_MASK))) {
         mode = 2;
         active = true;
         s_trajectoryMode = 2;
-    } else if ((flags & 0x4000000) && input->CanSyncFreeLookFacing(unit)) {
+    } else if ((flags & VehicleRec::FLAGS::TRAJECTORY_FREE_LOOK) && input->CanSyncFreeLookFacing(unit)) {
         mode = 3;
         active = true;
         s_trajectoryMode = 3;
-    } else if ((vehicleRec->m_flags & 0x8000000) && hasMissile) {
+    } else if ((vehicleRec->m_flags & VehicleRec::FLAGS::TRAJECTORY_CAST_MISSILE) && hasMissile) {
         mode = 0;
         active = true;
         s_trajectoryMode = 0;
@@ -1062,17 +1062,17 @@ int32_t CGUnit_C::ComputeMissileTrajectory(const SpellRec* spell, float* pitch, 
 
     VehicleRec* vehicleRec = this->m_vehicle ? this->m_vehicle->m_vehicleRec : nullptr;
 
-    if (vehicleRec && (vehicleRec->m_flags & 0x10)) {
+    if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::USE_UNIT_PITCH)) {
         *pitch = this->GetPitch();
 
-        if (vehicleRec->m_flags & 0x40) {
+        if (vehicleRec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS) {
             ClampInPlace(*pitch, vehicleRec->m_pitchMin, vehicleRec->m_pitchMax);
         }
     } else {
         *pitch = (missile->m_defaultPitchMax + missile->m_defaultPitchMin) * 0.5f;
     }
 
-    if (vehicleRec && (vehicleRec->m_flags & 0x800)) {
+    if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_POWER)) {
         float power = CGInputControl::GetUIVehiclePower();
         *speed = power;
         *speed = power * (missile->m_defaultSpeedMax - missile->m_defaultSpeedMin);
@@ -1356,7 +1356,7 @@ void CGUnit_C::SendFinalMissileTrajectoryUpdate() {
 void CGUnit_C::StartMissileTrajectoryTargeting(CGUnit_C* unit, const VehicleRec* vehicleRec) {
     CGUnit_C::StopMissileTrajectoryTargeting();
 
-    if (!(vehicleRec->m_flags & 0xF800000)) {
+    if (!(vehicleRec->m_flags & VehicleRec::FLAGS::TRAJECTORY_MASK)) {
         return;
     }
 

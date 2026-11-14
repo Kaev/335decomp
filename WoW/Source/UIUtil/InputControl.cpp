@@ -407,7 +407,7 @@ void CGInputControl::SendUIVehicleAngleUpdate(float angle) {
     float pitchMin;
     float pitchMax;
 
-    if (rec->m_flags & 0x40) {
+    if (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS) {
         pitchMin = rec->m_pitchMin;
         pitchMax = rec->m_pitchMax;
     } else {
@@ -535,7 +535,7 @@ int32_t CGInputControl::CameraCanPitchPlayer() {
     if ((movement->m_flags2 & MOVEMENTFLAG2_ALWAYS_ALLOW_PITCHING) && !(movement->m_flags & MOVEMENTFLAG_SWIMMING_OR_FLYING_MASK)) {
         VehicleRec* rec = mover->GetVehicleRec();
 
-        if (!rec || !(rec->m_flags & 0x40000)) {
+        if (!rec || !(rec->m_flags & VehicleRec::FLAGS::ALLOW_CAMERA_PITCH_INPUT)) {
             return 0;
         }
     }
@@ -751,7 +751,7 @@ void CGInputControl::SetPlayerPitch(CGUnit_C* unit, uint32_t time, float pitch) 
         float min;
         float max;
 
-        if (rec->m_flags & 0x40) {
+        if (rec->m_flags & VehicleRec::FLAGS::USE_PITCH_LIMITS) {
             min = rec->m_pitchMin;
             max = rec->m_pitchMax;
         } else {
@@ -776,7 +776,7 @@ void CGInputControl::SetPlayerPitch(CGUnit_C* unit, uint32_t time, float pitch) 
     } else {
         unit->OnSetPitchLocal(time, pitch);
 
-        if (rec && (rec->m_flags & 0x400)) {
+        if (rec && (rec->m_flags & VehicleRec::FLAGS::ADJUSTABLE_AIM_ANGLE)) {
             CGInputControl::SendUIVehicleAngleUpdate(pitch);
         }
     }

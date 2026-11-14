@@ -2582,7 +2582,7 @@ void CGCamera::CalcTargetCamera(CGObject_C* target, uint32_t time) {
             if (fadeUnit) {
                 VehicleRec* vehicleRec = fadeUnit->m_vehicle ? fadeUnit->m_vehicle->m_vehicleRec : nullptr;
 
-                if (vehicleRec && (vehicleRec->m_flags & 0x80000)) {
+                if (vehicleRec && (vehicleRec->m_flags & VehicleRec::FLAGS::CUSTOM_CAMERA_FADE_DISTANCE)) {
                     CM2Model* model = fadeUnit->GetObjectModel();
 
                     if (model && model->IsLoaded(0, 0)) {
