@@ -38,7 +38,7 @@ static FMOD_DSP_TYPE TranslateDspType(int32_t type) {
 // INLINED
 SI2DspNode::SI2DspNode() {
     this->m_dsp = nullptr;
-    this->m_type = -1;
+    this->m_type = SI2_DSP_TYPE_UNINITIALIZED;
 }
 
 // INLINED
@@ -109,7 +109,7 @@ void SI2::DSP_CreateDsp(const char* name, int32_t type, const float* params) {
 
     DSP_CHAIN_HEAD_LOOKUP* head = s_dspChains.Ptr(name);
     head->m_chain.m_nodes.LinkToTail(node);
-    node->m_type = type;
+    node->m_type = static_cast<SI2_DSP_TYPE>(type);
 
     switch (type) {
         case SI2_DSP_TYPE_PITCHSHIFT:

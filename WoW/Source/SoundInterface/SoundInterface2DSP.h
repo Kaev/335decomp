@@ -10,7 +10,7 @@
 class SI2DspNode : public TSLinkedNode<SI2DspNode> {
     public:
     /* 0008 */ FMOD::DSP* m_dsp;
-    /* 000C */ int32_t m_type;
+    /* 000C */ SI2_DSP_TYPE m_type;
 
     SI2DspNode();
 };
