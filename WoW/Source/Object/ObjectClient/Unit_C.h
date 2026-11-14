@@ -253,7 +253,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     static void VehiclePassengerInitWorldCameraState();
     static bool __stdcall IsSpellAllowedInArena(const SpellRec* spell);
     static void ApplyGuildTabard(int32_t guildId, const WOWGUID& guid, void* param, bool apply);
-    static int32_t __stdcall ResolveSheathState(int32_t hand, const CGUnitVirtualItem* mainHand, const CGUnitVirtualItem* offHand);
+    static WEAPONMODE __stdcall ResolveSheathState(WEAPONMODE weaponMode, const CGUnitVirtualItem* mainHand, const CGUnitVirtualItem* offHand);
     static bool __stdcall IsAreaInAreaGroup(int32_t areaId, int32_t areaGroupId, int32_t* checked);
     static float __fastcall ComputeTrackingElevationAngle(const C3Vector& position, const C3Vector& target);
     static void InitMissileTrajectorySystem();
@@ -875,7 +875,7 @@ class CGUnit_C : public CGObject_C, public CGUnit {
     void OnVirtualItemChanged(VIRTUAL_MONSTER_SLOT slot, int32_t oldItemId);
     void OnVisFlagChanged(uint8_t oldFlags);
     void SetPredictedPower(POWER_TYPE powerType, int32_t value);
-    void SetSheatheState(uint32_t showWeapons, BOOL instant, BOOL noSend);
+    void SetSheatheState(WEAPONMODE weaponMode, BOOL instant, BOOL noSend);
     void UpdateClientStandState(UNITSTANDSTATE standState);
     void UpdateModelScale(const CreatureModelDataRec* modelRec);
     void UpdateScriptRegistration();

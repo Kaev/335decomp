@@ -643,7 +643,7 @@ int32_t SheatheStateHandler(WOWGUID guid, uint32_t fieldOffset, uint32_t fieldSi
     uint32_t oldState = *static_cast<const uint32_t*>(oldValue);
 
     if (unit->m_obj->m_guid != ClntObjMgrGetActivePlayer() || unit->m_sheatheState == oldState) {
-        unit->SetSheatheState(unit->m_unit->m_sheatheState, TRUE, TRUE);
+        unit->SetSheatheState(static_cast<WEAPONMODE>(unit->m_unit->m_sheatheState), TRUE, TRUE);
     }
 
     return 1;
@@ -4371,7 +4371,7 @@ void CGUnit_C::UpdateHandItemAnimEffects(bool force) {
     if (this->IsActivePlayer() || this->m_sheatheState == this->m_unit->m_sheatheState) {
         this->SetHandItemSpellEffectsVisible(TRUE);
     } else {
-        this->SetSheatheState(this->m_unit->m_sheatheState, TRUE, FALSE);
+        this->SetSheatheState(static_cast<WEAPONMODE>(this->m_unit->m_sheatheState), TRUE, FALSE);
     }
 }
 
@@ -8864,18 +8864,18 @@ bool CGUnit_C::HasAuraEffect(int32_t auraType) const {
 
 // VERIFY: ef1871f1 auto
 // OFFSET: 0x00715D00
-int32_t __stdcall CGUnit_C::ResolveSheathState(int32_t hand, const CGUnitVirtualItem* mainHand, const CGUnitVirtualItem* offHand) {
-    if (hand == WEAPONMODE_NORMALMODE) {
+WEAPONMODE __stdcall CGUnit_C::ResolveSheathState(WEAPONMODE weaponMode, const CGUnitVirtualItem* mainHand, const CGUnitVirtualItem* offHand) {
+    if (weaponMode == WEAPONMODE::WEAPONMODE_NORMALMODE) {
         if (!mainHand && (!offHand || offHand->m_inventoryType == INVTYPE_HOLDABLE)) {
-            return WEAPONMODE_SHEATHEDMODE;
+            return WEAPONMODE::WEAPONMODE_SHEATHEDMODE;
         }
-    } else if (hand == WEAPONMODE_SHEATHEDMODE) {
+    } else if (weaponMode == WEAPONMODE::WEAPONMODE_SHEATHEDMODE) {
         if ((offHand && offHand->m_inventoryType == INVTYPE_SHIELD) || (mainHand && mainHand->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON) || (offHand && offHand->m_classID == ITEM_CLASS::ITEM_CLASS_WEAPON)) {
-            return WEAPONMODE_NORMALMODE;
+            return WEAPONMODE::WEAPONMODE_NORMALMODE;
         }
     }
 
-    return hand;
+    return weaponMode;
 }
 
 // VERIFY: 4b3a0738 auto
@@ -13725,12 +13725,12 @@ void CGUnit_C::OnAuraUpdate(CDataStore* msg, bool updateAll) {
 
 // VERIFY: 80b6ec9d manual
 // OFFSET: 0x00736D30
-void CGUnit_C::SetSheatheState(uint32_t showWeapons, BOOL instant, BOOL noSend) {
+void CGUnit_C::SetSheatheState(WEAPONMODE weaponMode, BOOL instant, BOOL noSend) {
     if (this->IsPlayingWeaponAnim()) {
-        showWeapons = CGUnit_C::ResolveSheathState(showWeapons, this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, false), this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_OFFHAND, false));
+        weaponMode = CGUnit_C::ResolveSheathState(weaponMode, this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_MAINHAND, false), this->GetVirtualItem(VIRTUAL_MONSTER_SLOT_OFFHAND, false));
     }
 
-    if (showWeapons == WEAPONMODE_RANGEDMODE && (this->m_obj->m_type & TYPE_PLAYER)) {
+    if (weaponMode == WEAPONMODE::WEAPONMODE_RANGEDMODE && (this->m_obj->m_type & TYPE_PLAYER)) {
         ChrClassesRec* classRec = g_chrClassesDB.GetRecord(this->m_unit->m_classID);
 
         if (!classRec || (classRec->m_flags & ChrClassesRec::CLASS_FLAGS::HAS_RELIC_SLOT)) {
@@ -13738,7 +13738,7 @@ void CGUnit_C::SetSheatheState(uint32_t showWeapons, BOOL instant, BOOL noSend) 
         }
     }
 
-    if (showWeapons == this->m_sheatheState) {
+    if (weaponMode == this->m_sheatheState) {
         return;
     }
 
@@ -13756,7 +13756,7 @@ void CGUnit_C::SetSheatheState(uint32_t showWeapons, BOOL instant, BOOL noSend) 
     }
 
     WEAPONMODE oldState = this->m_sheatheState;
-    this->m_sheatheState = static_cast<WEAPONMODE>(showWeapons);
+    this->m_sheatheState = weaponMode;
     this->m_previousSheatheState = oldState;
 
     if (this->m_obj->m_guid == ClntObjMgrGetActivePlayer() && !noSend) {
@@ -13767,7 +13767,7 @@ void CGUnit_C::SetSheatheState(uint32_t showWeapons, BOOL instant, BOOL noSend) 
         ClientServices::Send2(&msg);
     }
 
-    if (showWeapons) {
+    if (weaponMode) {
         this->ShowHandItemSpellEffects(FALSE, FALSE);
     }
 
